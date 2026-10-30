@@ -1,12 +1,13 @@
 :root {
   color-scheme: light;
-  --paper: #f6f6f1;
-  --ink: #202a24;
-  --muted: #5c665e;
-  --line: #d9ded3;
-  --green: #2e6346;
-  --lime: #dbf6b1;
-  --dark: #1c3029;
+  --paper: #fff6e5;
+  --ink: #1f1a3d;
+  --muted: #655b72;
+  --line: #e7dccf;
+  --accent: #814000;
+  --amber: #ffb547;
+  --deep-amber: #e07a00;
+  --dark: #1f1a3d;
   --mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
   font-family:
     Inter,
@@ -43,7 +44,7 @@ summary {
 a:focus-visible,
 button:focus-visible,
 summary:focus-visible {
-  outline: 3px solid var(--green);
+  outline: 3px solid var(--accent);
   outline-offset: 5px;
 }
 button {
@@ -70,30 +71,13 @@ button {
   gap: 9px;
 }
 .brand-period {
-  color: var(--green);
+  color: var(--ink);
   margin-left: -8px;
 }
 .brand-mark {
-  width: 25px;
-  height: 26px;
-  display: flex;
-  gap: 3px;
-  align-items: center;
-  margin-right: 3px;
-}
-.brand-mark i {
+  width: 40px;
+  height: 40px;
   display: block;
-  background: var(--ink);
-  width: 6px;
-  border-radius: 2px;
-  height: 12px;
-  transform: rotate(-20deg);
-}
-.brand-mark i:first-child {
-  height: 20px;
-}
-.brand-mark i:last-child {
-  height: 26px;
 }
 .site-header nav,
 .site-footer nav {
@@ -151,7 +135,7 @@ h1 {
   margin-bottom: 25px;
 }
 h1 span {
-  color: var(--green);
+  color: var(--accent);
 }
 .button {
   text-decoration: none;
@@ -166,7 +150,7 @@ h1 span {
 }
 .button-primary {
   background: var(--dark);
-  color: var(--lime);
+  color: var(--amber);
 }
 .text-link {
   font-size: 14px;
@@ -178,10 +162,10 @@ h1 span {
 }
 .text-link:hover,
 a:hover {
-  color: var(--green);
+  color: var(--accent);
 }
 .button-primary:hover {
-  background: #2e4c3e;
+  background: #372b52;
   color: white;
 }
 h2 {
@@ -200,6 +184,9 @@ h2 {
   align-items: center;
 }
 .footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-size: 23px;
   font-weight: 700;
   letter-spacing: -1.4px;
