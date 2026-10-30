@@ -9,25 +9,28 @@ export function createNodeServer(
     outgoing.on("close", () => {
       controller.abort();
     });
-    const headers = new Headers();
-    for (const [name, value] of Object.entries(incoming.headers)) {
-      if (Array.isArray(value))
-        for (const item of value) headers.append(name, item);
-      else if (value !== undefined) headers.set(name, value);
-    }
-    const init: RequestInit & { duplex: "half" } = {
-      method: incoming.method ?? "GET",
-      headers,
-      signal: controller.signal,
-      duplex: "half",
-    };
-    if (incoming.method !== "GET" && incoming.method !== "HEAD")
-      init.body = Readable.toWeb(incoming) as ReadableStream<Uint8Array>;
-    const request = new Request(
-      new URL(incoming.url ?? "/", "http://localhost"),
-      init,
-    );
-    void handler(request)
+    void Promise.resolve()
+      .then(() => {
+        const headers = new Headers();
+        for (const [name, value] of Object.entries(incoming.headers)) {
+          if (Array.isArray(value))
+            for (const item of value) headers.append(name, item);
+          else if (value !== undefined) headers.set(name, value);
+        }
+        const init: RequestInit & { duplex: "half" } = {
+          method: incoming.method ?? "GET",
+          headers,
+          signal: controller.signal,
+          duplex: "half",
+        };
+        if (incoming.method !== "GET" && incoming.method !== "HEAD")
+          init.body = Readable.toWeb(incoming) as ReadableStream<Uint8Array>;
+        const request = new Request(
+          new URL(incoming.url ?? "/", "http://localhost"),
+          init,
+        );
+        return handler(request);
+      })
       .then(async (response) => {
         outgoing.writeHead(
           response.status,

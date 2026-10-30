@@ -14,12 +14,14 @@ import {
   messageSchema,
 } from "./conversations.js";
 import type { recordStore } from "./records.js";
+import { requireRunLease, RunLeaseError } from "./runs.js";
 const stateSchema = z.object({
   identity: identitySchema,
   id: z.string(),
   messages: z.array(messageSchema),
   deleted: z.boolean().default(false),
   retiredRuns: z.array(z.string()).default([]),
+  purgeRuns: z.array(z.string()).default([]),
   jobs: z.array(jobSchema),
 });
 export class JobConflict extends Error {
@@ -46,6 +48,7 @@ export interface JobStore {
     id: string,
     event: Omit<RunEvent, "version" | "sequence" | "at">,
     outcome?: TerminalResult,
+    lease?: Readonly<{ runId: string; token: string }>,
   ): Promise<Job>;
   cancel(identity: Identity, conversationId: string, id: string): Promise<void>;
   pending(after?: string): Promise<{
@@ -69,7 +72,7 @@ export function createJobStore(
     job: Job,
     event: Omit<RunEvent, "version" | "sequence" | "at">,
   ) => {
-    if (job.events.length >= 1000) throw new Error("Run event limit exceeded");
+    const previous = job.events.at(-1);
     job.updatedAt = Date.now();
     job.status = event.type;
     job.availableAt =
@@ -79,6 +82,23 @@ export function createJobStore(
         : event.type === "reconciling"
           ? 5000
           : 0);
+    if (
+      previous?.type === event.type &&
+      previous.approvalId === event.approvalId &&
+      previous.text === event.text &&
+      previous.code === event.code
+    )
+      return;
+    if (
+      job.events.length >= 1000 &&
+      !isTerminal(event.type) &&
+      event.type !== "awaiting_approval" &&
+      !(
+        event.approvalId &&
+        !job.events.some((item) => item.approvalId === event.approvalId)
+      )
+    )
+      return;
     job.events.push({
       ...event,
       version: 1,
@@ -132,8 +152,9 @@ export function createJobStore(
           )
         : undefined;
     },
-    update: (identity, conversationId, id, event, outcome) =>
-      records.mutate(conversationKey(identity, conversationId), (value) => {
+    update: (identity, conversationId, id, event, outcome, lease) => {
+      const key = conversationKey(identity, conversationId);
+      const change = (value: unknown) => {
         const state = stateFrom(value, identity, conversationId);
         const job = state.jobs.find((item) => item.id === id);
         if (!job) throw new Error("Run not found");
@@ -150,7 +171,28 @@ export function createJobStore(
             );
         }
         return { value: state, result: job };
-      }),
+      };
+      if (!lease) return records.mutate(key, change);
+      if (lease.runId !== JSON.stringify([conversationId, id]))
+        return Promise.reject(new RunLeaseError());
+      return records.transaction(async (tx) => {
+        const runKey = JSON.stringify([
+          "run",
+          identity.tenantId,
+          identity.actorId,
+          lease.runId,
+        ]);
+        const run = await tx.read(runKey);
+        if (!run) throw new RunLeaseError();
+        requireRunLease(run.value, lease.token);
+        await tx.write(runKey, run.value, run.revision);
+        requireRunLease(run.value, lease.token);
+        const conversation = await tx.read(key);
+        const next = change(conversation?.value);
+        await tx.write(key, next.value, conversation?.revision ?? 0);
+        return next.result;
+      });
+    },
     async cancel(identity, conversationId, id) {
       await records.mutate(
         conversationKey(identity, conversationId),

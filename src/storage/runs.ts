@@ -32,6 +32,12 @@ export class RunLeaseError extends Error {
     super("Run is leased or lease has expired");
   }
 }
+export function requireRunLease(value: unknown, token: string): DurableRun {
+  const state = runSchema.parse(value);
+  if (state.lease?.token !== token || state.lease.expiresAt <= Date.now())
+    throw new RunLeaseError();
+  return state;
+}
 export interface RunStore {
   load(identity: Identity, id: string): Promise<DurableRun | undefined>;
   claim(
@@ -67,12 +73,6 @@ export function createRunStore(
     ]);
   const duration = (value: number) =>
     z.number().int().min(100).max(300_000).parse(value);
-  const owned = (value: unknown, token: string) => {
-    const state = runSchema.parse(value);
-    if (state.lease?.token !== token || state.lease.expiresAt <= Date.now())
-      throw new RunLeaseError();
-    return state;
-  };
   return {
     async load(identity, id) {
       const record = await records.read(key(identity, id));
@@ -103,7 +103,7 @@ export function createRunStore(
       duration(leaseMs);
       const parsed = checkpointSchema.parse(checkpoint);
       await records.mutate(key(identity, id), (value) => {
-        const state = owned(value, token);
+        const state = requireRunLease(value, token);
         return {
           value: {
             ...state,
@@ -116,7 +116,7 @@ export function createRunStore(
     },
     async release(identity, id, token) {
       await records.mutate(key(identity, id), (value) => {
-        const state = owned(value, token);
+        const state = requireRunLease(value, token);
         return {
           value: { ...state, lease: { token, expiresAt: 0 } },
           result: undefined,
@@ -126,7 +126,7 @@ export function createRunStore(
     async renew(identity, id, token, leaseMs) {
       duration(leaseMs);
       await records.mutate(key(identity, id), (value) => {
-        const state = owned(value, token);
+        const state = requireRunLease(value, token);
         return {
           value: {
             ...state,
