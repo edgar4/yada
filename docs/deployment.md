@@ -1,9 +1,15 @@
+---
+layout: doc
+title: "Packaging and deployment"
+---
+
 # Packaging and deployment
 
 Yada requires Node 24 and uses ESM. Versioned tarballs are installable without a registry:
 
 ```sh
 npm ci
+npx playwright install chromium
 npm run check
 npm run test:package
 npm pack
@@ -40,3 +46,18 @@ Terminate TLS at your reverse proxy. Forward authenticated fetch/NDJSON event st
 Use SQLite on persistent local storage for a single host, or configure PostgreSQL/MySQL with `YADA_STORAGE_DRIVER`, `YADA_STORAGE_URL` and `YADA_STORAGE_KEY` for shared durable storage. See [storage](storage.md) and [recovery](recovery.md). Back up the database and key separately, test restoration, and retain an image/tarball checksum for rollback. Before rolling back application code, confirm its stored schema/checkpoint compatibility and stop admission while replacing workers. Never retry an uncertain external mutation without checking its durable operation receipt.
 
 Before a live cutover, validate application authentication, cross-tenant isolation, real provider/MCP credentials, approval expiry and revocation, receipt reconciliation, SSE replay, cancellation, restart recovery and database backup restoration in your environment. The deterministic package smoke test does not establish those live guarantees.
+
+## Project website
+
+The project website uses GitHub Pages with the `main` branch’s `/docs` directory and its supported Jekyll renderer. Edit `docs/index.html` for the landing page, `docs/assets/` for styling and browser behavior, and Markdown files in `docs/` for technical guides. Site links follow `url` and `baseurl` in `docs/_config.yml`: use an empty `baseurl` for a custom domain or the repository path for a project site. A configured custom domain is retained in `docs/CNAME`.
+
+New guides use this front matter followed by a Markdown heading and content:
+
+```yaml
+---
+layout: doc
+title: "Your guide"
+---
+```
+
+Add guides to `docs/_data/navigation.yml`. Relative Markdown links between guides become HTML links during the Pages build. The Pages checks workflow renders the site with GitHub’s official Jekyll action, verifies internal links and desktop/mobile accessibility, and uploads rendered pages and screenshots as the `pages-preview` artifact. Publishing stays with the existing GitHub Pages branch configuration.

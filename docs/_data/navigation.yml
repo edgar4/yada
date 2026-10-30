@@ -1,0 +1,32 @@
+- title: Start here
+  pages:
+    - title: Provider configuration
+      url: /configuration.html
+    - title: Runtime architecture
+      url: /architecture.html
+    - title: Browser SDK & widget
+      url: /browser.html
+- title: Connect and act
+  pages:
+    - title: HTTP & database connectors
+      url: /connectors.html
+    - title: MCP connections
+      url: /mcp.html
+    - title: MCP OAuth
+      url: /mcp-oauth.html
+    - title: Approved actions
+      url: /actions.html
+- title: Run and operate
+  pages:
+    - title: Service API
+      url: /service.html
+    - title: Durable storage
+      url: /storage.html
+    - title: Recovery & replay
+      url: /recovery.html
+    - title: Operations
+      url: /operations.html
+    - title: Packaging & deployment
+      url: /deployment.html
+    - title: Existing worker integration
+      url: /integrations.html

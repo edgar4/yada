@@ -1,0 +1,25 @@
+---
+layout: base
+---
+
+<div class="docs-shell wrap">
+  <aside class="docs-sidebar" aria-label="Documentation navigation">
+    {% include navigation.html %}
+  </aside>
+  <main id="main" class="docs-main" tabindex="-1">
+    <details class="mobile-docs-nav">
+      <summary>Documentation menu</summary>
+      <nav aria-label="Mobile documentation navigation">
+        {% include navigation.html %}
+      </nav>
+    </details>
+    <div class="docs-eyebrow">Yada documentation</div>
+    <article class="prose">{{ content }}</article>
+    <div class="doc-bottom">
+      <a href="{{ '/' | relative_url }}">← Back to Yada</a
+      ><a href="https://github.com/edgar4/yada/blob/main/docs/{{ page.name }}"
+        >Edit this page <span aria-hidden="true">↗</span></a
+      >
+    </div>
+  </main>
+</div>

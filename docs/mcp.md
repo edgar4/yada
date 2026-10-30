@@ -1,3 +1,8 @@
+---
+layout: doc
+title: "MCP connections"
+---
+
 # MCP connections
 
 Connect an MCP server, then pass its tools to `run`. The connector supports Streamable HTTP and local stdio processes through the [MCP SDK](https://ts.sdk.modelcontextprotocol.io/client).

@@ -1,3 +1,8 @@
+---
+layout: doc
+title: "Browser client and widget"
+---
+
 # Browser client and widget
 
 Import the browser entrypoints through your application's module bundler. They do not import provider adapters, storage, Node APIs, or secrets. Serve the API over HTTPS and provide host authentication through cookies or a header callback. Keep provider keys on the server.

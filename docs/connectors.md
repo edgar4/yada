@@ -1,3 +1,8 @@
+---
+layout: doc
+title: "Read connectors"
+---
+
 # Read connectors
 
 `httpReadTool` uses a Zod input schema, a fixed reviewed origin and path, and a trusted query parameter mapper. Only GET requests are issued. Redirects are refused; credentials and headers come from application configuration. Every execution checks authorization again, validates input, uses the caller's abort signal, and bounds streamed response bytes (32,000 by default; at most 1,000,000). Non-success responses and invalid UTF-8 fail without returning response content. Configure only trusted network destinations and headers.
