@@ -1,0 +1,12 @@
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!tsconfig.build.json
+!src/
+!src/**
+!docs/
+!docs/**
+!README.md
+!deploy/
+!deploy/server.mjs
