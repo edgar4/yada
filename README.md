@@ -36,7 +36,7 @@ The key belongs to your selected provider. Live requests use your provider accou
 
 See [provider configuration](docs/configuration.md) for supported providers, model selection, and server-side configuration. See [MCP connections](docs/mcp.md) to connect external tool servers and [runtime architecture](docs/architecture.md) for execution behavior.
 
-Use [durable storage](docs/storage.md) to retain conversations and OAuth sessions across restarts. SQLite is the default; PostgreSQL and MySQL are also supported.
+Use [durable storage](docs/storage.md) to retain conversations and OAuth sessions across restarts, and [durable runs](docs/recovery.md) to resume interrupted execution. SQLite is the default; PostgreSQL and MySQL are also supported.
 
 ## Development
 

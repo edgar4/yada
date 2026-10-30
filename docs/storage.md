@@ -1,6 +1,6 @@
 # Durable storage
 
-Yada stores conversations and OAuth sessions in SQLite, PostgreSQL, or MySQL. SQLite is the default. All record payloads are encrypted with AES-256-GCM; the encryption key is supplied by your deployment and never stored in the database.
+Yada stores conversations, in-flight runs, and OAuth sessions in SQLite, PostgreSQL, or MySQL. SQLite is the default. All record payloads are encrypted with AES-256-GCM; the encryption key is supplied by your deployment and never stored in the database.
 
 ## Configuration
 
@@ -62,7 +62,7 @@ Import these functions from Yada's public entry point. Identity must be authenti
 
 `runConversation` loads committed text messages and saves the user input and completed answer together. Failed or cancelled runs do not change history. Storage failures propagate; a response is not returned as successful before its history is committed. Concurrent saves raise `StorageConflict` instead of overwriting another turn. Serialize runs per conversation in your host application; conflicts do not trigger automatic model or tool retries.
 
-For direct access, use `storage.conversations.load(identity, id)` and `save(identity, id, messages, expectedRevision)`. Use revision `0` to create a new conversation. Each save returns the next revision. The current implementation persists completed text exchanges, not in-flight runs, tool traces, or model reasoning state. Callers should manage history length for the selected model's context limit.
+For direct access, use `storage.conversations.load(identity, id)` and `save(identity, id, messages, expectedRevision)`. Use revision `0` to create a new conversation. Each save returns the next revision. `runConversation` persists completed text exchanges. Use [durable runs](recovery.md) to checkpoint individual executions and resume them after a crash. Callers should manage history length for the selected model's context limit.
 
 ## OAuth sessions
 
