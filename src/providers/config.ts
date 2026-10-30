@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { createAnthropicProvider } from "./anthropic.js";
+import { createOpenAIProvider } from "./openai.js";
 const providerConfig = z.strictObject({
-  provider: z.literal("anthropic"),
+  provider: z.enum(["anthropic", "openai"]),
   apiKey: z.string().trim().min(1),
   model: z.string().trim().min(1).optional(),
 });
@@ -12,7 +13,11 @@ export function createProvider(config: ProviderConfig) {
     throw new Error(
       "Invalid provider configuration: choose a supported provider and provide that provider's API key; model is optional.",
     );
-  return createAnthropicProvider({
+  const factory =
+    result.data.provider === "openai"
+      ? createOpenAIProvider
+      : createAnthropicProvider;
+  return factory({
     apiKey: result.data.apiKey,
     model: result.data.model,
   });

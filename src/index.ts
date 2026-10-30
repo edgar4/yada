@@ -5,3 +5,4 @@ export { createFakeProvider } from "./providers/fake.js";
 export { createAnthropicProvider } from "./providers/anthropic.js";
 export { createProvider, providerConfigFromEnv } from "./providers/config.js";
 export type { ProviderConfig } from "./providers/config.js";
+export { createOpenAIProvider } from "./providers/openai.js";
