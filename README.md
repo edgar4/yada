@@ -1,9 +1,22 @@
 # Yada
 
-A standalone, extensible agent for websites and applications, with replaceable model providers and connectors for MCP servers, backend APIs, and databases.
+Standalone TypeScript assistant runtime, under development.
 
-Status: repository initialized; architecture and implementation plan prepared. The runtime is not implemented yet.
+See [runtime architecture](docs/architecture.md) for contracts and execution boundaries.
 
-Start with [the implementation plan](docs/plan.md). It covers the existing Talon implementation, target boundaries, delivery milestones, and migration gates.
+```sh
+nvm use
+npm ci
+npm run check
+npm run demo
+```
 
-The first integration will replace Talon's embedded Yada through a compatibility adapter. Other applications will use the same runtime through a server SDK or hosted API and an optional web widget.
+The first slice supports typed read tools, a deterministic provider, and an Anthropic adapter. It is not yet a production assistant: MCP, SQLite persistence, approvals, and website embedding are planned. Tool handlers are trusted server code and must honor cancellation. The host supplies authenticated identity and authorization; never accept identity directly from a browser request.
+
+Core owns contracts and execution. Providers depend on core contracts. Applications compose dependencies through the public exports in `src/index.ts`. Runtime schemas validate model-supplied arguments before invoking typed handlers.
+
+For an opt-in live model run, copy `.env.example` to `.env`, set your Anthropic key and model, then run `npm run demo:live`. This sends a request to the provider and may incur usage charges. Automated tests use mocked responses and require no credentials.
+
+The adapter mapping follows Talon's existing implementation and the [LangChain ChatAnthropic contract](https://reference.langchain.com/javascript/langchain-anthropic/ChatAnthropic).
+
+Planned storage is user-configurable: SQLite by default, with PostgreSQL and MySQL/MariaDB adapters. Persistence is not implemented yet.
