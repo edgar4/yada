@@ -6,7 +6,7 @@ import {
   createStorage,
   createWorker,
   storageConfigFromEnv,
-} from "yada";
+} from "@edgaralochi/yada";
 
 const token = process.env.YADA_DEMO_TOKEN;
 if (!token || token.length < 32)

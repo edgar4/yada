@@ -9,7 +9,11 @@ description: "Recover Yada runs from durable checkpoints using renewable leases,
 `runDurable` persists in-flight execution in the same encrypted storage used for conversations and OAuth. SQLite, PostgreSQL, and MySQL share the same API and recovery behavior.
 
 ```ts
-import { createStorage, storageConfigFromEnv, runDurable } from "yada";
+import {
+  createStorage,
+  storageConfigFromEnv,
+  runDurable,
+} from "@edgaralochi/yada";
 
 const storage = await createStorage(storageConfigFromEnv(process.env));
 try {

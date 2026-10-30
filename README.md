@@ -4,6 +4,16 @@ A standalone AI agent built in TypeScript, with typed tools and configurable mod
 
 Embed the agent runtime in your backend and add an assistant interface to your website. Yada supports approved actions, durable conversations, and recovery after restarts.
 
+## Install
+
+Requires Node 24:
+
+```sh
+npm install @edgaralochi/yada
+```
+
+Import the runtime from `@edgaralochi/yada`, the browser client from `@edgaralochi/yada/client`, and the widget from `@edgaralochi/yada/widget`. Released under the [MIT license](LICENSE).
+
 ## Quick start
 
 Use Node 24:

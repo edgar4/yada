@@ -113,7 +113,7 @@ try {
     "--input-type=module",
     "-e",
     `
-    import {createStorage,storageConfigFromEnv} from "yada";
+    import {createStorage,storageConfigFromEnv} from "@edgaralochi/yada";
     const storage=await createStorage(storageConfigFromEnv(process.env));
     await storage.jobs.submit({actorId:"demo",tenantId:"demo"},"smoke",{id:"waiting",input:"Wait",profileId:"unconfigured"});
     await storage.close();
