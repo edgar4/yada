@@ -11,7 +11,12 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "verbatimModuleSyntax": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "paths": {
+      "@edgaralochi/yada": ["./src/index.ts"],
+      "@edgaralochi/yada/client": ["./src/client/index.ts"],
+      "@edgaralochi/yada/widget": ["./src/widget/index.ts"]
+    }
   },
   "include": ["src", "tests", "examples"]
 }
