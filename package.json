@@ -1,0 +1,36 @@
+{
+  "name": "yada",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run --coverage",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
+    "demo": "node --import tsx examples/basic.ts",
+    "demo:live": "node --env-file-if-exists=.env --import tsx examples/anthropic.ts"
+  },
+  "dependencies": {
+    "@langchain/anthropic": "1.6.0",
+    "@langchain/core": "1.3.2",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.6.6",
+    "@vitest/coverage-v8": "5.0.5",
+    "eslint": "10.14.0",
+    "prettier": "3.9.10",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "5.0.5"
+  },
+  "engines": {
+    "node": ">=24.0.0 <25"
+  }
+}
