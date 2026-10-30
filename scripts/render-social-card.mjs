@@ -3,7 +3,7 @@ import { fileURLToPath, URL } from "node:url";
 import { chromium } from "@playwright/test";
 
 const mark = await readFile(
-  new URL("../docs/assets/brand/yada-mark-dark.svg", import.meta.url),
+  new URL("../site/assets/brand/yada-mark-dark.svg", import.meta.url),
 );
 const browser = await chromium.launch({ headless: true });
 try {
@@ -21,7 +21,7 @@ try {
   await page.evaluate(() => globalThis.document.fonts.ready);
   await page.screenshot({
     path: fileURLToPath(
-      new URL("../docs/assets/brand/yada-social.png", import.meta.url),
+      new URL("../site/assets/brand/yada-social.png", import.meta.url),
     ),
   });
 } finally {

@@ -10,25 +10,25 @@ import { createSeoCheck } from "./check-seo.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const output = join(root, "work/pages");
-const config = await readFile(join(root, "docs/_config.yml"), "utf8");
+const config = await readFile(join(root, "site/_config.yml"), "utf8");
 const baseurl = /^baseurl:[ \t]*(?:"([^"]*)"|'([^']*)'|([^\s#]*))[ \t]*$/m.exec(
   config,
 );
-assert(baseurl, "Set an explicit baseurl in docs/_config.yml");
+assert(baseurl, "Set an explicit baseurl in site/_config.yml");
 const mount = baseurl[1] ?? baseurl[2] ?? baseurl[3];
 const files = (await readdir(output)).filter((name) => name.endsWith(".html"));
 assert(files.includes("index.html"));
 const siteUrl = /^url:[ \t]*(?:"([^"]*)"|'([^']*)'|([^\s#]*))[ \t]*$/m.exec(
   config,
 );
-assert(siteUrl, "Set an explicit url in docs/_config.yml");
+assert(siteUrl, "Set an explicit url in site/_config.yml");
 const checkSeo = createSeoCheck({
   siteUrl: (siteUrl[1] ?? siteUrl[2] ?? siteUrl[3]).replace(/\/$/, ""),
   mount,
   output,
   files,
 });
-const cname = await readFile(join(root, "docs/CNAME"), "utf8").catch(
+const cname = await readFile(join(root, "site/CNAME"), "utf8").catch(
   (error) => {
     if (error.code !== "ENOENT") throw error;
     return undefined;
