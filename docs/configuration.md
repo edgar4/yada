@@ -30,6 +30,34 @@ const provider = createProvider({
 
 Import `createProvider` from Yada's public entry point. `providerConfigFromEnv` converts the environment settings into this same object. You may omit the model to use the adapter's default; the example includes it so the selection is explicit.
 
-When switching providers, replace all three values: provider, its model ID, and its API key. The field names stay the same. Anthropic is currently the only implemented live adapter; OpenAI and Gemini adapters are not available yet. Unsupported providers and blank settings fail validation without including the supplied secret in the error.
+When switching providers, replace all three values: provider, its model ID, and its API key. The field names stay the same. Supported providers are `anthropic`, `openai`, and `gemini`. Unsupported providers and blank settings fail validation without including the supplied secret in the error.
 
-The Anthropic default is `claude-sonnet-4-6`. Use the provider's exact model ID for other models or versions.
+## Provider selection
+
+| Provider    | Default model       | API key                       |
+| ----------- | ------------------- | ----------------------------- |
+| `anthropic` | `claude-sonnet-4-6` | Your Anthropic API key        |
+| `openai`    | `gpt-4.1-mini`      | Your OpenAI API key           |
+| `gemini`    | `gemini-3.8-flash`  | Your Google AI Studio API key |
+
+For OpenAI:
+
+```dotenv
+YADA_LLM_PROVIDER=openai
+YADA_LLM_MODEL=gpt-4.1-mini
+YADA_LLM_API_KEY=your-openai-api-key
+```
+
+For Gemini:
+
+```dotenv
+YADA_LLM_PROVIDER=gemini
+YADA_LLM_MODEL=gemini-3.8-flash
+YADA_LLM_API_KEY=your-google-ai-studio-api-key
+```
+
+Use the provider's exact API model ID when overriding the default. The selected model must support text and function calling for tool workflows. Provider access and model availability depend on your account. These adapters use API-key authentication; Azure OpenAI, Vertex AI, and custom endpoints are not configured by this interface.
+
+The OpenAI adapter uses Chat Completions. Gemini tool-call signatures are retained across turns within a run. Provider metadata cannot be reused with another provider. Retries are disabled at the adapter boundary; failures return through the runtime's error contract.
+
+Model references: [OpenAI GPT-4.1 mini](https://developers.openai.com/api/docs/models/gpt-4.1-mini) and [Google Gemini 3.8 Flash](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash).
