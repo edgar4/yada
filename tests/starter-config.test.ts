@@ -10,6 +10,9 @@ const env = {
 };
 
 it("uses the shared provider and database settings with local defaults", () => {
+  expect(starterConfigFromEnv({ ...env, PORT: "3001" }).origin).toBe(
+    "http://localhost:3001",
+  );
   expect(starterConfigFromEnv(env)).toMatchObject({
     origin: "http://localhost:3000",
     port: 3000,
