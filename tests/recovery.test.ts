@@ -262,23 +262,52 @@ for (const driver of drivers)
     });
     it("renews a lease during slow model calls", async () => {
       const s = await setup();
+      const leaseMs = 1500;
+      let originalExpiry = 0;
+      let token = "";
+      let confirmRenewal = () => {};
+      const renewed = new Promise<void>((resolve) => {
+        confirmRenewal = resolve;
+      });
+      const renew = vi.fn(
+        async (...args: Parameters<typeof s.store.runs.renew>) => {
+          await s.store.runs.renew(...args);
+          if (originalExpiry && Date.now() > originalExpiry) confirmRenewal();
+        },
+      );
       const provider = createFakeProvider(async () => {
-        await delay(350);
+        const initial = await s.store.runs.load(identity, s.id);
+        if (!initial?.lease) throw new Error("Missing initial lease");
+        originalExpiry = initial.lease.expiresAt;
+        token = initial.lease.token;
+        await renewed;
+        const current = await s.store.runs.load(identity, s.id);
+        expect(current?.lease?.token).toBe(token);
+        expect(current?.lease?.expiresAt).toBeGreaterThan(originalExpiry);
+        expect(current?.lease?.expiresAt).toBeGreaterThan(Date.now());
+        await expect(
+          s.store.runs.claim(identity, s.id, initial.request, leaseMs),
+        ).rejects.toBeInstanceOf(RunLeaseError);
         return { content: "Done", toolCalls: [], finishReason: "stop" };
       });
       expect(
         await runDurable({
           runId: s.id,
           profileId: "test-v1",
-          store: s.store.runs,
-          leaseMs: 150,
+          store: { ...s.store.runs, renew },
+          leaseMs,
           identity,
           provider,
           tools: [],
           input: "Hi",
           system: "Help",
-          signal: AbortSignal.timeout(3000),
+          signal: AbortSignal.timeout(4000),
         }),
       ).toEqual({ status: "completed", text: "Done" });
+      expect(renew.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(provider.requests).toHaveLength(1);
+      expect((await s.store.runs.load(identity, s.id))?.lease?.token).toBe(
+        token,
+      );
     });
   });
