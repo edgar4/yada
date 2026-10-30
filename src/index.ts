@@ -23,3 +23,15 @@ export type {
   OAuthPending,
 } from "./connectors/mcp/oauth.js";
 export { mcpServersFromEnv } from "./connectors/mcp/config.js";
+export {
+  createStorage,
+  storageConfigFromEnv,
+  StorageConflict,
+} from "./storage/index.js";
+export type {
+  YadaStorage,
+  StorageConfig,
+  ConversationStore,
+  Conversation,
+  ConversationMessage,
+} from "./storage/index.js";
