@@ -1,3 +1,4 @@
+{%- assign asset_version = site.time | date: '%s' -%}
 <!doctype html>
 <html lang="en">
   <head>
@@ -25,10 +26,22 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Inter:wght@400..700&family=JetBrains+Mono:wght@400;600&display=swap"
     />
-    <link rel="stylesheet" href="{{ '/assets/site.css' | relative_url }}" />
-    <link rel="stylesheet" href="{{ '/assets/landing.css' | relative_url }}" />
-    <link rel="stylesheet" href="{{ '/assets/docs.css' | relative_url }}" />
-    <script src="{{ '/assets/site.js' | relative_url }}" defer></script>
+    <link
+      rel="stylesheet"
+      href="{{ '/assets/site.css' | relative_url }}?v={{ asset_version }}"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ '/assets/landing.css' | relative_url }}?v={{ asset_version }}"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ '/assets/docs.css' | relative_url }}?v={{ asset_version }}"
+    />
+    <script
+      src="{{ '/assets/site.js' | relative_url }}?v={{ asset_version }}"
+      defer
+    ></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
