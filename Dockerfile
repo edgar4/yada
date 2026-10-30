@@ -5,10 +5,10 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
-COPY README.md ./
+COPY README.md LICENSE ./
 COPY docs ./docs
 RUN npm pack --pack-destination /tmp
-RUN npm install --prefix /runtime --omit=dev --no-audit --no-fund /tmp/yada-*.tgz
+RUN npm install --prefix /runtime --omit=dev --no-audit --no-fund /tmp/edgaralochi-yada-*.tgz
 
 FROM node:24-bookworm-slim
 ENV NODE_ENV=production
