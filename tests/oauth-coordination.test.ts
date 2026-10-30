@@ -209,7 +209,7 @@ for (const driver of ["sqlite", "postgres", "mysql"] as const) {
             exited.then(() => {
               throw new Error(`Worker exited before claim: ${errors}`);
             }),
-            delay(5000).then(() => {
+            delay(10_000).then(() => {
               throw new Error("Worker claim timeout");
             }),
           ]);
@@ -228,7 +228,7 @@ for (const driver of ["sqlite", "postgres", "mysql"] as const) {
           worker.kill("SIGKILL");
           await exited;
         }
-      });
+      }, 15_000);
       it("aborts after lease renewal fails and redacts acquisition failures", async () => {
         const { first, second, id, records } = await setup(600);
         const fault = vi

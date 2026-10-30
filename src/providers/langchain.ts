@@ -88,7 +88,26 @@ export function chatModelAdapter(
             : normalizedReason === "end_turn" || normalizedReason === "stop"
               ? "stop"
               : "other";
+      const usage = z
+        .object({
+          usage_metadata: z
+            .object({
+              input_tokens: z.number().int().nonnegative().optional(),
+              output_tokens: z.number().int().nonnegative().optional(),
+            })
+            .optional(),
+        })
+        .parse(message).usage_metadata;
       return {
+        ...(usage?.input_tokens !== undefined &&
+        usage.output_tokens !== undefined
+          ? {
+              usage: {
+                inputTokens: usage.input_tokens,
+                outputTokens: usage.output_tokens,
+              },
+            }
+          : {}),
         content,
         toolCalls,
         finishReason,

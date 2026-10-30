@@ -30,6 +30,7 @@ export type ProviderRequest = Readonly<{
   signal: AbortSignal;
 }>;
 export type ProviderResult = Readonly<{
+  usage?: Readonly<{ inputTokens: number; outputTokens: number }>;
   content: string;
   toolCalls: readonly ToolCall[];
   providerMetadata?: ProviderMetadata;

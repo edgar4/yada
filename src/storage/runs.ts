@@ -1,3 +1,4 @@
+import { limitsSchema } from "../core/limits.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
@@ -9,6 +10,7 @@ import type { Identity } from "../core/contracts.js";
 import type { recordStore } from "./records.js";
 const requestSchema = z.object({
   input: z.string(),
+  limits: limitsSchema.default({ maxContextChars: 64000 }),
   history: z.array(turnSchema).default([]),
   system: z.string(),
   profileId: z.string().min(1),
@@ -29,6 +31,40 @@ export class RunLeaseError extends Error {
   constructor() {
     super("Run is leased or lease has expired");
   }
+}
+export function requireRunLease(value: unknown, token: string): DurableRun {
+  const state = runSchema.parse(value);
+  if (state.lease?.token !== token || state.lease.expiresAt <= Date.now())
+    throw new RunLeaseError();
+  return state;
+}
+export type RunOwnership = Readonly<{ runId: string; token: string }>;
+export function withRunLease<T>(
+  records: ReturnType<typeof recordStore>,
+  identity: Identity,
+  ownership: RunOwnership,
+  operation: (
+    tx: ReturnType<typeof recordStore>,
+    assertOwned: () => void,
+  ) => Promise<T>,
+): Promise<T> {
+  return records.transaction(async (tx) => {
+    const key = JSON.stringify([
+      "run",
+      identity.tenantId,
+      identity.actorId,
+      ownership.runId,
+    ]);
+    const run = await tx.read(key);
+    if (!run) throw new RunLeaseError();
+    const assertOwned = () => {
+      requireRunLease(run.value, ownership.token);
+    };
+    assertOwned();
+    await tx.write(key, run.value, run.revision);
+    assertOwned();
+    return operation(tx, assertOwned);
+  });
 }
 export interface RunStore {
   load(identity: Identity, id: string): Promise<DurableRun | undefined>;
@@ -65,12 +101,6 @@ export function createRunStore(
     ]);
   const duration = (value: number) =>
     z.number().int().min(100).max(300_000).parse(value);
-  const owned = (value: unknown, token: string) => {
-    const state = runSchema.parse(value);
-    if (state.lease?.token !== token || state.lease.expiresAt <= Date.now())
-      throw new RunLeaseError();
-    return state;
-  };
   return {
     async load(identity, id) {
       const record = await records.read(key(identity, id));
@@ -101,7 +131,7 @@ export function createRunStore(
       duration(leaseMs);
       const parsed = checkpointSchema.parse(checkpoint);
       await records.mutate(key(identity, id), (value) => {
-        const state = owned(value, token);
+        const state = requireRunLease(value, token);
         return {
           value: {
             ...state,
@@ -114,7 +144,7 @@ export function createRunStore(
     },
     async release(identity, id, token) {
       await records.mutate(key(identity, id), (value) => {
-        const state = owned(value, token);
+        const state = requireRunLease(value, token);
         return {
           value: { ...state, lease: { token, expiresAt: 0 } },
           result: undefined,
@@ -124,7 +154,7 @@ export function createRunStore(
     async renew(identity, id, token, leaseMs) {
       duration(leaseMs);
       await records.mutate(key(identity, id), (value) => {
-        const state = owned(value, token);
+        const state = requireRunLease(value, token);
         return {
           value: {
             ...state,

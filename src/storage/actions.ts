@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { Identity } from "../core/contracts.js";
 import type { recordStore } from "./records.js";
+import { withRunLease, RunLeaseError, type RunOwnership } from "./runs.js";
 export const actionSchema = z.object({
   id: z.string(),
   runId: z.string(),
@@ -37,7 +38,11 @@ export interface ActionStore {
   load(identity: Identity, id: string): Promise<Action | undefined>;
   propose(identity: Identity, action: Action): Promise<Action>;
   decide(identity: Identity, id: string, approved: boolean): Promise<Action>;
-  begin(identity: Identity, id: string): Promise<boolean>;
+  begin(
+    identity: Identity,
+    id: string,
+    ownership?: RunOwnership,
+  ): Promise<boolean>;
   receipt(identity: Identity, id: string, receipt: string): Promise<void>;
 }
 export function createActionStore(
@@ -80,9 +85,11 @@ export function createActionStore(
           throw new Error("Action decision conflict");
         return { value: state, result: state };
       }),
-    begin: (identity, id) =>
-      records.mutate(key(identity, id), (value) => {
+    begin: (identity, id, ownership) => {
+      const change = (value: unknown) => {
         const state = actionSchema.parse(value);
+        if (ownership && state.runId !== ownership.runId)
+          throw new RunLeaseError();
         if (state.status !== "approved") return { value: state, result: false };
         if (state.expiresAt <= Date.now()) {
           state.status = "expired";
@@ -90,7 +97,22 @@ export function createActionStore(
         }
         state.status = "executing";
         return { value: state, result: true };
-      }),
+      };
+      if (!ownership) return records.mutate(key(identity, id), change);
+      return withRunLease(
+        records,
+        identity,
+        ownership,
+        async (tx, assertOwned) => {
+          const actionKey = key(identity, id);
+          const action = await tx.read(actionKey);
+          const next = change(action?.value);
+          assertOwned();
+          await tx.write(actionKey, next.value, action?.revision ?? 0);
+          return next.result;
+        },
+      );
+    },
     async receipt(identity, id, receipt) {
       await records.mutate(key(identity, id), (value) => {
         const state = actionSchema.parse(value);

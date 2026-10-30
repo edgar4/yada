@@ -61,6 +61,14 @@ export type { Job, JobInput, RunEvent } from "./service/contracts.js";
 export type { JobStore } from "./storage/jobs.js";
 export { JobConflict } from "./storage/jobs.js";
 export type { Action, ActionStore } from "./storage/actions.js";
+export { contextWindow } from "./core/limits.js";
+export type { RunLimits } from "./core/limits.js";
+export {
+  backupStorage,
+  restoreStorage,
+  rotateStorageKey,
+} from "./storage/maintenance.js";
+export type { StorageBackup } from "./storage/maintenance.js";
 export { createTalonProvider } from "./integrations/talon.js";
 export type {
   TalonProviderRequest,

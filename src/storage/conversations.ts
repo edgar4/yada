@@ -44,6 +44,12 @@ export function createConversationStore(
   return {
     async load(identity, id) {
       const record = await records.read(conversationKey(identity, id));
+      if (
+        record &&
+        z.object({ deleted: z.boolean().optional() }).safeParse(record.value)
+          .data?.deleted
+      )
+        return undefined;
       return record
         ? { revision: record.revision, messages: messagesFrom(record.value) }
         : undefined;

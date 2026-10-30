@@ -1,17 +1,28 @@
+import { limitsSchema } from "../core/limits.js";
 import { turnSchema } from "../core/checkpoint.js";
 import { run } from "../core/runtime.js";
 import type { RunStore } from "./runs.js";
+import type { Suspension } from "../core/action.js";
 export async function runDurable(
   options: Omit<Parameters<typeof run>[0], "checkpoint" | "persist"> & {
     runId: string;
     profileId: string;
     store: RunStore;
     leaseMs?: number;
+    onSuspend?: (result: Suspension, token: string) => Promise<void>;
   },
 ) {
-  const { store, runId, profileId, leaseMs = 30_000, ...runtime } = options;
+  const {
+    store,
+    runId,
+    profileId,
+    leaseMs = 30_000,
+    onSuspend,
+    ...runtime
+  } = options;
   const request = {
     input: options.input,
+    limits: limitsSchema.parse(options.limits ?? {}),
     history: turnSchema.array().parse(options.history ?? []),
     system: options.system,
     profileId,
@@ -33,6 +44,8 @@ export async function runDurable(
   if (state.checkpoint?.outcome) return state.checkpoint.outcome;
   if (!state.lease) throw new Error("Missing run lease");
   const token = state.lease.token;
+  const executeWrite =
+    runtime.executeWrite?.withLease?.(token) ?? runtime.executeWrite;
   const controller = new AbortController();
   const signal = AbortSignal.any([options.signal, controller.signal]);
   let lost: Error | undefined;
@@ -58,6 +71,7 @@ export async function runDurable(
   try {
     const result = await run({
       ...runtime,
+      ...(executeWrite ? { executeWrite } : {}),
       signal,
       ...(state.checkpoint ? { checkpoint: state.checkpoint } : {}),
       persist: async (checkpoint) => {
@@ -70,6 +84,7 @@ export async function runDurable(
       result.status === "awaiting_approval" ||
       result.status === "reconciling"
     ) {
+      await onSuspend?.(result, token);
       clearInterval(timer);
       await renewal;
       await store.release(options.identity, runId, token);

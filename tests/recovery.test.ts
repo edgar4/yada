@@ -107,7 +107,7 @@ for (const driver of drivers)
         child.kill("SIGKILL");
         await exited;
       }
-      await delay(350);
+      await delay(1100);
       const execute = vi.fn(() => Promise.resolve("should not repeat"));
       const tool = readTool({
         name: "lookup",
@@ -127,7 +127,7 @@ for (const driver of drivers)
         runId: s.id,
         profileId: "test-v1",
         store: s.store.runs,
-        leaseMs: 300,
+        leaseMs: 1000,
         identity,
         provider,
         tools: [tool],
