@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createProvider, readTool, run } from "../src/index.js";
 afterEach(() => vi.unstubAllGlobals());
-it.each(["openai", "gemini"] as const)(
+it.each(["openai", "gemini", "deepseek"] as const)(
   "round trips through the real %s SDK with mocked HTTP",
   async (provider) => {
     const bodies: unknown[] = [];
@@ -12,7 +12,7 @@ it.each(["openai", "gemini"] as const)(
       bodies.push(JSON.parse(init.body) as unknown);
       const first = bodies.length === 1;
       const body =
-        provider === "openai"
+        provider !== "gemini"
           ? {
               id: "completion",
               object: "chat.completion",
@@ -95,7 +95,7 @@ it.each(["openai", "gemini"] as const)(
       expect(JSON.stringify(bodies[1])).toContain('"tool_call_id":"call_1"');
   },
 );
-it.each(["openai", "gemini"] as const)(
+it.each(["openai", "gemini", "deepseek"] as const)(
   "does not retry or leak %s HTTP auth failures",
   async (provider) => {
     const fetchMock = vi.fn(() =>

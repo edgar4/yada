@@ -7,3 +7,4 @@ export { createProvider, providerConfigFromEnv } from "./providers/config.js";
 export type { ProviderConfig } from "./providers/config.js";
 export { createOpenAIProvider } from "./providers/openai.js";
 export { createGeminiProvider } from "./providers/gemini.js";
+export { createDeepSeekProvider } from "./providers/deepseek.js";

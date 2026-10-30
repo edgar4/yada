@@ -2,13 +2,15 @@ import { z } from "zod";
 import { createAnthropicProvider } from "./anthropic.js";
 import { createOpenAIProvider } from "./openai.js";
 import { createGeminiProvider } from "./gemini.js";
+import { createDeepSeekProvider } from "./deepseek.js";
 const factories = {
   anthropic: createAnthropicProvider,
   openai: createOpenAIProvider,
   gemini: createGeminiProvider,
+  deepseek: createDeepSeekProvider,
 };
 const providerConfig = z.strictObject({
-  provider: z.enum(["anthropic", "openai", "gemini"]),
+  provider: z.enum(["anthropic", "openai", "gemini", "deepseek"]),
   apiKey: z.string().trim().min(1),
   model: z.string().trim().min(1).optional(),
 });
