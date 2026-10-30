@@ -40,7 +40,7 @@ Use [durable storage](docs/storage.md) to retain conversations and OAuth session
 
 Connect [HTTP APIs and business databases](docs/connectors.md), or build [approved write tools](docs/actions.md) with durable operation receipts. Use the [service API](docs/service.md) for scheduled runs and streaming events, and the [browser SDK and widget](docs/browser.md) for an accessible, themeable chat interface.
 
-See [operations](docs/operations.md) for context and usage controls, backup/restore, key rotation, and retention. Existing applications can use the [provider compatibility bridge](docs/integrations.md) during a local migration rehearsal.
+See [operations](docs/operations.md) for context and usage controls, backup/restore, key rotation, and retention.
 
 See [packaging and deployment](docs/deployment.md) for installable tarballs, release artifacts and a local Docker example.
 

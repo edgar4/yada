@@ -69,9 +69,3 @@ export {
   rotateStorageKey,
 } from "./storage/maintenance.js";
 export type { StorageBackup } from "./storage/maintenance.js";
-export { createTalonProvider } from "./integrations/talon.js";
-export type {
-  TalonProviderRequest,
-  TalonProviderResult,
-  TalonProviderAdapter,
-} from "./integrations/talon.js";

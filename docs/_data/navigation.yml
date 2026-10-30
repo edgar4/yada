@@ -28,5 +28,3 @@
       url: /operations.html
     - title: Packaging & deployment
       url: /deployment.html
-    - title: Existing worker integration
-      url: /integrations.html
