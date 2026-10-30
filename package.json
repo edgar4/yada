@@ -69,7 +69,7 @@
     "README.md",
     "LICENSE"
   ],
-  "description": "TypeScript runtime for in-app AI assistants, with typed tools, configurable providers, approvals, and durable conversations.",
+  "description": "TypeScript runtime for in-app AI agents, with typed tools, configurable providers, approvals, and durable conversations.",
   "license": "MIT",
   "author": "Edgar Alochi",
   "repository": {
