@@ -17,6 +17,4 @@ Core owns contracts and execution. Providers depend on core contracts. Applicati
 
 For an opt-in live model run, copy `.env.example` to `.env`, select the provider and enter your API key, then run `npm run demo:live`. This sends a request to the provider and may incur usage charges. Automated tests use mocked responses and require no credentials.
 
-The adapter mapping follows Talon's existing implementation and the [LangChain ChatAnthropic contract](https://reference.langchain.com/javascript/langchain-anthropic/ChatAnthropic).
-
 Planned storage is user-configurable: SQLite by default, with PostgreSQL and MySQL/MariaDB adapters. Persistence is not implemented yet.
