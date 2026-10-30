@@ -1,4 +1,9 @@
 import { abortable } from "./abort.js";
+import {
+  checkpointSchema,
+  CheckpointError,
+  type RunCheckpoint,
+} from "./checkpoint.js";
 import type {
   Identity,
   ProviderAdapter,
@@ -16,6 +21,8 @@ export async function run(options: {
   history?: readonly Turn[];
   maxRounds?: number;
   maxToolCalls?: number;
+  checkpoint?: RunCheckpoint;
+  persist?: (checkpoint: RunCheckpoint) => Promise<void>;
 }): Promise<RunResult> {
   const { provider, signal } = options;
   const rounds = options.maxRounds ?? 8;
@@ -31,12 +38,38 @@ export async function run(options: {
   const tools = new Map(options.tools.map((tool) => [tool.spec.name, tool]));
   if (tools.size !== options.tools.length)
     throw new Error("Duplicate tool names");
-  const messages: Turn[] = [
-    ...(options.history ?? []),
-    { role: "user", content: options.input },
-  ];
-  let calls = 0;
-  const ids = new Set<string>();
+  const state = checkpointSchema.parse(
+    options.checkpoint ?? {
+      version: 1,
+      messages: [
+        ...(options.history ?? []),
+        { role: "user", content: options.input },
+      ],
+      pending: [],
+      rounds: 0,
+      calls: 0,
+    },
+  );
+  const save = async () => {
+    try {
+      await options.persist?.(structuredClone(state));
+    } catch {
+      throw new CheckpointError();
+    }
+  };
+  const finish = async (result: RunResult) => {
+    state.outcome = result;
+    await save();
+    return result;
+  };
+  if (state.outcome) return state.outcome;
+  const ids = new Set(
+    state.messages.flatMap((message) =>
+      message.role === "assistant"
+        ? message.toolCalls.map((call) => call.id)
+        : [],
+    ),
+  );
   try {
     signal.throwIfAborted();
     const visible: ReadTool[] = [];
@@ -44,48 +77,13 @@ export async function run(options: {
       if (await abortable(() => tool.authorize(identity), signal))
         visible.push(tool);
     if (visible.length && !provider.capabilities.toolCalling)
-      return { status: "failed", code: "unsupported" };
-    for (let round = 0; round < rounds; round++) {
-      signal.throwIfAborted();
-      const result = await abortable(
-        () =>
-          provider.complete({
-            system: options.system,
-            messages: [...messages],
-            tools: visible.map((tool) => tool.spec),
-            signal,
-          }),
-        signal,
-      );
-      signal.throwIfAborted();
-      if (result.finishReason === "length" || result.finishReason === "other")
-        return { status: "failed", code: "invalid_response" };
-      if (!result.toolCalls.length)
-        return result.finishReason === "stop" && result.content.trim()
-          ? { status: "completed", text: result.content }
-          : { status: "failed", code: "invalid_response" };
-      if (result.finishReason !== "tool_calls")
-        return { status: "failed", code: "invalid_response" };
-      if (calls + result.toolCalls.length > callLimit)
-        return { status: "failed", code: "limit" };
-      for (const call of result.toolCalls) {
-        if (!call.id || ids.has(call.id))
-          return { status: "failed", code: "invalid_response" };
-        ids.add(call.id);
-      }
-      messages.push({
-        role: "assistant",
-        content: result.content,
-        toolCalls: result.toolCalls,
-        ...(result.providerMetadata
-          ? { providerMetadata: result.providerMetadata }
-          : {}),
-      });
-      for (const call of result.toolCalls) {
+      return await finish({ status: "failed", code: "unsupported" });
+    for (;;) {
+      for (const call of [...state.pending]) {
         signal.throwIfAborted();
         const tool = visible.find((item) => item.spec.name === call.name);
         if (!tool || !(await abortable(() => tool.authorize(identity), signal)))
-          return { status: "failed", code: "tool_denied" };
+          return await finish({ status: "failed", code: "tool_denied" });
         signal.throwIfAborted();
         const content = await abortable(
           () => tool.execute(call.args, identity, signal),
@@ -93,20 +91,67 @@ export async function run(options: {
         );
         signal.throwIfAborted();
         if (content.length > 32_000)
-          return { status: "failed", code: "invalid_response" };
-        messages.push({
+          return await finish({ status: "failed", code: "invalid_response" });
+        state.messages.push({
           role: "tool",
           toolCallId: call.id,
           name: call.name,
           content,
         });
-        calls++;
+        state.calls++;
+        state.pending.shift();
+        await save();
       }
+      if (state.rounds >= rounds)
+        return await finish({ status: "failed", code: "limit" });
+      signal.throwIfAborted();
+      state.rounds++;
+      await save();
+      const result = await abortable(
+        () =>
+          provider.complete({
+            system: options.system,
+            messages: structuredClone(state.messages),
+            tools: visible.map((tool) => tool.spec),
+            signal,
+          }),
+        signal,
+      );
+      signal.throwIfAborted();
+      if (result.finishReason === "length" || result.finishReason === "other")
+        return await finish({ status: "failed", code: "invalid_response" });
+      if (!result.toolCalls.length)
+        return await finish(
+          result.finishReason === "stop" && result.content.trim()
+            ? { status: "completed", text: result.content }
+            : { status: "failed", code: "invalid_response" },
+        );
+      if (result.finishReason !== "tool_calls")
+        return await finish({ status: "failed", code: "invalid_response" });
+      if (state.calls + result.toolCalls.length > callLimit)
+        return await finish({ status: "failed", code: "limit" });
+      for (const call of result.toolCalls) {
+        if (!call.id || ids.has(call.id))
+          return await finish({ status: "failed", code: "invalid_response" });
+        ids.add(call.id);
+      }
+      state.messages.push({
+        role: "assistant",
+        content: result.content,
+        toolCalls: [...result.toolCalls],
+        ...(result.providerMetadata
+          ? { providerMetadata: result.providerMetadata }
+          : {}),
+      });
+      state.pending = [...result.toolCalls];
+      await save();
     }
-    return { status: "failed", code: "limit" };
-  } catch {
-    return signal.aborted
-      ? { status: "cancelled" }
-      : { status: "failed", code: "dependency_failed" };
+  } catch (error) {
+    if (error instanceof CheckpointError) throw error;
+    return finish(
+      signal.aborted
+        ? { status: "cancelled" }
+        : { status: "failed", code: "dependency_failed" },
+    );
   }
 }

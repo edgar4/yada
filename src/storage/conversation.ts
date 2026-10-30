@@ -2,7 +2,10 @@ import { run } from "../core/runtime.js";
 import type { Turn } from "../core/contracts.js";
 import type { ConversationStore } from "./index.js";
 export async function runConversation(
-  options: Omit<Parameters<typeof run>[0], "history"> & {
+  options: Omit<
+    Parameters<typeof run>[0],
+    "history" | "checkpoint" | "persist"
+  > & {
     conversationId: string;
     store: ConversationStore;
   },
