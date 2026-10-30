@@ -1,5 +1,7 @@
 - title: Start here
   pages:
+    - title: Starter app
+      url: /starter.html
     - title: Provider configuration
       url: /configuration.html
     - title: Runtime architecture
