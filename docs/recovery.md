@@ -39,13 +39,13 @@ A worker claims a lease before execution and renews it while running. The defaul
 
 Competing claims raise `RunLeaseError` while a lease remains active. After a crash, retry after expiry. Each new claim receives a unique token; stale workers cannot overwrite the replacement worker's checkpoint. Database compare-and-swap checks prevent lost updates.
 
-Failure to persist a checkpoint raises `CheckpointError`; no successful answer is returned before its outcome is committed. Lease-renewal failures abort execution and leave the run recoverable after expiry. Cancellation requested by the caller is a persisted terminal outcome. Ordinary model or tool errors remain terminal `dependency_failed` outcomes.
+Failure to persist a checkpoint raises `CheckpointError`; no successful answer is returned before its outcome is committed. Lease-renewal failures abort execution and leave the run recoverable after expiry. Cancellation requested by the caller is persisted. If a write has an uncertain result, the run remains reconciling until its receipt resolves; cancellation cannot discard that evidence. Ordinary model or tool errors otherwise produce terminal `dependency_failed` outcomes.
 
 ## Replay boundaries
 
 Model decisions are saved before tools execute. Each tool result is saved before the next tool or model call. A crash after execution but before the result is committed can repeat that read. A model request interrupted before its response is saved can also repeat and incur provider charges. Model attempts consume the round budget before dispatch, including interrupted attempts.
 
-This API supports read tools. It does not promise exactly-once external execution. Tool handlers must honor cancellation; losing a lease cannot stop an external operation that ignores its signal. Keep write operations out of read-tool handlers.
+Use [approved write tools](actions.md) with `actionExecutor` for mutations. Durable execution binds the executor to the current lease and fences the transition into execution. Once a write starts, recovery looks up its receipt instead of replaying it. Tool handlers must honor cancellation; losing a lease cannot stop an external operation that ignores its signal. Keep write operations out of read-tool handlers.
 
 ## Verification
 
