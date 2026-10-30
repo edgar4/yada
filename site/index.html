@@ -1,7 +1,7 @@
 ---
 layout: base
-title: "Yada — TypeScript agent runtime for your application"
-description: "Build an assistant inside your application with Yada: a TypeScript agent runtime, approved tools, durable runs, a browser SDK and a themeable chat widget."
+title: "Yada — TypeScript runtime for in-app AI assistants"
+description: "Yada is a TypeScript runtime for building AI assistants inside your product. Connect a model, expose your APIs as typed tools and require user approval before every write."
 ---
 
 <main id="main" tabindex="-1">
@@ -12,29 +12,28 @@ description: "Build an assistant inside your application with Yada: a TypeScript
         <path d="M90 32 Q75 46 60 60" />
         <path d="M60 60 Q60 75 60 90" />
       </g>
-      <circle cx="60" cy="60" r="9" />
     </svg>
     <div class="wrap hero-grid">
       <div class="hero-copy">
-        <p class="eyebrow">Yada · Hebrew for “to know”</p>
+        <p class="kicker">TypeScript agent runtime for Node.js</p>
         <h1 id="hero-title">
-          A capable assistant.<br /><span>Inside your app.</span>
+          Build an AI assistant that works
+          <span>inside your product.</span>
         </h1>
         <p class="hero-description">
-          Turn a conversation into useful work. Connect your model, your tools,
-          and your application’s rules. Yada brings the runtime together.
+          Yada is the server-side runtime for in-app assistants. Connect a
+          model, turn your APIs and databases into typed tools, and let users
+          approve every change. It runs in your Node backend, behind your auth,
+          with your keys.
         </p>
         <div class="hero-actions">
-          <a class="button button-primary" href="#get-started"
-            >Build with Yada <span aria-hidden="true">↗</span></a
-          ><a class="text-link" href="{{ '/architecture.html' | relative_url }}"
-            >Explore the runtime <span aria-hidden="true">→</span></a
+          <a class="button button-primary" href="#get-started">Get started</a
+          ><a
+            class="text-link"
+            href="{{ '/configuration.html' | relative_url }}"
+            >Read the docs <span aria-hidden="true">→</span></a
           >
         </div>
-        <p class="hero-detail">
-          <span>Node 24</span><span>ESM + TypeScript</span
-          ><span>Your infrastructure</span>
-        </p>
       </div>
       <div class="hero-demo">
         <svg
@@ -57,63 +56,48 @@ description: "Build an assistant inside your application with Yada: a TypeScript
           </g>
           <circle data-part="d" cx="60" cy="60" r="9" fill="#E07A00" />
         </svg>
-        <div class="flow-window" aria-label="Illustrative assistant workflow">
-          <div class="window-bar">
-            <span>Your application / Assistant</span
-            ><span class="window-badge">Example</span>
-          </div>
+        <div class="flow-window" aria-label="Example conversation in your app">
+          <div class="window-bar">Your app · support console</div>
           <ol class="flow-body">
             <li class="flow-message" data-face="neutral">
               <span class="flow-label">You</span>
               <p>Find this customer’s latest order.</p>
             </li>
             <li class="tool-call" data-face="thinking">
-              <span class="flow-label"
-                >order_lookup <span class="read-badge">Read tool</span></span
-              >
-              <p>Order #1042 <span aria-hidden="true">·</span> Ready to ship</p>
+              <span class="flow-label">order_lookup · read tool</span>
+              <p>Order #1042 · Ready to ship</p>
             </li>
             <li class="flow-message assistant-message" data-face="smile">
               <span class="flow-label">Yada</span>
-              <p>Found it. Would you like to update the delivery note?</p>
+              <p>Found it. Want me to update the delivery note?</p>
             </li>
             <li class="approval-preview" data-face="wink">
-              <span class="approval-icon" aria-hidden="true">✓</span>
               <div>
-                <strong>Your approval comes first.</strong
-                ><span>Writes wait for an authorized decision.</span>
+                <strong>Waiting for your approval.</strong
+                ><span>Writes never run without a confirmed decision.</span>
               </div>
             </li>
           </ol>
-          <div class="window-foot">
-            Your tools supply the data. Your backend holds the keys.
-          </div>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="runtime-strip" aria-label="Runtime components">
+  <section class="runtime-strip" aria-labelledby="strip-title">
     <div class="wrap strip-inner">
-      <p>One runtime. The pieces your app needs.</p>
+      <p id="strip-title">One runtime, three entry points</p>
       <ul>
-        <li>Server runtime</li>
-        <li>Browser SDK</li>
-        <li>Web component</li>
+        <li><code>yada</code> server runtime</li>
+        <li><code>yada/client</code> browser SDK</li>
+        <li><code>yada/widget</code> chat widget</li>
       </ul>
     </div>
   </section>
 
   <section class="section wrap" id="runtime" aria-labelledby="runtime-title">
     <div class="section-heading">
-      <p class="eyebrow">USEFUL BY DESIGN</p>
-      <h2 id="runtime-title">
-        Give your assistant<br />a way to get things done.
-      </h2>
-      <p>
-        Keep your product’s behavior in code. Yada connects model decisions to
-        typed tools, explicit authorization, and durable execution.
-      </p>
+      <h2 id="runtime-title">From a chat message to real work</h2>
+      <p>The model decides what to do. Your code decides what’s allowed.</p>
     </div>
     <ol class="lifecycle">
       <li>
@@ -124,11 +108,10 @@ description: "Build an assistant inside your application with Yada: a TypeScript
           height="64"
           alt=""
         />
-        <span class="step-number">01</span>
-        <h3>Connect a model</h3>
+        <h3>Pick a model</h3>
         <p>
-          Choose a hosted provider or a local server. Use a shared request and
-          tool-call contract.
+          Anthropic, OpenAI, Gemini and DeepSeek, or local models through Ollama
+          and llama.cpp. Switching is a config change, not a rewrite.
         </p>
       </li>
       <li>
@@ -139,11 +122,10 @@ description: "Build an assistant inside your application with Yada: a TypeScript
           height="64"
           alt=""
         />
-        <span class="step-number">02</span>
-        <h3>Define the tools</h3>
+        <h3>Expose your tools</h3>
         <p>
-          Bind inputs to schemas and authorization. Connect APIs, databases, or
-          MCP servers.
+          Wrap HTTP APIs, SQL queries or MCP servers as tools with Zod-validated
+          inputs. Authorization is checked before every call.
         </p>
       </li>
       <li>
@@ -154,11 +136,10 @@ description: "Build an assistant inside your application with Yada: a TypeScript
           height="64"
           alt=""
         />
-        <span class="step-number">03</span>
-        <h3>Approve the action</h3>
+        <h3>Approve the writes</h3>
         <p>
-          Prepare a write, show its preview, and wait for a verified user
-          decision.
+          Write tools pause with a preview. Nothing changes until an
+          authenticated user confirms.
         </p>
       </li>
       <li>
@@ -169,11 +150,10 @@ description: "Build an assistant inside your application with Yada: a TypeScript
           height="64"
           alt=""
         />
-        <span class="step-number">04</span>
-        <h3>Keep the thread</h3>
+        <h3>Pick up where it stopped</h3>
         <p>
-          Persist conversations, checkpoints, and operation receipts across
-          restarts.
+          Encrypted checkpoints and operation receipts in SQLite, PostgreSQL or
+          MySQL let runs resume after a crash or deploy.
         </p>
       </li>
     </ol>
@@ -181,55 +161,46 @@ description: "Build an assistant inside your application with Yada: a TypeScript
 
   <section class="building-blocks wrap" aria-labelledby="blocks-title">
     <div class="blocks-intro">
-      <p class="eyebrow">SMALL SURFACE. SOLID FOUNDATIONS.</p>
-      <h2 id="blocks-title">Fits your stack.<br />Follows your rules.</h2>
+      <h2 id="blocks-title">It only knows what you let it.</h2>
       <p>
-        Embed Yada behind your existing authentication and business logic. Build
-        the interface that belongs in your product.
+        Yada is Hebrew for “to know”. Here, that knowledge comes from you: the
+        tools you register, the data they can reach and the permissions of the
+        user asking. It’s a library inside your service, not a hosted platform.
       </p>
-      <a class="text-link" href="{{ '/service.html' | relative_url }}"
-        >See the service API <span aria-hidden="true">→</span></a
+      <a class="text-link" href="{{ '/architecture.html' | relative_url }}"
+        >How the runtime works <span aria-hidden="true">→</span></a
       >
     </div>
     <div class="block-list">
       <div class="block-row">
-        <span class="block-index" aria-hidden="true">A</span>
-        <div>
-          <h3>Bring your model</h3>
-          <p>
-            Anthropic, OpenAI, Gemini, DeepSeek, Ollama, and llama.cpp. Provider
-            credentials stay on your server.
-          </p>
-          <a href="{{ '/configuration.html' | relative_url }}"
-            >Provider configuration <span aria-hidden="true">↗</span></a
-          >
-        </div>
+        <h3>Your backend, your keys</h3>
+        <p>
+          Provider credentials and tool handlers stay on your server. There’s no
+          hosted layer between your app and your model provider.
+        </p>
+        <a href="{{ '/configuration.html' | relative_url }}"
+          >Provider configuration <span aria-hidden="true">→</span></a
+        >
       </div>
       <div class="block-row">
-        <span class="block-index" aria-hidden="true">B</span>
-        <div>
-          <h3>Connect real application tools</h3>
-          <p>
-            Typed read and write tools, HTTP and database connectors, and MCP
-            with OAuth connection support.
-          </p>
-          <a href="{{ '/connectors.html' | relative_url }}"
-            >Tools and connectors <span aria-hidden="true">↗</span></a
-          >
-        </div>
+        <h3>Your auth, checked on every call</h3>
+        <p>
+          Pass in the authenticated user and tenant. Yada rechecks authorization
+          before each tool runs and again before a write executes.
+        </p>
+        <a href="{{ '/actions.html' | relative_url }}"
+          >Approved actions <span aria-hidden="true">→</span></a
+        >
       </div>
       <div class="block-row">
-        <span class="block-index" aria-hidden="true">C</span>
-        <div>
-          <h3>Keep durable state</h3>
-          <p>
-            SQLite, PostgreSQL, or MySQL. Recover runs from checkpoints and
-            reconcile uncertain writes using receipts.
-          </p>
-          <a href="{{ '/recovery.html' | relative_url }}"
-            >Recovery and replay <span aria-hidden="true">↗</span></a
-          >
-        </div>
+        <h3>A chat UI that fits your product</h3>
+        <p>
+          Stream responses with the browser SDK, or drop in the accessible,
+          themeable chat web component.
+        </p>
+        <a href="{{ '/browser.html' | relative_url }}"
+          >Browser SDK and widget <span aria-hidden="true">→</span></a
+        >
       </div>
     </div>
   </section>
@@ -241,27 +212,23 @@ description: "Build an assistant inside your application with Yada: a TypeScript
   >
     <div class="wrap start-grid">
       <div class="start-copy">
-        <p class="eyebrow">FROM ZERO TO A TOOL CALL</p>
-        <h2 id="start-title">Start small.<br />Make it yours.</h2>
+        <h2 id="start-title">Try it without an API key.</h2>
         <p>
-          Run the deterministic catalog demo first. No provider account or API
-          key needed.
+          On Node 24, the demo runs a catalog lookup against a scripted model,
+          so you can watch a full tool call before connecting a provider.
         </p>
         <p>
-          Then add your provider configuration to a private
-          <code>.env</code> file and run the same example with a live model.
+          When you’re ready, add your provider settings to a private
+          <code>.env</code> and run the same example against a live model.
         </p>
         <a class="text-link" href="{{ '/configuration.html' | relative_url }}"
           >Full setup guide <span aria-hidden="true">→</span></a
         >
-        <p class="setup-note">
-          Live calls use your provider account. Keep keys on the server.
-        </p>
       </div>
       <div class="setup-stack">
         <div class="code-panel">
           <div class="code-heading">
-            <span><b>01</b> Run the local demo</span
+            <span>Run the demo</span
             ><button
               type="button"
               data-copy="demo-code"
@@ -278,7 +245,7 @@ npm run demo</code></pre>
         </div>
         <div class="code-panel env-panel">
           <div class="code-heading">
-            <span><b>02</b> Configure your private .env</span
+            <span>Connect a live model</span
             ><button
               type="button"
               data-copy="env-code"
@@ -301,44 +268,32 @@ YADA_LLM_API_KEY=your-provider-key</code></pre>
 
   <section class="section wrap" aria-labelledby="docs-title">
     <div class="docs-heading">
-      <div>
-        <p class="eyebrow">GO A LITTLE DEEPER</p>
-        <h2 id="docs-title">A good place to build from.</h2>
-      </div>
-      <p>
-        Practical guides, clear boundaries,<br />and the details you need to
-        integrate.
-      </p>
+      <h2 id="docs-title">Guides for every part of the runtime</h2>
+      <p>Setup, tools, approvals, storage and deployment.</p>
     </div>
     <div class="guide-grid">
       <a class="guide" href="{{ '/configuration.html' | relative_url }}"
-        ><span class="guide-label">01 / CONFIGURE</span>
-        <h3>Models & providers <span aria-hidden="true">↗</span></h3>
-        <p>Credentials, model selection, and local servers.</p></a
+        ><h3>Models and providers</h3>
+        <p>Credentials, model selection and local servers.</p></a
       >
       <a class="guide" href="{{ '/actions.html' | relative_url }}"
-        ><span class="guide-label">02 / ACT</span>
-        <h3>Approved actions <span aria-hidden="true">↗</span></h3>
-        <p>Write tools, approval previews, and receipts.</p></a
+        ><h3>Approved actions</h3>
+        <p>Write tools, approval previews and receipts.</p></a
       >
       <a class="guide" href="{{ '/browser.html' | relative_url }}"
-        ><span class="guide-label">03 / EMBED</span>
-        <h3>SDK & chat widget <span aria-hidden="true">↗</span></h3>
+        ><h3>SDK and chat widget</h3>
         <p>Streaming clients and a themeable web component.</p></a
       >
       <a class="guide" href="{{ '/mcp.html' | relative_url }}"
-        ><span class="guide-label">04 / CONNECT</span>
-        <h3>MCP connections <span aria-hidden="true">↗</span></h3>
+        ><h3>MCP connections</h3>
         <p>External tool servers and OAuth connections.</p></a
       >
       <a class="guide" href="{{ '/storage.html' | relative_url }}"
-        ><span class="guide-label">05 / PERSIST</span>
-        <h3>Durable storage <span aria-hidden="true">↗</span></h3>
+        ><h3>Durable storage</h3>
         <p>Conversations and run state across restarts.</p></a
       >
       <a class="guide" href="{{ '/deployment.html' | relative_url }}"
-        ><span class="guide-label">06 / OPERATE</span>
-        <h3>Deployment & operations <span aria-hidden="true">↗</span></h3>
+        ><h3>Deployment and operations</h3>
         <p>Installable packages and a Docker starting point.</p></a
       >
     </div>
