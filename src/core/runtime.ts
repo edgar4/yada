@@ -73,6 +73,9 @@ export async function run(options: {
         role: "assistant",
         content: result.content,
         toolCalls: result.toolCalls,
+        ...(result.providerMetadata
+          ? { providerMetadata: result.providerMetadata }
+          : {}),
       });
       for (const call of result.toolCalls) {
         signal.throwIfAborted();

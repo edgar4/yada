@@ -1,3 +1,7 @@
+export type ProviderMetadata = Readonly<{
+  provider: string;
+  data: Record<string, unknown>;
+}>;
 export type ToolCall = Readonly<{ id: string; name: string; args: unknown }>;
 export type Turn =
   | Readonly<{ role: "user"; content: string }>
@@ -5,6 +9,7 @@ export type Turn =
       role: "assistant";
       content: string;
       toolCalls: readonly ToolCall[];
+      providerMetadata?: ProviderMetadata;
     }>
   | Readonly<{
       role: "tool";
@@ -26,6 +31,7 @@ export type ProviderRequest = Readonly<{
 export type ProviderResult = Readonly<{
   content: string;
   toolCalls: readonly ToolCall[];
+  providerMetadata?: ProviderMetadata;
   finishReason: "stop" | "tool_calls" | "length" | "other";
 }>;
 export interface ProviderAdapter {

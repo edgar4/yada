@@ -8,13 +8,16 @@ import {
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { z } from "zod";
 import type { ProviderAdapter, Turn } from "../core/contracts.js";
-function toMessage(turn: Turn): BaseMessage {
+function toMessage(turn: Turn, provider: string): BaseMessage {
   switch (turn.role) {
     case "user":
       return new HumanMessage(turn.content);
     case "assistant":
+      if (turn.providerMetadata && turn.providerMetadata.provider !== provider)
+        throw new Error("Provider metadata mismatch");
       return new AIMessage({
         content: turn.content,
+        additional_kwargs: turn.providerMetadata?.data ?? {},
         tool_calls: turn.toolCalls.map((call) => ({
           id: call.id,
           name: call.name,
@@ -50,7 +53,10 @@ export function chatModelAdapter(
       const bound = tools.length ? model.bindTools?.(tools) : model;
       if (!bound) throw new Error("Model does not support tools");
       const message = await bound.invoke(
-        [new SystemMessage(request.system), ...request.messages.map(toMessage)],
+        [
+          new SystemMessage(request.system),
+          ...request.messages.map((turn) => toMessage(turn, name)),
+        ],
         { signal: request.signal },
       );
       request.signal.throwIfAborted();
@@ -58,7 +64,10 @@ export function chatModelAdapter(
         throw new Error("Invalid model tool calls");
       const reason: unknown =
         message.response_metadata["stop_reason"] ??
-        message.response_metadata["finish_reason"];
+        message.response_metadata["finish_reason"] ??
+        message.response_metadata["finishReason"];
+      const normalizedReason =
+        typeof reason === "string" ? reason.toLowerCase() : "";
       const toolCalls = (message.tool_calls ?? []).map((call) => ({
         id: z.string().min(1).parse(call.id),
         name: call.name,
@@ -72,14 +81,26 @@ export function chatModelAdapter(
               .map((block) => z.object({ text: z.string() }).parse(block).text)
               .join("");
       const finishReason =
-        reason === "max_tokens" || reason === "length"
+        normalizedReason === "max_tokens" || normalizedReason === "length"
           ? "length"
           : toolCalls.length
             ? "tool_calls"
-            : reason === "end_turn" || reason === "stop"
+            : normalizedReason === "end_turn" || normalizedReason === "stop"
               ? "stop"
               : "other";
-      return { content, toolCalls, finishReason };
+      return {
+        content,
+        toolCalls,
+        finishReason,
+        ...(Object.keys(message.additional_kwargs).length
+          ? {
+              providerMetadata: {
+                provider: name,
+                data: message.additional_kwargs,
+              },
+            }
+          : {}),
+      };
     },
   };
 }
