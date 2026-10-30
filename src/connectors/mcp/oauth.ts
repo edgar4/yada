@@ -25,6 +25,11 @@ export interface McpOAuthStore {
   load(key: string): Promise<OAuthSession | undefined>;
   update(key: string, patch: Partial<OAuthSession>): Promise<void>;
   consumePending(key: string, state: string): Promise<OAuthPending | undefined>;
+  coordinate?<T>(
+    key: string,
+    operation: (store: McpOAuthStore, signal: AbortSignal) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T>;
 }
 export type McpOAuth = Readonly<{
   provider: OAuthClientProvider;

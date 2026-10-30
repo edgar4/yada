@@ -10,8 +10,8 @@ export type {
   ConversationMessage,
 } from "./conversations.js";
 import { createRunStore, type RunStore } from "./runs.js";
-import { oauthSessionSchema } from "./oauth-schema.js";
-import type { McpOAuthStore, OAuthSession } from "../connectors/mcp/oauth.js";
+import { createOAuthStore } from "./oauth.js";
+import type { McpOAuthStore } from "../connectors/mcp/oauth.js";
 import { openDatabase } from "./database.js";
 import { recordStore } from "./records.js";
 import { storageConfig, type StorageConfig } from "./config.js";
@@ -32,35 +32,12 @@ export async function createStorage(
   const options = storageConfig.parse(config);
   const db = await openDatabase(options);
   const records = recordStore(db, options.encryptionKey);
-  const oauthKey = (id: string) => JSON.stringify(["oauth", id]);
-  const session = (value: unknown): OAuthSession =>
-    value === undefined ? {} : oauthSessionSchema.parse(value);
-
   return {
     runs: createRunStore(records),
     jobs: createJobStore(records),
     actions: createActionStore(records),
     conversations: createConversationStore(records),
-    oauth: {
-      async load(id) {
-        const record = await records.read(oauthKey(id));
-        return record ? session(record.value) : undefined;
-      },
-      update: async (id, patch) =>
-        records.mutate(oauthKey(id), (value) => ({
-          value: session({ ...session(value), ...patch }),
-          result: undefined,
-        })),
-      consumePending: (id, state) =>
-        records.mutate(oauthKey(id), (value) => {
-          const current = session(value);
-          const pending = current.pending;
-          if (!pending || pending.state !== state)
-            return { value: current, result: undefined };
-          delete current.pending;
-          return { value: current, result: pending };
-        }),
-    },
+    oauth: createOAuthStore(records),
     close: () => db.destroy(),
   };
 }
