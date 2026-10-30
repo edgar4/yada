@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createProvider, readTool, run } from "../src/index.js";
 afterEach(() => vi.unstubAllGlobals());
-it.each(["openai", "gemini", "deepseek"] as const)(
+it.each(["openai", "gemini", "deepseek", "ollama", "llamacpp"] as const)(
   "round trips through the real %s SDK with mocked HTTP",
   async (provider) => {
     const bodies: unknown[] = [];
@@ -69,7 +69,7 @@ it.each(["openai", "gemini", "deepseek"] as const)(
     });
     vi.stubGlobal("fetch", fetchMock);
     const result = await run({
-      provider: createProvider({ provider, apiKey: "test" }),
+      provider: createProvider({ provider, apiKey: "test", model: "test" }),
       tools: [
         readTool({
           name: "lookup",
@@ -95,7 +95,7 @@ it.each(["openai", "gemini", "deepseek"] as const)(
       expect(JSON.stringify(bodies[1])).toContain('"tool_call_id":"call_1"');
   },
 );
-it.each(["openai", "gemini", "deepseek"] as const)(
+it.each(["openai", "gemini", "deepseek", "ollama", "llamacpp"] as const)(
   "does not retry or leak %s HTTP auth failures",
   async (provider) => {
     const fetchMock = vi.fn(() =>
@@ -115,7 +115,7 @@ it.each(["openai", "gemini", "deepseek"] as const)(
     vi.stubGlobal("fetch", fetchMock);
     expect(
       await run({
-        provider: createProvider({ provider, apiKey: "test" }),
+        provider: createProvider({ provider, apiKey: "test", model: "test" }),
         tools: [],
         identity: { actorId: "a", tenantId: "t" },
         input: "Hi",
