@@ -76,7 +76,7 @@ export async function createStorage(
       },
       update: async (id, patch) =>
         records.mutate(oauthKey(id), (value) => ({
-          value: { ...session(value), ...patch },
+          value: session({ ...session(value), ...patch }),
           result: undefined,
         })),
       consumePending: (id, state) =>

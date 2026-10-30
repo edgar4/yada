@@ -24,6 +24,7 @@ export default ts.config(
             "**/providers/**",
             "**/integrations/**",
             "**/connectors/**",
+            "**/storage/**",
             "node:*",
           ],
         },

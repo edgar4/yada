@@ -1,0 +1,33 @@
+name: Database conformance
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  storage:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: yada-test
+          POSTGRES_DB: yada_test
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 20
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: yada-test
+          MYSQL_DATABASE: yada_test
+        ports: ["3306:3306"]
+        options: --health-cmd "mysqladmin ping -pyada-test" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      YADA_TEST_POSTGRES_URL: postgres://postgres:yada-test@127.0.0.1:5432/yada_test
+      YADA_TEST_MYSQL_URL: mysql://root:yada-test@127.0.0.1:3306/yada_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run check

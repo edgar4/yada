@@ -35,3 +35,4 @@ export type {
   Conversation,
   ConversationMessage,
 } from "./storage/index.js";
+export { runConversation } from "./storage/conversation.js";

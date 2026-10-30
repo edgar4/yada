@@ -13,6 +13,7 @@ export async function run(options: {
   input: string;
   system: string;
   signal: AbortSignal;
+  history?: readonly Turn[];
   maxRounds?: number;
   maxToolCalls?: number;
 }): Promise<RunResult> {
@@ -30,7 +31,10 @@ export async function run(options: {
   const tools = new Map(options.tools.map((tool) => [tool.spec.name, tool]));
   if (tools.size !== options.tools.length)
     throw new Error("Duplicate tool names");
-  const messages: Turn[] = [{ role: "user", content: options.input }];
+  const messages: Turn[] = [
+    ...(options.history ?? []),
+    { role: "user", content: options.input },
+  ];
   let calls = 0;
   const ids = new Set<string>();
   try {
