@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Juniper customer care</title>
+    <style>
+      body {
+        margin: 0;
+        color: #244534;
+        background: #f6f2e9;
+        font:
+          18px/1.6 Georgia,
+          serif;
+      }
+      header,
+      main {
+        max-width: 880px;
+        margin: auto;
+        padding: 32px;
+      }
+      header {
+        border-bottom: 1px solid #d8d4c9;
+      }
+      h1 {
+        font-weight: 400;
+        font-size: 48px;
+      }
+      button {
+        background: orange !important;
+        text-transform: uppercase;
+      }
+      yada-chat {
+        --yada-accent: #286345;
+        --yada-background: #fffdf8;
+        --yada-color: #244534;
+        --yada-border: #b2c3af;
+        --yada-radius: 20px;
+        --yada-font: 17px/1.6 Georgia, serif;
+        --yada-spacing: 24px;
+        --yada-focus: #286345;
+      }
+    </style>
+  </head>
+  <body data-conversation="retail-demo" data-profile="support">
+    <header>JUNIPER / thoughtfully made</header>
+    <main>
+      <h1>A little help, whenever you need it.</h1>
+      <p>
+        Ask about your order or our collection. Review any proposed action
+        before approving it.
+      </p>
+      <yada-chat></yada-chat>
+    </main>
+    <script type="module" src="./app.ts"></script>
+  </body>
+</html>
