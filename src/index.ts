@@ -36,3 +36,8 @@ export type {
   ConversationMessage,
 } from "./storage/index.js";
 export { runConversation } from "./storage/conversation.js";
+export { runDurable } from "./storage/durable-run.js";
+export { RunLeaseError } from "./storage/runs.js";
+export type { RunStore, DurableRun, DurableRequest } from "./storage/runs.js";
+export { CheckpointError } from "./core/checkpoint.js";
+export type { RunCheckpoint } from "./core/checkpoint.js";

@@ -1,3 +1,4 @@
+import { createRunStore, type RunStore } from "./runs.js";
 import { oauthSessionSchema } from "./oauth-schema.js";
 import { z } from "zod";
 import type { Identity } from "../core/contracts.js";
@@ -28,6 +29,7 @@ export interface ConversationStore {
   ): Promise<number>;
 }
 export interface YadaStorage {
+  runs: RunStore;
   conversations: ConversationStore;
   oauth: McpOAuthStore;
   close: () => Promise<void>;
@@ -50,6 +52,7 @@ export async function createStorage(
     value === undefined ? {} : oauthSessionSchema.parse(value);
 
   return {
+    runs: createRunStore(records),
     conversations: {
       async load(identity, id) {
         const record = await records.read(key(identity, id));
