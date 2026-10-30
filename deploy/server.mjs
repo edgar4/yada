@@ -48,11 +48,14 @@ let stopping = false;
 async function stop() {
   if (stopping) return;
   stopping = true;
-  await new Promise((resolve, reject) =>
+  const closed = new Promise((resolve, reject) =>
     server.close((error) => (error ? reject(error) : resolve())),
   );
-  await worker.stop();
+  server.closeAllConnections();
+  const results = await Promise.allSettled([closed, worker.stop()]);
   await storage.close();
+  if (results.some((result) => result.status === "rejected"))
+    throw new Error("Shutdown failed");
 }
 for (const signal of ["SIGINT", "SIGTERM"])
   process.once(signal, () => void stop().catch(() => process.exit(1)));

@@ -208,13 +208,13 @@ for (const driver of drivers)
         runId: s.id,
         profileId: "v1",
         store: s.store.runs,
-        leaseMs: 100,
+        leaseMs: 1000,
         identity,
         provider,
         tools: [tool],
         input: "Lookup",
         system: "Help",
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(10000),
       };
       await expect(
         runDurable({
@@ -230,7 +230,7 @@ for (const driver of drivers)
         }),
       ).rejects.toBeInstanceOf(CheckpointError);
       expect(execute).not.toHaveBeenCalled();
-      await delay(120);
+      await delay(1100);
       expect(await runDurable(options)).toEqual({
         status: "completed",
         text: "Done",

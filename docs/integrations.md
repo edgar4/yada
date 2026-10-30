@@ -3,20 +3,19 @@
 `createTalonProvider` adapts a normalized Yada provider to Talon's existing worker provider contract. Pass it as the worker's `provider` dependency or return it from the host's provider registry factory. The host continues to run its graph, tools, PostgreSQL checkpoints and private Go API.
 
 ```ts
-import { createOpenAIProvider, createTalonProvider } from "yada";
+import {
+  createProvider,
+  providerConfigFromEnv,
+  createTalonProvider,
+} from "yada";
 
-const apiKey = process.env.PROVIDER_KEY;
-if (!apiKey) throw new Error("Missing provider key");
 const provider = createTalonProvider(
-  createOpenAIProvider({
-    apiKey,
-    model: "your-model",
-  }),
+  createProvider(providerConfigFromEnv(process.env)),
   { profile: "existing-profile", contextTokens: 128_000 },
 );
 ```
 
-Use a verified context-window size and keep the host's capability check. The profile is a host-owned identifier used for checkpoint pinning and private metrics. Keep it stable when substituting the implementation for the same approved profile. Register a new profile when changing provider/model policy; existing conversations must retain their pinned implementation until drained or explicitly migrated.
+Select a compatible provider with `YADA_LLM_PROVIDER`, `YADA_LLM_MODEL`, and `YADA_LLM_API_KEY` as described in [provider configuration](configuration.md). Use a verified context-window size and keep the host's capability check. The profile is a host-owned identifier used for checkpoint pinning and private metrics. Keep it stable when substituting the implementation for the same approved profile. Register a new profile when changing provider/model policy; existing conversations must retain their pinned implementation until drained or explicitly migrated.
 
 The bridge maps assistant tool-call history, schemas and cancellation signals, returns structured tool calls and normalized private token usage when available, and discards generated prose. Invalid argument objects return through the host's invalid-call repair path. It never executes tools or creates runs, leases, approvals, events or receipts. The existing host remains responsible for tenant binding, reserved fields, policy, permission checks, write approval, operation IDs, receipt reconciliation and grounded presentation. Do not put the generic Yada HTTP service in front of existing runs as a second authority.
 

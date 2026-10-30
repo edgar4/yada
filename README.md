@@ -2,7 +2,7 @@
 
 A standalone AI agent built in TypeScript, with typed tools and configurable model providers. Yada chooses tools, executes steps, and uses the results to continue helping the user.
 
-Embed the agent runtime in your application to power an assistant interface.
+Embed the agent runtime in your backend and add an assistant interface to your website. Yada supports approved actions, durable conversations, and recovery after restarts.
 
 ## Quick start
 
@@ -38,12 +38,18 @@ See [provider configuration](docs/configuration.md) for supported providers, mod
 
 Use [durable storage](docs/storage.md) to retain conversations and OAuth sessions across restarts, and [durable runs](docs/recovery.md) to resume interrupted execution. SQLite is the default; PostgreSQL and MySQL are also supported.
 
+Connect [HTTP APIs and business databases](docs/connectors.md), or build [approved write tools](docs/actions.md) with durable operation receipts. Use the [service API](docs/service.md) for scheduled runs and streaming events, and the [browser SDK and widget](docs/browser.md) for an accessible, themeable chat interface.
+
+See [operations](docs/operations.md) for context and usage controls, backup/restore, key rotation, and retention. Existing applications can use the [provider compatibility bridge](docs/integrations.md) during a local migration rehearsal.
+
 See [packaging and deployment](docs/deployment.md) for installable tarballs, release artifacts and a local Docker example.
 
 ## Development
 
 ```sh
+npx playwright install chromium
 npm run check
+npm run test:package
 ```
 
 Runs formatting checks, linting, type checking, tests, and compilation. Automated tests require no provider credentials.
