@@ -84,6 +84,6 @@ Opening storage applies versioned migrations under Knex's migration lock. Migrat
 
 SQLite uses WAL with a bounded busy timeout and a single connection per storage instance. Keep the database on a persistent local volume, not a shared network filesystem. PostgreSQL and MySQL support deployments using a shared database across hosts.
 
-Back up the database using its native backup tools and retain the encryption key separately. For SQLite, use its backup API or stop all writers before copying the database and WAL files. Restore a backup with the matching key and verify it before replacing production data. Automated key rotation and retention/deletion policies are not supplied by this API.
+Back up the database using its native backup tools and retain the encryption key separately. For SQLite, use its backup API or stop all writers before copying the database and WAL files. Restore a backup with the matching key and verify it before replacing production data. See [operations](operations.md) for encrypted snapshots, verified restore, offline key rotation, and conversation erasure. Schedule retention according to your application policy.
 
 The conformance suite runs against real SQLite, PostgreSQL 17, and MySQL 8.4. CI repeats all three. To test external databases locally, set `YADA_TEST_POSTGRES_URL` and `YADA_TEST_MYSQL_URL` to disposable test databases before `npm run check`.

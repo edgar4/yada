@@ -31,7 +31,7 @@ After a crash, your host resubmits the same `runDurable` call with the same iden
 
 Yada resumes saved pending calls and retains completed tool results, provider message metadata, call IDs, and execution budgets. It rechecks authorization before executing pending calls. A completed, failed, or cancelled run returns its saved outcome without calling the model again. Use a new run ID for a new attempt after a terminal outcome.
 
-The host owns the durable job queue, retry scheduling, and discovery of unfinished job IDs. Yada does not start a background recovery service. `storage.runs.load(identity, runId)` exposes the stored request, checkpoint, and lease for host-side inspection. `runDurable` does not automatically append its answer to `runConversation` history; the host owns any projection into conversation history.
+When using `runDurable` directly, the host owns the durable job queue, retry scheduling, and discovery of unfinished job IDs. Use [the service worker](service.md) for automatic discovery, scheduling, and conversation projection. `storage.runs.load(identity, runId)` exposes the stored request, checkpoint, and lease for host-side inspection. `runDurable` does not automatically append its answer to `runConversation` history; the host owns any projection into conversation history.
 
 ## Leases and failures
 
