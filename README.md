@@ -2,7 +2,7 @@
 
 A standalone AI agent built in TypeScript, with typed tools and configurable model providers. Yada chooses tools, executes steps, and uses the results to continue helping the user.
 
-Embed the agent runtime in your backend and add an assistant interface to your website. Yada supports approved actions, durable conversations, and recovery after restarts.
+Embed the agent runtime in your backend and add a chat interface for it to your website. Yada supports approved actions, durable conversations, and recovery after restarts.
 
 ## Install
 
