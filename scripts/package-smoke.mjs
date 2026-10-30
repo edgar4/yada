@@ -25,6 +25,7 @@ try {
     for (const extension of ["js", "d.ts"])
       assert(
         packed.files.some(({ path }) => path === `dist/${entry}.${extension}`),
+        `Archive is missing dist/${entry}.${extension}`,
       );
   await writeFile(
     join(temporary, "package.json"),
