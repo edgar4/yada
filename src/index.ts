@@ -16,6 +16,8 @@ export { createLocalProvider } from "./providers/local.js";
 export { connectMcp } from "./connectors/mcp/index.js";
 export type {
   McpConfig,
+  McpReadConfig,
+  McpWriteMapping,
   McpAccess,
   McpConnection,
 } from "./connectors/mcp/index.js";
