@@ -12,6 +12,7 @@ const password = "starter-password-for-tests-only";
 const malicious = '<img src=x onerror="globalThis.compromised=true">';
 let authenticated = false;
 let sessionFailure = false;
+let expireEvents = false;
 let logoutFailure = false;
 let loginRequested = false;
 let loginGate: Promise<void> | undefined;
@@ -83,6 +84,10 @@ const server = createNodeServer(async (request) => {
     );
   }
   if (path.startsWith("/v1/")) {
+    if (expireEvents && path.endsWith("/events")) {
+      authenticated = false;
+      return Response.json({}, { status: 401 });
+    }
     if (!valid) return Response.json({}, { status: 401 });
     if (request.method === "POST") {
       submissions++;
@@ -164,81 +169,99 @@ afterAll(async () => {
   });
 });
 beforeEach(() => {
-  authenticated = sessionFailure = logoutFailure = loginRequested = false;
+  authenticated =
+    sessionFailure =
+    logoutFailure =
+    loginRequested =
+    expireEvents =
+      false;
   loginGate = undefined;
   submissions = 0;
   jobs.clear();
 });
 
-it("signs in with HttpOnly cookies, reuses the widget and resumes without resubmission", async () => {
-  const page = await open();
-  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  await page.screenshot({ path: "work/starter-login.png", fullPage: true });
-  await signIn(page);
-  expect(await page.evaluate(() => document.cookie)).toBe("");
-  expect(
-    (await page.context().cookies()).find((cookie) => cookie.name === "starter")
-      ?.httpOnly,
-  ).toBe(true);
-  const widget = page.locator("yada-chat");
-  await widget
-    .getByRole("textbox", { name: "Message", exact: true })
-    .fill(malicious);
-  await widget.getByRole("button", { name: "Send", exact: true }).click();
-  await expect
-    .poll(async () => widget.getByRole("status").textContent())
-    .toBe("completed");
-  const persisted = await page.evaluate(() => ({
-    conversation: localStorage.getItem("yada-starter:conversation"),
-    run: localStorage.getItem("yada-starter:run"),
-    values: Object.values(localStorage),
-  }));
-  expect(persisted.conversation).toBeTruthy();
-  expect(persisted.run).toBeTruthy();
-  expect(persisted.values.join("")).not.toContain(password);
-  expect(await widget.locator("img").count()).toBe(0);
-  expect(
-    await page.evaluate(
-      () => Reflect.get(globalThis, "compromised") as unknown,
-    ),
-  ).toBeUndefined();
-  await page.reload();
-  await expect
-    .poll(async () =>
-      page.locator("yada-chat").getByRole("status").textContent(),
-    )
-    .toBe("completed");
-  expect(submissions).toBe(1);
-  expect(
-    await page.evaluate(() =>
-      localStorage.getItem("yada-starter:conversation"),
-    ),
-  ).toBe(persisted.conversation);
-  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  await page.screenshot({ path: "work/starter-chat.png", fullPage: true });
-  await page.setViewportSize({ width: 390, height: 844 });
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= innerWidth,
-    ),
-  ).toBe(true);
-  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  await page.screenshot({
-    path: "work/starter-chat-mobile.png",
-    fullPage: true,
-  });
-  await page.getByRole("button", { name: "Sign out", exact: true }).click();
-  await page.getByLabel("Workspace password", { exact: true }).waitFor();
-  expect(await page.locator("yada-chat").count()).toBe(0);
-  expect(
-    await page.evaluate(() => localStorage.getItem("yada-starter:run")),
-  ).toBeNull();
-  expect(
-    await page.evaluate(() =>
-      localStorage.getItem("yada-starter:conversation"),
-    ),
-  ).toBe(persisted.conversation);
-});
+it(
+  "signs in with HttpOnly cookies, reuses the widget and resumes without resubmission",
+  { timeout: 10_000 },
+  async () => {
+    const page = await open();
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await page.screenshot({ path: "work/starter-login.png", fullPage: true });
+    await signIn(page);
+    expect(await page.evaluate(() => document.cookie)).toBe("");
+    expect(
+      (await page.context().cookies()).find(
+        (cookie) => cookie.name === "starter",
+      )?.httpOnly,
+    ).toBe(true);
+    const widget = page.locator("yada-chat");
+    await widget
+      .getByRole("textbox", { name: "Message", exact: true })
+      .fill(malicious);
+    await widget.getByRole("button", { name: "Send", exact: true }).click();
+    await expect
+      .poll(async () => widget.getByRole("status").textContent())
+      .toBe("completed");
+    const persisted = await page.evaluate(() => ({
+      conversation: localStorage.getItem("yada-starter:conversation"),
+      run: localStorage.getItem("yada-starter:run"),
+      values: Object.values(localStorage),
+    }));
+    expect(persisted.conversation).toBeTruthy();
+    expect(persisted.run).toBeTruthy();
+    expect(persisted.values.join("")).not.toContain(password);
+    expect(await widget.locator("img").count()).toBe(0);
+    expect(
+      await page.evaluate(
+        () => Reflect.get(globalThis, "compromised") as unknown,
+      ),
+    ).toBeUndefined();
+    await page.reload();
+    await expect
+      .poll(async () =>
+        page.locator("yada-chat").getByRole("status").textContent(),
+      )
+      .toBe("completed");
+    expect(submissions).toBe(1);
+    expect(
+      await page.evaluate(() =>
+        localStorage.getItem("yada-starter:conversation"),
+      ),
+    ).toBe(persisted.conversation);
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await page.screenshot({ path: "work/starter-chat.png", fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await page.screenshot({
+      path: "work/starter-chat-mobile.png",
+      fullPage: true,
+    });
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await page.getByLabel("Workspace password", { exact: true }).waitFor();
+    expect(await page.locator("yada-chat").count()).toBe(0);
+    expect(await page.locator("body").textContent()).not.toContain(malicious);
+    expect(
+      await page.evaluate(() => localStorage.getItem("yada-starter:run")),
+    ).toBe(persisted.run);
+    expect(
+      await page.evaluate(() =>
+        localStorage.getItem("yada-starter:conversation"),
+      ),
+    ).toBe(persisted.conversation);
+    await signIn(page);
+    await expect
+      .poll(async () =>
+        page.locator("yada-chat").getByRole("status").textContent(),
+      )
+      .toBe("completed");
+    expect(submissions).toBe(1);
+  },
+);
 
 it("announces rejected credentials and disables duplicate pending logins", async () => {
   const page = await open();
@@ -268,23 +291,45 @@ it("announces rejected credentials and disables duplicate pending logins", async
   await page.locator("yada-chat").waitFor();
 });
 
-it("clears the saved run when an authenticated API request loses its session", async () => {
+it("preserves recovery IDs without rendering history after an API session expires", async () => {
   const page = await open();
   await signIn(page);
-  authenticated = false;
   const widget = page.locator("yada-chat");
   await widget
     .getByRole("textbox", { name: "Message", exact: true })
-    .fill("Hello");
+    .fill("Private workspace history");
   await widget.getByRole("button", { name: "Send", exact: true }).click();
+  await expect
+    .poll(async () => widget.getByRole("status").textContent())
+    .toBe("completed");
+  const persisted = await page.evaluate(() => ({
+    run: localStorage.getItem("yada-starter:run"),
+    conversation: localStorage.getItem("yada-starter:conversation"),
+  }));
+  expireEvents = true;
+  await page.reload();
   await page.getByLabel("Workspace password", { exact: true }).waitFor();
   expect(await page.locator("#error").textContent()).toBe(
     "Your session has expired. Sign in again.",
   );
   expect(
-    await page.evaluate(() => localStorage.getItem("yada-starter:run")),
-  ).toBeNull();
+    await page.evaluate(() => ({
+      run: localStorage.getItem("yada-starter:run"),
+      conversation: localStorage.getItem("yada-starter:conversation"),
+    })),
+  ).toEqual(persisted);
   expect(await page.locator("yada-chat").count()).toBe(0);
+  expect(await page.locator("body").textContent()).not.toContain(
+    "Private workspace history",
+  );
+  expireEvents = false;
+  await signIn(page);
+  await expect
+    .poll(async () =>
+      page.locator("yada-chat").getByRole("status").textContent(),
+    )
+    .toBe("completed");
+  expect(submissions).toBe(1);
 });
 
 it("offers retry when session checking fails and keeps failed logout explicit", async () => {
@@ -345,6 +390,14 @@ it("drops a missing saved run and signs out when the session expires across relo
   await page.getByLabel("Workspace password", { exact: true }).waitFor();
   expect(
     await page.evaluate(() => localStorage.getItem("yada-starter:run")),
-  ).toBeNull();
+  ).toBe("stale-run");
+  expect(await page.locator("yada-chat").count()).toBe(0);
   expect(await page.locator("#error").textContent()).toBe("");
+  await signIn(page);
+  await expect
+    .poll(async () => page.locator("#status").textContent())
+    .toContain("previous run is no longer available");
+  expect(
+    await page.evaluate(() => localStorage.getItem("yada-starter:run")),
+  ).toBeNull();
 });
