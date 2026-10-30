@@ -11,7 +11,12 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "verbatimModuleSyntax": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "paths": {
+      "yada": ["./src/index.ts"],
+      "yada/client": ["./src/client/index.ts"],
+      "yada/widget": ["./src/widget/index.ts"]
+    }
   },
   "include": ["src", "tests", "examples"]
 }
