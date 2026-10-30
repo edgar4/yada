@@ -35,11 +35,6 @@
   align-items: center;
   gap: 18px 30px;
 }
-.hero-detail {
-  margin: 40px 0 0;
-  font-size: 14px;
-  color: var(--muted);
-}
 .hero-demo {
   position: relative;
   padding-top: 64px;
@@ -280,10 +275,6 @@
 }
 .start-copy .text-link {
   margin-top: 8px;
-}
-.start-copy .setup-note {
-  margin-top: 32px;
-  font-size: 14px;
 }
 .start-copy code,
 .env-panel p code {
