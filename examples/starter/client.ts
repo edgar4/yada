@@ -62,7 +62,6 @@ function signedOut(message = ""): void {
   generation++;
   authenticated = false;
   detach();
-  remember(runKey, null);
   password.value = "";
   login.hidden = false;
   chat.hidden = logout.hidden = retry.hidden = true;
