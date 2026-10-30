@@ -1,3 +1,8 @@
+---
+layout: doc
+title: "Runtime architecture"
+---
+
 # Runtime architecture
 
 Yada is a server-side TypeScript runtime. Applications compose a model adapter and read tools through `src/index.ts`.

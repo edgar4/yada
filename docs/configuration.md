@@ -1,3 +1,8 @@
+---
+layout: doc
+title: "LLM provider configuration"
+---
+
 # LLM provider configuration
 
 Choose your model provider, its model ID, and the API key from your account with that provider. These are provider credentials; Yada does not issue an API key.

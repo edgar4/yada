@@ -1,0 +1,18 @@
+{% for group in site.data.navigation %}
+<div class="docs-nav-group">
+  <p>{{ group.title }}</p>
+  <ul>
+    {% for entry in group.pages %}
+    <li>
+      {% if page.url == entry.url %}
+      <a href="{{ entry.url | relative_url }}" aria-current="page"
+        >{{ entry.title }}</a
+      >
+      {% else %}
+      <a href="{{ entry.url | relative_url }}">{{ entry.title }}</a>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endfor %}

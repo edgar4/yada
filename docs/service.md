@@ -1,3 +1,8 @@
+---
+layout: doc
+title: "Durable service"
+---
+
 # Durable service
 
 Compose the server with your application's authentication and authorization:

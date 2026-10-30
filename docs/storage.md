@@ -1,3 +1,8 @@
+---
+layout: doc
+title: "Durable storage"
+---
+
 # Durable storage
 
 Yada stores conversations, in-flight runs, and OAuth sessions in SQLite, PostgreSQL, or MySQL. SQLite is the default. All record payloads are encrypted with AES-256-GCM; the encryption key is supplied by your deployment and never stored in the database.

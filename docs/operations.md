@@ -1,3 +1,8 @@
+---
+layout: doc
+title: "Operations"
+---
+
 # Operations
 
 ## Context, usage and cost reservations

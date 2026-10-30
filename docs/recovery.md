@@ -1,3 +1,8 @@
+---
+layout: doc
+title: "Durable runs and recovery"
+---
+
 # Durable runs and recovery
 
 `runDurable` persists in-flight execution in the same encrypted storage used for conversations and OAuth. SQLite, PostgreSQL, and MySQL share the same API and recovery behavior.

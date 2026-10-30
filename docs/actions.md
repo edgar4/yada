@@ -1,3 +1,8 @@
+---
+layout: doc
+title: "Approved actions"
+---
+
 # Approved actions
 
 Define mutating tools with `writeTool`, including a schema, tool version, authorization, preparation, execution, and receipt lookup. Use `createWorker` to connect these tools to durable approvals, or supply `actionExecutor(storage.actions, identity, runId)` to `runDurable`.

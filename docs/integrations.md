@@ -1,3 +1,8 @@
+---
+layout: doc
+title: "Existing worker integration"
+---
+
 # Existing worker integration
 
 `createTalonProvider` adapts a normalized Yada provider to Talon's existing worker provider contract. Pass it as the worker's `provider` dependency or return it from the host's provider registry factory. The host continues to run its graph, tools, PostgreSQL checkpoints and private Go API.

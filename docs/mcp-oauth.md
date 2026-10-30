@@ -1,3 +1,8 @@
+---
+layout: doc
+title: "MCP OAuth"
+---
+
 # MCP OAuth
 
 Yada supports browser-based authorization-code OAuth with PKCE and automatic token refresh for HTTP MCP connections. The host application supplies a callback route, browser redirect handler, authenticated identity, and durable token store.
