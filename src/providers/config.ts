@@ -21,13 +21,15 @@ export function providerConfigFromEnv(
   env: Readonly<Record<string, string | undefined>>,
 ): ProviderConfig {
   const result = providerConfig.safeParse({
-    provider: env["LLM_PROVIDER"],
-    apiKey: env["LLM_API_KEY"],
-    ...(env["LLM_MODEL"] === undefined ? {} : { model: env["LLM_MODEL"] }),
+    provider: env["YADA_LLM_PROVIDER"],
+    apiKey: env["YADA_LLM_API_KEY"],
+    ...(env["YADA_LLM_MODEL"] === undefined
+      ? {}
+      : { model: env["YADA_LLM_MODEL"] }),
   });
   if (!result.success)
     throw new Error(
-      "Invalid provider configuration: check LLM_PROVIDER, LLM_API_KEY, and optional LLM_MODEL.",
+      "Invalid provider configuration: check YADA_LLM_PROVIDER, YADA_LLM_API_KEY, and optional YADA_LLM_MODEL.",
     );
   return result.data;
 }

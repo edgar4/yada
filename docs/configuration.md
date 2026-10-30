@@ -5,16 +5,16 @@ Choose your model provider, its model ID, and the API key from your account with
 For the live example, copy `.env.example` to `.env`:
 
 ```dotenv
-LLM_PROVIDER=anthropic
-LLM_MODEL=claude-sonnet-4-6
-LLM_API_KEY=your-anthropic-api-key
+YADA_LLM_PROVIDER=anthropic
+YADA_LLM_MODEL=claude-sonnet-4-6
+YADA_LLM_API_KEY=your-anthropic-api-key
 ```
 
-| Setting        | Meaning                                                              |
-| -------------- | -------------------------------------------------------------------- |
-| `LLM_PROVIDER` | The company or service hosting the model.                            |
-| `LLM_MODEL`    | The exact API model ID offered by that provider, not a display name. |
-| `LLM_API_KEY`  | The key issued by the selected provider for your account.            |
+| Setting             | Meaning                                                              |
+| ------------------- | -------------------------------------------------------------------- |
+| `YADA_LLM_PROVIDER` | The company or service hosting the model.                            |
+| `YADA_LLM_MODEL`    | The exact API model ID offered by that provider, not a display name. |
+| `YADA_LLM_API_KEY`  | The key issued by the selected provider for your account.            |
 
 Run `npm run demo:live`. Keep credentials on the server and outside version control.
 
