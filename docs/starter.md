@@ -65,7 +65,17 @@ Configured MCP tools inherit the starter workspace identity. Add only servers yo
 
 Finish or cancel active runs before changing their provider, tools or execution limits. Recovery requires the configuration that created an unfinished run; restore that configuration if a change leaves a run waiting.
 
-To reuse the starter outside this repository, copy the contents of `examples/starter/` into a new ESM project, install [`@edgaralochi/yada`](deployment.md), `zod`, `tsx` and `esbuild`, then run `node init.mjs`, `node build.mjs` and `node --env-file=.env.starter --import tsx server.ts`. Its imports use Yada's public package exports; generated assets and SQLite data stay under the working directory's `work/starter/` folder.
+To reuse the starter outside this repository, copy the contents of `examples/starter/` into a new project directory and run:
+
+```sh
+npm init -y
+npm pkg set type=module
+npm install @edgaralochi/yada zod
+npm install --save-dev tsx esbuild
+node init.mjs
+```
+
+Set your provider credentials in `.env.starter`, then run `node build.mjs` and `node --env-file=.env.starter --import tsx server.ts`. A [Yada tarball](deployment.md) can replace the registry package. Its imports use Yada's public exports; generated assets and SQLite data stay under the working directory's `work/starter/` folder.
 
 ## Deploy it
 
