@@ -65,21 +65,36 @@ const wait = (ms: number, signal?: AbortSignal) =>
     signal?.addEventListener("abort", abort, { once: true });
   });
 
-async function* lines(response: Response, limit: number) {
+async function* lines(
+  response: Response,
+  limit: number,
+  totalLimit = Infinity,
+) {
   if (!response.body) throw new ClientError("Response has no body");
   const reader = response.body.getReader();
   const decoder = new TextDecoder("utf-8", { fatal: true });
   let pending = "";
   let bytes = 0;
+  let totalBytes = 0;
+  const decode = (value?: Uint8Array, stream = false) => {
+    try {
+      return decoder.decode(value, { stream });
+    } catch {
+      throw new ClientError("Invalid UTF-8 response");
+    }
+  };
   try {
     for (;;) {
       const { value, done } = await reader.read();
       if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > totalLimit)
+        throw new ClientError("Response exceeds size limit");
       for (const byte of value) {
         bytes = byte === 10 ? 0 : bytes + 1;
         if (bytes > limit) throw new ClientError("Response exceeds size limit");
       }
-      pending += decoder.decode(value, { stream: true });
+      pending += decode(value, true);
       let newline: number;
       while ((newline = pending.indexOf("\n")) >= 0) {
         const line = pending.slice(0, newline).trim();
@@ -87,7 +102,7 @@ async function* lines(response: Response, limit: number) {
         if (line) yield line;
       }
     }
-    pending += decoder.decode();
+    pending += decode();
     if (pending.trim()) yield pending.trim();
   } finally {
     await reader.cancel().catch(() => undefined);
@@ -308,10 +323,8 @@ export class BrowserClient {
     const response = await this.request(url, method, body, signal);
     if (response.status === 204) return undefined;
     let text = "";
-    for await (const line of lines(response, 2_097_152)) {
+    for await (const line of lines(response, 2_097_152, 2_097_152)) {
       text += line;
-      if (text.length > 2_097_152)
-        throw new ClientError("Response exceeds size limit");
     }
     if (!text) return undefined;
     try {

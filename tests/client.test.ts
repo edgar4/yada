@@ -168,6 +168,9 @@ describe("browser client", () => {
         headers: { "content-type": "application/x-ndjson" },
       }),
       new Response("{}"),
+      new Response(Uint8Array.of(255), {
+        headers: { "content-type": "application/x-ndjson" },
+      }),
     ]) {
       const transport = vi.fn<typeof fetch>().mockResolvedValue(response);
       await expect(
@@ -226,6 +229,7 @@ describe("browser client", () => {
     for (const response of [
       new Response("x".repeat(2_097_153)),
       new Response(('"' + "x".repeat(1_100_000) + '"\n').repeat(2)),
+      new Response(('"' + "é".repeat(600_000) + '"\n').repeat(2)),
     ])
       await expect(
         setup(vi.fn<typeof fetch>().mockResolvedValue(response)).getRun(
