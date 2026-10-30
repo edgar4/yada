@@ -16,7 +16,7 @@ Cancellation returns promptly even when a dependency ignores its signal. It cann
 
 ## Current capabilities
 
-The runtime supports read tools, a scripted testing provider, and Anthropic, OpenAI, and Gemini through LangChain. Tool input schemas use Zod and infer handler argument types. Provider tests cover SDK mappings and real OpenAI/Gemini SDK execution with mocked HTTP responses.
+The runtime supports read tools, a scripted testing provider, and Anthropic, OpenAI, Gemini, DeepSeek, Ollama, and llama.cpp through LangChain. Tool input schemas use Zod and infer handler argument types. Provider tests cover SDK mappings and real SDK execution for hosted and local providers with mocked HTTP responses.
 
 Each run keeps its messages in memory; messages are not persisted across process restarts.
 
