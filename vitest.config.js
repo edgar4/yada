@@ -1,6 +1,27 @@
 import process from "node:process";
+import { URL, fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 export default defineConfig({
+  resolve: {
+    alias: [
+      {
+        find: /^yada$/,
+        replacement: fileURLToPath(new URL("./src/index.ts", import.meta.url)),
+      },
+      {
+        find: /^yada\/client$/,
+        replacement: fileURLToPath(
+          new URL("./src/client/index.ts", import.meta.url),
+        ),
+      },
+      {
+        find: /^yada\/widget$/,
+        replacement: fileURLToPath(
+          new URL("./src/widget/index.ts", import.meta.url),
+        ),
+      },
+    ],
+  },
   test: {
     include: ["tests/**/*.test.ts"],
     fileParallelism:
