@@ -1,7 +1,6 @@
 {
-  "name": "yada",
+  "name": "@edgaralochi/yada",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist', {recursive: true, force: true})\" && tsc -p tsconfig.build.json",
@@ -70,6 +69,32 @@
   "files": [
     "dist",
     "docs",
-    "README.md"
-  ]
+    "README.md",
+    "LICENSE"
+  ],
+  "description": "TypeScript runtime for in-app AI assistants, with typed tools, configurable providers, approvals, and durable conversations.",
+  "license": "MIT",
+  "author": "Edgar Alochi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edgar4/yada.git"
+  },
+  "homepage": "https://yada.edgar.co.ke",
+  "bugs": {
+    "url": "https://github.com/edgar4/yada/issues"
+  },
+  "keywords": [
+    "ai",
+    "ai-agent",
+    "ai-assistant",
+    "chatbot",
+    "llm",
+    "mcp",
+    "typescript",
+    "tool-calling"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
 }

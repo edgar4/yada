@@ -21,7 +21,11 @@ try {
     execute(npm, ["pack", "--json", "--pack-destination", temporary], root),
   )[0];
   for (const { path } of packed.files)
-    assert.match(path, /^(?:dist\/|docs\/|README\.md$|package\.json$)/);
+    assert.match(
+      path,
+      /^(?:dist\/|docs\/|README\.md$|LICENSE$|package\.json$)/,
+    );
+  assert(packed.files.some(({ path }) => path === "LICENSE"));
   for (const entry of ["index", "client/index", "widget/index"])
     for (const extension of ["js", "d.ts"])
       assert(
@@ -44,16 +48,19 @@ try {
     temporary,
   );
   const manifest = JSON.parse(
-    await readFile(join(temporary, "node_modules/yada/package.json"), "utf8"),
+    await readFile(
+      join(temporary, "node_modules/@edgaralochi/yada/package.json"),
+      "utf8",
+    ),
   );
   assert.equal(manifest.version, packed.version);
   await writeFile(
     join(temporary, "smoke.mjs"),
     `
 import assert from "node:assert/strict";
-import { createFakeProvider, createStorage, run } from "yada";
-import * as client from "yada/client";
-import * as widget from "yada/widget";
+import { createFakeProvider, createStorage, run } from "@edgaralochi/yada";
+import * as client from "@edgaralochi/yada/client";
+import * as widget from "@edgaralochi/yada/widget";
 assert(Object.keys(client).length > 0);
 assert(Object.keys(widget).length > 0);
 const provider = createFakeProvider(() => ({content: "installed", toolCalls: [], finishReason: "stop"}));
@@ -67,9 +74,9 @@ await storage.close();
   await writeFile(
     join(temporary, "types.ts"),
     `
-import * as runtime from "yada";
-import * as client from "yada/client";
-import * as widget from "yada/widget";
+import * as runtime from "@edgaralochi/yada";
+import * as client from "@edgaralochi/yada/client";
+import * as widget from "@edgaralochi/yada/widget";
 void [runtime, client, widget];
 `,
   );

@@ -41,40 +41,10 @@
   padding: 7px 12px;
   border-radius: 999px;
 }
-.docs-nav-group a::before {
-  content: "";
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--line);
-}
 .docs-nav-group a[aria-current="page"] {
   background: var(--ink);
   color: var(--white);
   font-weight: 650;
-}
-.docs-nav-group a[aria-current="page"]::before {
-  background: var(--amber);
-}
-.docs-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 20px;
-}
-.docs-eyebrow::before {
-  content: "";
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--deep-amber);
 }
 .prose {
   font-size: 16px;

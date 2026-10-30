@@ -9,8 +9,8 @@ description: "Embed Yada’s browser SDK and accessible chat widget with authent
 Import the browser entrypoints through your application's module bundler. They do not import provider adapters, storage, Node APIs, or secrets. Serve the API over HTTPS and provide host authentication through cookies or a header callback. Keep provider keys on the server.
 
 ```ts
-import { BrowserClient } from "yada/client";
-import { defineYadaWidget, type YadaWidget } from "yada/widget";
+import { BrowserClient } from "@edgaralochi/yada/client";
+import { defineYadaWidget, type YadaWidget } from "@edgaralochi/yada/widget";
 
 const client = new BrowserClient({
   baseUrl: location.origin,
