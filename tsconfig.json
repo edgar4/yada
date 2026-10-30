@@ -13,9 +13,9 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "paths": {
-      "yada": ["./src/index.ts"],
-      "yada/client": ["./src/client/index.ts"],
-      "yada/widget": ["./src/widget/index.ts"]
+      "@edgaralochi/yada": ["./src/index.ts"],
+      "@edgaralochi/yada/client": ["./src/client/index.ts"],
+      "@edgaralochi/yada/widget": ["./src/widget/index.ts"]
     }
   },
   "include": ["src", "tests", "examples"]

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { readTool, type Identity } from "yada";
+import { readTool, type Identity } from "@edgaralochi/yada";
 
 export function starterTools(owner: Identity) {
   const authorize = (identity: Identity) =>

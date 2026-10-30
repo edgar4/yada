@@ -3,7 +3,7 @@ import {
   mcpServersFromEnv,
   providerConfigFromEnv,
   storageConfigFromEnv,
-} from "yada";
+} from "@edgaralochi/yada";
 
 const settings = z.object({
   password: z.string().min(24).max(256),
