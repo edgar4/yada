@@ -41,3 +41,19 @@ export { RunLeaseError } from "./storage/runs.js";
 export type { RunStore, DurableRun, DurableRequest } from "./storage/runs.js";
 export { CheckpointError } from "./core/checkpoint.js";
 export type { RunCheckpoint } from "./core/checkpoint.js";
+export { createWorker } from "./service/worker.js";
+export type { AgentProfile, Trace } from "./service/worker.js";
+export { createHandler } from "./service/http.js";
+export { createNodeServer } from "./service/node.js";
+export { writeTool } from "./core/action.js";
+export type {
+  WriteTool,
+  ActionContext,
+  Preparation,
+  Suspension,
+} from "./core/action.js";
+export { actionExecutor } from "./service/actions.js";
+export type { Job, JobInput, RunEvent } from "./service/contracts.js";
+export type { JobStore } from "./storage/jobs.js";
+export { JobConflict } from "./storage/jobs.js";
+export type { Action, ActionStore } from "./storage/actions.js";

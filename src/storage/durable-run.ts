@@ -1,18 +1,31 @@
+import { turnSchema } from "../core/checkpoint.js";
 import { run } from "../core/runtime.js";
 import type { RunStore } from "./runs.js";
 export async function runDurable(
-  options: Omit<
-    Parameters<typeof run>[0],
-    "history" | "checkpoint" | "persist"
-  > & { runId: string; profileId: string; store: RunStore; leaseMs?: number },
+  options: Omit<Parameters<typeof run>[0], "checkpoint" | "persist"> & {
+    runId: string;
+    profileId: string;
+    store: RunStore;
+    leaseMs?: number;
+  },
 ) {
   const { store, runId, profileId, leaseMs = 30_000, ...runtime } = options;
   const request = {
     input: options.input,
+    history: turnSchema.array().parse(options.history ?? []),
     system: options.system,
     profileId,
     provider: options.provider.name,
-    tools: options.tools.map((tool) => JSON.stringify(tool.spec)).sort(),
+    tools: options.tools
+      .map((tool) =>
+        JSON.stringify({
+          ...tool.spec,
+          ...(tool.effect === "write"
+            ? { effect: tool.effect, version: tool.version }
+            : {}),
+        }),
+      )
+      .sort(),
     maxRounds: options.maxRounds ?? 8,
     maxToolCalls: options.maxToolCalls ?? 16,
   };
@@ -53,6 +66,14 @@ export async function runDurable(
       },
     });
     if (lost) throw lost;
+    if (
+      result.status === "awaiting_approval" ||
+      result.status === "reconciling"
+    ) {
+      clearInterval(timer);
+      await renewal;
+      await store.release(options.identity, runId, token);
+    }
     return result;
   } finally {
     clearInterval(timer);

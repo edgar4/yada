@@ -8,7 +8,7 @@ const metadata = z.object({
   provider: z.string(),
   data: z.record(z.string(), z.unknown()),
 });
-const turn = z.discriminatedUnion("role", [
+export const turnSchema = z.discriminatedUnion("role", [
   z.object({ role: z.literal("user"), content: z.string() }),
   z
     .object({
@@ -44,7 +44,7 @@ export const runResultSchema = z.discriminatedUnion("status", [
 ]);
 export const checkpointSchema = z.object({
   version: z.literal(1),
-  messages: z.array(turn),
+  messages: z.array(turnSchema),
   pending: z.array(call),
   rounds: z.number().int().nonnegative(),
   calls: z.number().int().nonnegative(),

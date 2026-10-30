@@ -1,3 +1,4 @@
+import type { ActionExecutor } from "./action.js";
 import { abortable } from "./abort.js";
 import {
   checkpointSchema,
@@ -7,18 +8,20 @@ import {
 import type {
   Identity,
   ProviderAdapter,
-  ReadTool,
+  Tool,
+  TerminalResult,
   RunResult,
   Turn,
 } from "./contracts.js";
 export async function run(options: {
   provider: ProviderAdapter;
-  tools: readonly ReadTool[];
+  tools: readonly Tool[];
   identity: Identity;
   input: string;
   system: string;
   signal: AbortSignal;
   history?: readonly Turn[];
+  executeWrite?: ActionExecutor;
   maxRounds?: number;
   maxToolCalls?: number;
   checkpoint?: RunCheckpoint;
@@ -57,7 +60,7 @@ export async function run(options: {
       throw new CheckpointError();
     }
   };
-  const finish = async (result: RunResult) => {
+  const finish = async (result: TerminalResult) => {
     state.outcome = result;
     await save();
     return result;
@@ -72,7 +75,7 @@ export async function run(options: {
   );
   try {
     signal.throwIfAborted();
-    const visible: ReadTool[] = [];
+    const visible: Tool[] = [];
     for (const tool of tools.values())
       if (await abortable(() => tool.authorize(identity), signal))
         visible.push(tool);
@@ -85,10 +88,19 @@ export async function run(options: {
         if (!tool || !(await abortable(() => tool.authorize(identity), signal)))
           return await finish({ status: "failed", code: "tool_denied" });
         signal.throwIfAborted();
-        const content = await abortable(
-          () => tool.execute(call.args, identity, signal),
-          signal,
-        );
+        if (tool.effect === "write" && !options.executeWrite)
+          return await finish({ status: "failed", code: "unsupported" });
+        const executeWrite = options.executeWrite;
+        const content =
+          tool.effect === "read"
+            ? await abortable(
+                () => tool.execute(call.args, identity, signal),
+                signal,
+              )
+            : executeWrite
+              ? await executeWrite(tool, call, signal)
+              : "";
+        if (typeof content !== "string") return content;
         signal.throwIfAborted();
         if (content.length > 32_000)
           return await finish({ status: "failed", code: "invalid_response" });
