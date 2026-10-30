@@ -33,7 +33,7 @@ try {
 }
 ```
 
-Import `connectMcp` and `run` from Yada's public entry point. `identity` must come from your authenticated backend. The permission callback is application code; discovery and execution both check access. Each connection is bound to its original actor and tenant.
+Import `connectMcp` and `run` from Yada's public entry point. `identity` must come from your authenticated backend. The permission callback is application code; each invocation checks current access. Each connection is bound to its original actor and tenant.
 
 ## Configuration
 
@@ -67,7 +67,7 @@ Tool catalogs are discovered automatically. Without `readTools`, only tools adve
 
 Discovery follows pagination with bounded page/tool counts and rejects duplicate tools, repeated cursors, or missing configured tools. Names must fit the provider-compatible 64-character limit after prefixing. Reconnect to refresh a changed tool catalog.
 
-Inputs are validated against the advertised JSON Schema before transmission. Draft 7 and draft 2020-12 schemas are supported; external references are not fetched and asynchronous schema extensions are rejected. Requests and rendered results are bounded to 32,000 UTF-8 bytes. Structured read results become JSON text; text blocks are joined in order. Tool errors and unsupported media fail execution. Declared output schemas are validated against the discovered schema, including tools from earlier discovery pages.
+Inputs are validated against the advertised JSON Schema before transmission. Draft 7 and draft 2020-12 schemas are supported; external references are not fetched and asynchronous schema extensions are rejected. Tool arguments and rendered results are bounded to 32,000 UTF-8 bytes. Structured read results become JSON text; text blocks are joined in order. Tool errors and unsupported media fail execution. Declared output schemas are validated against the discovered schema, including tools from earlier discovery pages.
 
 Connection setup defaults to a ten-second deadline, which can be overridden with the third `connectMcp` argument. Discovery and calls have ten-second request timeouts and honor cancellation signals. Always close connections after use. External tool content remains untrusted data.
 
