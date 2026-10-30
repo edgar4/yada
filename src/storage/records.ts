@@ -72,5 +72,10 @@ export function recordStore(db: Knex, encryptionKey: string) {
       .where({ id: idFor(key) })
       .delete();
   }
-  return { read, write, mutate, scan, remove };
+  function transaction<T>(
+    operation: (records: ReturnType<typeof recordStore>) => Promise<T>,
+  ): Promise<T> {
+    return db.transaction((tx) => operation(recordStore(tx, encryptionKey)));
+  }
+  return { read, write, mutate, scan, remove, transaction };
 }

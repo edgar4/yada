@@ -2,15 +2,24 @@ import { limitsSchema } from "../core/limits.js";
 import { turnSchema } from "../core/checkpoint.js";
 import { run } from "../core/runtime.js";
 import type { RunStore } from "./runs.js";
+import type { Suspension } from "../core/action.js";
 export async function runDurable(
   options: Omit<Parameters<typeof run>[0], "checkpoint" | "persist"> & {
     runId: string;
     profileId: string;
     store: RunStore;
     leaseMs?: number;
+    onSuspend?: (result: Suspension, token: string) => Promise<void>;
   },
 ) {
-  const { store, runId, profileId, leaseMs = 30_000, ...runtime } = options;
+  const {
+    store,
+    runId,
+    profileId,
+    leaseMs = 30_000,
+    onSuspend,
+    ...runtime
+  } = options;
   const request = {
     input: options.input,
     limits: limitsSchema.parse(options.limits ?? {}),
@@ -72,6 +81,7 @@ export async function runDurable(
       result.status === "awaiting_approval" ||
       result.status === "reconciling"
     ) {
+      await onSuspend?.(result, token);
       clearInterval(timer);
       await renewal;
       await store.release(options.identity, runId, token);

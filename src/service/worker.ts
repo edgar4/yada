@@ -7,6 +7,7 @@ import { CheckpointError } from "../core/checkpoint.js";
 import { runDurable } from "../storage/durable-run.js";
 import { RunLeaseError } from "../storage/runs.js";
 import type { YadaStorage } from "../storage/index.js";
+import { isTerminal } from "./contracts.js";
 export type AgentProfile = Readonly<{
   provider: ProviderAdapter;
   tools: readonly Tool[];
@@ -27,21 +28,29 @@ export function createWorker(options: {
   profiles: Readonly<Record<string, AgentProfile>>;
   leaseMs?: number;
   pollMs?: number;
-  trace?: (event: Trace) => void;
+  trace?: (event: Trace) => void | Promise<void>;
 }) {
   const shutdown = new AbortController();
   let cursor = "";
   let active: Promise<void> | undefined;
   let loop: Promise<void> | undefined;
+  const trace = (event: Trace) => {
+    void Promise.resolve()
+      .then(() => options.trace?.(event))
+      .catch(() => undefined);
+  };
   async function processPage() {
     const page = await options.storage.jobs.pending(cursor);
     cursor = page.cursor;
     for (const { identity, conversationId, job } of page.jobs) {
       if (shutdown.signal.aborted) break;
-      const profile = options.profiles[job.profileId];
+      const profile = Object.hasOwn(options.profiles, job.profileId)
+        ? options.profiles[job.profileId]
+        : undefined;
       if (!profile) continue;
       const started = Date.now();
       const cancellation = new AbortController();
+      const runId = JSON.stringify([conversationId, job.id]);
       const checkCancellation = async () => {
         const latest = await options.storage.jobs.load(
           identity,
@@ -49,7 +58,6 @@ export function createWorker(options: {
           job.id,
         );
         if (latest?.cancelRequested) {
-          const runId = JSON.stringify([conversationId, job.id]);
           const saved = await options.storage.runs.load(identity, runId);
           for (const call of saved?.checkpoint?.pending ?? []) {
             const action = await options.storage.actions.load(
@@ -69,18 +77,40 @@ export function createWorker(options: {
             : { role: "user", content: turn.content },
         );
         const runs = options.storage.runs;
+        const eligible = async () => {
+          const current = await options.storage.jobs.load(
+            identity,
+            conversationId,
+            job.id,
+          );
+          return (
+            current &&
+            !isTerminal(current.status) &&
+            (current.cancelRequested || current.availableAt <= Date.now())
+          );
+        };
         const result = await runDurable({
           ...profile,
           executeWrite: actionExecutor(
             options.storage.actions,
             identity,
-            JSON.stringify([conversationId, job.id]),
+            runId,
           ),
           history: contextWindow(history, profile.historyChars ?? 32_000),
           input: job.input,
           identity,
-          runId: JSON.stringify([conversationId, job.id]),
+          runId,
           profileId: job.profileId,
+          onSuspend: async (result, token) => {
+            await options.storage.jobs.update(
+              identity,
+              conversationId,
+              job.id,
+              { type: result.status, approvalId: result.approvalId },
+              undefined,
+              { runId, token },
+            );
+          },
           ...(options.leaseMs === undefined
             ? {}
             : { leaseMs: options.leaseMs }),
@@ -92,13 +122,26 @@ export function createWorker(options: {
           store: {
             ...runs,
             claim: async (...args) => {
+              if (!(await eligible())) throw new RunLeaseError();
               const state = await runs.claim(...args);
-              await options.storage.jobs.update(
-                identity,
-                conversationId,
-                job.id,
-                { type: "running" },
-              );
+              if (!(await eligible())) {
+                if (state.lease && !state.checkpoint?.outcome)
+                  await runs.release(identity, args[1], state.lease.token);
+                throw new RunLeaseError();
+              }
+              if (
+                job.status !== "reconciling" &&
+                state.lease &&
+                !state.checkpoint?.outcome
+              )
+                await options.storage.jobs.update(
+                  identity,
+                  conversationId,
+                  job.id,
+                  { type: "running" },
+                  undefined,
+                  { runId, token: state.lease.token },
+                );
               return state;
             },
             save: async (...args) => {
@@ -109,6 +152,8 @@ export function createWorker(options: {
                 conversationId,
                 job.id,
                 { type: "progress" },
+                undefined,
+                { runId: args[1], token: args[2] },
               );
             },
             renew: async (...args) => {
@@ -117,31 +162,29 @@ export function createWorker(options: {
             },
           },
         });
-        await options.storage.jobs.update(
-          identity,
-          conversationId,
-          job.id,
-          {
-            type: result.status,
-            ...("approvalId" in result
-              ? { approvalId: result.approvalId }
-              : {}),
-            ...(result.status === "completed"
-              ? { text: result.text }
-              : result.status === "failed"
-                ? { code: result.code }
-                : {}),
-          },
-          "approvalId" in result ? undefined : result,
-        );
-        options.trace?.({
+        if (!("approvalId" in result))
+          await options.storage.jobs.update(
+            identity,
+            conversationId,
+            job.id,
+            {
+              type: result.status,
+              ...(result.status === "completed"
+                ? { text: result.text }
+                : result.status === "failed"
+                  ? { code: result.code }
+                  : {}),
+            },
+            result,
+          );
+        trace({
           event: "run_finished",
           status: result.status,
           elapsedMs: Date.now() - started,
         });
       } catch (error) {
         if (!(error instanceof RunLeaseError))
-          options.trace?.({
+          trace({
             event: "run_retry",
             status: "retryable",
             elapsedMs: Date.now() - started,
@@ -164,7 +207,7 @@ export function createWorker(options: {
           try {
             await tick();
           } catch {
-            options.trace?.({
+            trace({
               event: "run_retry",
               status: "storage_unavailable",
               elapsedMs: 0,
