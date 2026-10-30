@@ -1,6 +1,7 @@
 ---
 layout: doc
 title: "Packaging and deployment"
+description: "Package and deploy Yada using installable ESM tarballs, a local Docker example and GitHub Pages documentation. Review host security and recovery requirements."
 ---
 
 # Packaging and deployment
@@ -57,7 +58,14 @@ New guides use this front matter followed by a Markdown heading and content:
 ---
 layout: doc
 title: "Your guide"
+description: "A concise description of this guide’s specific topic."
 ---
 ```
 
 Add guides to `docs/_data/navigation.yml`. Relative Markdown links between guides become HTML links during the Pages build. The Pages checks workflow renders the site with GitHub’s official Jekyll action, verifies internal links and desktop/mobile accessibility, and uploads rendered pages and screenshots as the `pages-preview` artifact. Publishing stays with the existing GitHub Pages branch configuration.
+
+Each published guide supplies its own title and description. The shared head emits canonical, Open Graph and Twitter Card metadata, plus structured source-code and page information. Canonical URLs, crawl files and social image links use `url` and `baseurl` together. The sitemap contains published landing and guide pages; it omits assets and crawl files. The custom-domain deployment serves `robots.txt` at the host root. A project-path deployment cannot control its domain’s root robots file.
+
+The shared PNG social card is `docs/assets/brand/yada-social.png`. Preserve its 1200 × 630 dimensions and descriptive alternative text when replacing it. Regenerate the selected-brand card with `node scripts/render-social-card.mjs` after installing Chromium. `scripts/check-seo.mjs`, invoked by the Pages checker, verifies unique metadata, canonical URLs, JSON-LD, sitemap coverage, robots directives and the PNG image. Search engines and social platforms decide how to display this information; metadata does not guarantee indexing or a particular search appearance.
+
+Implementation references: [canonical URLs](https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls), [sitemap guidance](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap), [root robots files](https://developers.google.com/crawling/docs/robots-txt/create-robots-txt), and [SoftwareSourceCode properties](https://schema.org/SoftwareSourceCode).

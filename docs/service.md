@@ -1,6 +1,7 @@
 ---
 layout: doc
 title: "Durable service"
+description: "Compose Yada’s authenticated HTTP service and worker for durable conversations, scheduled runs, replayable events, cancellation and action decisions."
 ---
 
 # Durable service

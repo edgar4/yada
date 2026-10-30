@@ -3,17 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>
-      {% if page.title %}{{ page.title | escape }} · {% endif %}Yada
-    </title>
-    <meta
-      name="description"
-      content="{{ page.description | default: site.description | escape }}"
-    />
-    <meta name="theme-color" content="#f6f6f1" />
+    {% include seo.html %}
+    <meta name="theme-color" content="#FFF6E5" />
     <link
       rel="icon"
-      href="{{ '/assets/favicon.svg' | relative_url }}"
+      href="{{ '/assets/brand/yada-mark-dark.svg' | relative_url }}"
       type="image/svg+xml"
     />
     <link rel="stylesheet" href="{{ '/assets/site.css' | relative_url }}" />
@@ -25,8 +19,13 @@
     <a class="skip-link" href="#main">Skip to content</a>
     <header class="site-header wrap">
       <a class="wordmark" href="{{ '/' | relative_url }}" aria-label="Yada home"
-        ><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span
-        >yada<span class="brand-period">.</span></a
+        ><img
+          class="brand-mark"
+          src="{{ '/assets/brand/yada-mark-light.svg' | relative_url }}"
+          width="40"
+          height="40"
+          alt=""
+        />yada<span class="brand-period">.</span></a
       >
       <nav aria-label="Main navigation">
         <a href="{{ '/configuration.html' | relative_url }}">Documentation</a>
@@ -38,7 +37,14 @@
     {{ content }}
     <footer class="site-footer wrap">
       <div>
-        <a class="footer-brand" href="{{ '/' | relative_url }}">yada.</a>
+        <a class="footer-brand" href="{{ '/' | relative_url }}"
+          ><img
+            src="{{ '/assets/brand/yada-glyph.svg' | relative_url }}"
+            width="28"
+            height="28"
+            alt=""
+          />yada.</a
+        >
         <p>Built to live in your application.</p>
       </div>
       <nav aria-label="Footer navigation">

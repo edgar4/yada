@@ -1,6 +1,7 @@
 ---
 layout: doc
 title: "MCP connections"
+description: "Connect Yada to MCP servers over Streamable HTTP or stdio, with validated discovery, scoped authorization, timeouts and controlled tool exposure."
 ---
 
 # MCP connections

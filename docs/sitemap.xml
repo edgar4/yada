@@ -1,0 +1,14 @@
+---
+layout: null
+---
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{% assign published_pages = site.html_pages | sort: 'url' %}
+{% for entry in published_pages %}
+{% if entry.published != false and entry.sitemap != false %}
+{% if entry.layout == 'base' or entry.layout == 'doc' %}
+  <url><loc>{{ entry.url | replace: 'index.html', '' | absolute_url | xml_escape }}</loc></url>
+{% endif %}
+{% endif %}
+{% endfor %}
+</urlset>
