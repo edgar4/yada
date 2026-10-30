@@ -18,7 +18,7 @@ Cancellation returns promptly even when a dependency ignores its signal. It cann
 
 The runtime supports read tools, a scripted testing provider, and Anthropic through LangChain. Tool input schemas use Zod and infer handler argument types. Automated provider tests use mocked SDK responses.
 
-Persistence, write approvals, MCP, and browser embedding are not implemented. The runtime currently keeps each run's messages in memory.
+Each run keeps its messages in memory; messages are not persisted across process restarts.
 
 ## Development checks
 

@@ -1,20 +1,43 @@
 # Yada
 
-Standalone TypeScript assistant runtime, under development.
+A standalone TypeScript assistant runtime with typed tools and configurable model providers.
 
-See [provider configuration](docs/configuration.md) and [runtime architecture](docs/architecture.md) for contracts and execution boundaries.
+## Quick start
+
+Use Node 24:
 
 ```sh
 nvm use
 npm ci
-npm run check
 npm run demo
 ```
 
-The first slice supports typed read tools, a deterministic provider, and an Anthropic adapter. It is not yet a production assistant: MCP, SQLite persistence, approvals, and website embedding are planned. Tool handlers are trusted server code and must honor cancellation. The host supplies authenticated identity and authorization; never accept identity directly from a browser request.
+The demo runs a catalog lookup without an API key.
 
-Core owns contracts and execution. Providers depend on core contracts. Applications compose dependencies through the public exports in `src/index.ts`. Runtime schemas validate model-supplied arguments before invoking typed handlers.
+## Connect your model provider
 
-For an opt-in live model run, copy `.env.example` to `.env`, select your LLM provider and model, and enter the API key issued by that provider, then run `npm run demo:live`. This sends a request to the provider and may incur usage charges. Automated tests use mocked responses and require no credentials.
+Copy `.env.example` to `.env` and enter your provider credentials:
 
-Planned storage is user-configurable: SQLite by default, with PostgreSQL and MySQL/MariaDB adapters. Persistence is not implemented yet.
+```dotenv
+YADA_LLM_PROVIDER=anthropic
+YADA_LLM_MODEL=claude-sonnet-4-6
+YADA_LLM_API_KEY=your-anthropic-api-key
+```
+
+Run the same catalog example with a live model:
+
+```sh
+npm run demo:live
+```
+
+The key belongs to your selected provider. Live requests use your provider account and may incur usage charges. Keep `.env` private.
+
+See [provider configuration](docs/configuration.md) for supported providers, model selection, and server-side configuration. See [runtime architecture](docs/architecture.md) for tool contracts and execution behavior.
+
+## Development
+
+```sh
+npm run check
+```
+
+Runs formatting checks, linting, type checking, tests, and compilation. Automated tests require no provider credentials.
