@@ -8,5 +8,6 @@
 !docs/
 !docs/**
 !README.md
+!LICENSE
 !deploy/
 !deploy/server.mjs
