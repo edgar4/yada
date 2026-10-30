@@ -108,11 +108,19 @@ try {
         if (url.origin === base) links.add(url.href);
       }
       for (const src of await page
-        .locator("script[src],link[href]")
+        .locator("script[src],link[href],img[src]")
         .evaluateAll((nodes) => nodes.map((node) => node.src ?? node.href))) {
         if (new URL(src).origin === base)
           assert.equal((await context.request.get(src)).status(), 200, src);
       }
+      const brokenImages = await page
+        .locator("img")
+        .evaluateAll((images) =>
+          images
+            .filter((image) => !image.complete || image.naturalWidth === 0)
+            .map((image) => image.src),
+        );
+      assert.deepEqual(brokenImages, [], `${name}: image loading`);
       if (name === "index.html") {
         await page.screenshot({
           path: join(root, `work/home-${viewport.width}.png`),
