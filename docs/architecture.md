@@ -1,6 +1,7 @@
 ---
 layout: doc
 title: "Runtime architecture"
+description: "Understand Yada’s runtime boundaries, provider and tool contracts, authorization checks, execution limits and durable checkpoint behavior."
 ---
 
 # Runtime architecture

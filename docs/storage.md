@@ -1,6 +1,7 @@
 ---
 layout: doc
 title: "Durable storage"
+description: "Persist Yada conversations, runs, approvals and OAuth sessions with encrypted SQLite, PostgreSQL or MySQL storage and versioned migrations."
 ---
 
 # Durable storage

@@ -1,0 +1,66 @@
+{% assign canonical_path = page.url | replace: 'index.html', '' %} {% assign
+canonical_url = canonical_path | absolute_url %} {% assign home_url = '/' |
+absolute_url %} {% assign page_title = page.title | append: ' · Yada' %} {% if
+page.url == '/' or page.url == '/index.html' %} {% assign page_title =
+page.title %} {% endif %} {% assign page_description = page.description |
+default: site.description %} {% assign social_image =
+'/assets/brand/yada-social.png' | absolute_url %}
+<title>{{ page_title | escape }}</title>
+<meta name="description" content="{{ page_description | escape }}" />
+<link rel="canonical" href="{{ canonical_url }}" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Yada" />
+<meta property="og:title" content="{{ page_title | escape }}" />
+<meta property="og:description" content="{{ page_description | escape }}" />
+<meta property="og:url" content="{{ canonical_url }}" />
+<meta property="og:image" content="{{ social_image }}" />
+<meta property="og:image:type" content="image/png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta
+  property="og:image:alt"
+  content="Yada — a TypeScript agent runtime for your application"
+/>
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="{{ page_title | escape }}" />
+<meta name="twitter:description" content="{{ page_description | escape }}" />
+<meta name="twitter:image" content="{{ social_image }}" />
+<meta
+  name="twitter:image:alt"
+  content="Yada — a TypeScript agent runtime for your application"
+/>
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": {{ home_url | append: '#website' | jsonify }},
+        "name": "Yada",
+        "url": {{ home_url | jsonify }},
+        "description": {{ site.description | jsonify }},
+        "inLanguage": "en"
+      },
+      {
+        "@type": "SoftwareSourceCode",
+        "@id": {{ home_url | append: '#source' | jsonify }},
+        "name": "Yada",
+        "url": {{ home_url | jsonify }},
+        "description": {{ site.description | jsonify }},
+        "codeRepository": "https://github.com/edgar4/yada",
+        "programmingLanguage": "TypeScript",
+        "runtimePlatform": "Node.js 24"
+      },
+      {
+        "@type": "WebPage",
+        "@id": {{ canonical_url | jsonify }},
+        "url": {{ canonical_url | jsonify }},
+        "name": {{ page_title | jsonify }},
+        "description": {{ page_description | jsonify }},
+        "inLanguage": "en",
+        "isPartOf": { "@id": {{ home_url | append: '#website' | jsonify }} },
+        "about": { "@id": {{ home_url | append: '#source' | jsonify }} }
+      }
+    ]
+  }
+</script>

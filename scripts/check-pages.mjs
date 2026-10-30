@@ -6,6 +6,7 @@ import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 import { chromium } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { createSeoCheck } from "./check-seo.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const output = join(root, "work/pages");
@@ -17,6 +18,16 @@ assert(baseurl, "Set an explicit baseurl in docs/_config.yml");
 const mount = baseurl[1] ?? baseurl[2] ?? baseurl[3];
 const files = (await readdir(output)).filter((name) => name.endsWith(".html"));
 assert(files.includes("index.html"));
+const siteUrl = /^url:[ \t]*(?:"([^"]*)"|'([^']*)'|([^\s#]*))[ \t]*$/m.exec(
+  config,
+);
+assert(siteUrl, "Set an explicit url in docs/_config.yml");
+const checkSeo = createSeoCheck({
+  siteUrl: (siteUrl[1] ?? siteUrl[2] ?? siteUrl[3]).replace(/\/$/, ""),
+  mount,
+  output,
+  files,
+});
 const cname = await readFile(join(root, "docs/CNAME"), "utf8").catch(
   (error) => {
     if (error.code !== "ENOENT") throw error;
@@ -31,6 +42,9 @@ const mime = {
   ".css": "text/css",
   ".js": "application/javascript",
   ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".xml": "application/xml",
+  ".txt": "text/plain",
 };
 const server = createServer((request, response) => {
   const pathname = new URL(request.url, "http://localhost").pathname;
@@ -79,6 +93,7 @@ try {
       const response = await page.goto(`${base}${mount}/${name}`);
       assert.equal(response.status(), 200, name);
       assert.deepEqual(failures, [], `${name}: browser errors`);
+      if (viewport.width === 1440) await checkSeo(page, name);
       assert.equal(await page.locator("h1").count(), 1, `${name}: one h1`);
       assert.equal(await page.locator("main").count(), 1, `${name}: one main`);
       assert.equal(
@@ -203,7 +218,7 @@ try {
   }
   assert.deepEqual(failures, []);
   console.log(
-    `Verified ${files.length} rendered Pages on desktop/mobile, ${links.size} internal links, assets, copy, keyboard navigation and WCAG 2.1 AA checks`,
+    `Verified ${files.length} rendered Pages on desktop/mobile, ${links.size} internal links, assets, copy, keyboard navigation, SEO metadata/crawl files and WCAG 2.1 AA checks`,
   );
 } finally {
   await browser.close();

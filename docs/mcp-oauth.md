@@ -1,6 +1,7 @@
 ---
 layout: doc
 title: "MCP OAuth"
+description: "Integrate MCP OAuth authorization, callback validation and durable session storage with Yada while keeping connection credentials on the server."
 ---
 
 # MCP OAuth

@@ -3,13 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>
-      {% if page.title %}{{ page.title | escape }} · {% endif %}Yada
-    </title>
-    <meta
-      name="description"
-      content="{{ page.description | default: site.description | escape }}"
-    />
+    {% include seo.html %}
     <meta name="theme-color" content="#FFF6E5" />
     <link
       rel="icon"

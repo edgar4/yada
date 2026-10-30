@@ -1,6 +1,7 @@
 ---
 layout: doc
 title: "Approved actions"
+description: "Build approved write tools in Yada with exact action previews, authenticated decisions, version checks, operation IDs and receipt reconciliation."
 ---
 
 # Approved actions

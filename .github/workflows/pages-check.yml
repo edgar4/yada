@@ -5,6 +5,8 @@ on:
       [
         "docs/**",
         "scripts/check-pages.mjs",
+        "scripts/check-seo.mjs",
+        "scripts/render-social-card.mjs",
         ".github/workflows/pages-check.yml",
         "package.json",
         "package-lock.json",
@@ -14,6 +16,8 @@ on:
       [
         "docs/**",
         "scripts/check-pages.mjs",
+        "scripts/check-seo.mjs",
+        "scripts/render-social-card.mjs",
         ".github/workflows/pages-check.yml",
         "package.json",
         "package-lock.json",

@@ -1,6 +1,7 @@
 ---
 layout: doc
 title: "Browser client and widget"
+description: "Embed Yada’s browser SDK and accessible chat widget with authenticated streaming, reconnect cursors, explicit approvals and isolated themes."
 ---
 
 # Browser client and widget
