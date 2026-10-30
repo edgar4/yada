@@ -7,7 +7,7 @@ import { createReadDatabase } from "../src/connectors/database.js";
 for (const driver of ["postgres", "mysql"] as const) {
   const configured =
     process.env[
-      driver === "postgres" ? "YADA_TEST_POSTGRES" : "YADA_TEST_MYSQL"
+      driver === "postgres" ? "YADA_TEST_POSTGRES_URL" : "YADA_TEST_MYSQL_URL"
     ];
   it.skipIf(!configured)(
     `reads a real ${driver} business database without migrations`,
