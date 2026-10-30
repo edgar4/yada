@@ -2,11 +2,13 @@ import { abortable } from "../core/abort.js";
 import type { ActionExecutor } from "../core/action.js";
 import type { Identity } from "../core/contracts.js";
 import { operationId, type ActionStore } from "../storage/actions.js";
+import { CheckpointError } from "../core/checkpoint.js";
 export function actionExecutor(
   store: ActionStore,
   identity: Identity,
   runId: string,
   ttlMs = 600_000,
+  leaseToken?: string,
 ): ActionExecutor {
   const execute: ActionExecutor = async (tool, call, signal) => {
     const id = operationId(identity, runId, call.id);
@@ -51,7 +53,17 @@ export function actionExecutor(
       if (!(await abortable(() => tool.authorize(identity), signal)))
         throw new Error("Action permission revoked");
       signal.throwIfAborted();
-      if (await store.begin(identity, id)) {
+      let began: boolean;
+      try {
+        began = await store.begin(
+          identity,
+          id,
+          leaseToken === undefined ? undefined : { runId, token: leaseToken },
+        );
+      } catch {
+        throw new CheckpointError();
+      }
+      if (began) {
         try {
           const receipt = await abortable(
             () =>
@@ -93,5 +105,7 @@ export function actionExecutor(
       ? { status: "reconciling", approvalId: id }
       : undefined;
   };
+  execute.withLease = (token) =>
+    actionExecutor(store, identity, runId, ttlMs, token);
   return execute;
 }

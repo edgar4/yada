@@ -38,6 +38,34 @@ export function requireRunLease(value: unknown, token: string): DurableRun {
     throw new RunLeaseError();
   return state;
 }
+export type RunOwnership = Readonly<{ runId: string; token: string }>;
+export function withRunLease<T>(
+  records: ReturnType<typeof recordStore>,
+  identity: Identity,
+  ownership: RunOwnership,
+  operation: (
+    tx: ReturnType<typeof recordStore>,
+    assertOwned: () => void,
+  ) => Promise<T>,
+): Promise<T> {
+  return records.transaction(async (tx) => {
+    const key = JSON.stringify([
+      "run",
+      identity.tenantId,
+      identity.actorId,
+      ownership.runId,
+    ]);
+    const run = await tx.read(key);
+    if (!run) throw new RunLeaseError();
+    const assertOwned = () => {
+      requireRunLease(run.value, ownership.token);
+    };
+    assertOwned();
+    await tx.write(key, run.value, run.revision);
+    assertOwned();
+    return operation(tx, assertOwned);
+  });
+}
 export interface RunStore {
   load(identity: Identity, id: string): Promise<DurableRun | undefined>;
   claim(
