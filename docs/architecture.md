@@ -18,7 +18,7 @@ Cancellation returns promptly even when a dependency ignores its signal. It cann
 
 The runtime supports read tools, a scripted testing provider, and Anthropic, OpenAI, Gemini, DeepSeek, Ollama, and llama.cpp through LangChain. Tool input schemas use Zod and infer handler argument types. Provider tests cover SDK mappings and real SDK execution for hosted and local providers with mocked HTTP responses.
 
-Each run keeps its messages in memory; messages are not persisted across process restarts.
+`run` keeps an individual run in memory. `runConversation` adds durable completed conversation history through the storage interface. OAuth sessions can use the same encrypted storage. See [durable storage](storage.md).
 
 ## Development checks
 

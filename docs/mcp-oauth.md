@@ -55,7 +55,7 @@ Implement `McpOAuthStore` in your server's storage layer:
 
 Keys include tenant, actor, MCP endpoint, and callback URL. Preserve token, client-registration, and discovery objects unchanged, including their issuer stamps. Protect tokens and PKCE verifiers at rest. Do not log records or expose them to the browser. Serialize login/refresh operations for each key across application instances; starting another flow replaces the pending state.
 
-Yada supplies this interface rather than an in-memory production token store. Storage failures must propagate; do not silently fall back to memory. Callback checks depend on atomic consumption in your implementation.
+Use `storage.oauth` from [durable storage](storage.md), or implement this interface in your existing backend. Storage failures must propagate; do not silently fall back to memory. Callback checks depend on atomic consumption in your implementation.
 
 `oauth.disconnect()` deletes local tokens and pending login state. Close active MCP connections as well. This does not revoke the upstream authorization grant; use the provider's account controls when revocation is required.
 
