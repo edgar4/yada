@@ -13,7 +13,18 @@ export default ts.config(
       },
     },
   },
-  { files: ["**/*.js"], extends: [ts.configs.disableTypeChecked] },
+  { files: ["**/*.{js,mjs}"], extends: [ts.configs.disableTypeChecked] },
+  {
+    files: ["scripts/*.mjs", "deploy/*.mjs"],
+    languageOptions: {
+      globals: {
+        process: "readonly",
+        console: "readonly",
+        Buffer: "readonly",
+        AbortSignal: "readonly",
+      },
+    },
+  },
   {
     files: ["src/core/**/*.ts"],
     rules: {

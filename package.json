@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node -e \"require('node:fs').rmSync('dist', {recursive: true, force: true})\" && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
@@ -12,7 +12,9 @@
     "test": "vitest run --coverage",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
     "demo": "node --import tsx examples/basic.ts",
-    "demo:live": "node --env-file-if-exists=.env --import tsx examples/live.ts"
+    "demo:live": "node --env-file-if-exists=.env --import tsx examples/live.ts",
+    "prepack": "npm run build",
+    "test:package": "node scripts/package-smoke.mjs"
   },
   "dependencies": {
     "@langchain/anthropic": "1.6.0",
@@ -28,7 +30,9 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
     "@eslint/js": "10.0.1",
+    "@playwright/test": "1.64.1",
     "@types/better-sqlite3": "9.6.0",
     "@types/node": "26.6.6",
     "@vitest/coverage-v8": "5.0.5",
@@ -41,5 +45,26 @@
   },
   "engines": {
     "node": ">=24.0.0 <25"
-  }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.js"
+    },
+    "./widget": {
+      "types": "./dist/widget/index.d.ts",
+      "import": "./dist/widget/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "docs",
+    "README.md"
+  ]
 }
