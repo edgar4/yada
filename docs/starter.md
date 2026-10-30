@@ -63,6 +63,8 @@ This starter does not implement multiple user accounts. In a multi-user host, re
 
 Configured MCP tools inherit the starter workspace identity. Add only servers you trust and explicitly review any write mappings. The widget displays the existing approval flow; MCP writes still require the [server compatibility contract](mcp.md#approved-writes).
 
+Finish or cancel active runs before changing their provider, tools or execution limits. Recovery requires the configuration that created an unfinished run; restore that configuration if a change leaves a run waiting.
+
 To reuse the starter outside this repository, copy the contents of `examples/starter/` into a new ESM project, install a [Yada tarball](deployment.md), `zod`, `tsx` and `esbuild`, then run `node init.mjs`, `node build.mjs` and `node --env-file=.env.starter --import tsx server.ts`. Its imports use Yada's public package exports; generated assets and SQLite data stay under the working directory's `work/starter/` folder.
 
 ## Deploy it

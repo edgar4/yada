@@ -34,13 +34,13 @@ try {
   let stopping: Promise<void> | undefined;
   const stop = () =>
     (stopping ??= (async () => {
-      server.closeAllConnections();
       const closed = new Promise<void>((resolve, reject) =>
         server.close((error) => {
           if (error) reject(error);
           else resolve();
         }),
       );
+      server.closeAllConnections();
       const results = await Promise.allSettled([closed, app.close()]);
       await storage.close();
       if (results.some((result) => result.status === "rejected"))
