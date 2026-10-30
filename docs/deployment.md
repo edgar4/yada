@@ -1,6 +1,7 @@
 ---
 layout: doc
 title: "Packaging and deployment"
+description: "Package and deploy Yada using installable ESM tarballs, a local Docker example and GitHub Pages documentation. Review host security and recovery requirements."
 ---
 
 # Packaging and deployment

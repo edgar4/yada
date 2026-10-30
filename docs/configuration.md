@@ -1,6 +1,7 @@
 ---
 layout: doc
 title: "LLM provider configuration"
+description: "Configure hosted and local model providers for Yada, including Anthropic, OpenAI, Gemini, DeepSeek, Ollama and llama.cpp. Keep credentials on your server."
 ---
 
 # LLM provider configuration

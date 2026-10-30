@@ -1,6 +1,7 @@
 ---
 layout: doc
 title: "Operations"
+description: "Operate Yada with context and usage limits, encrypted backups, verified restore, key rotation, retention, erasure and recovery monitoring."
 ---
 
 # Operations

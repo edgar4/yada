@@ -1,6 +1,7 @@
 ---
 layout: doc
 title: "Read connectors"
+description: "Connect Yada to reviewed HTTP APIs and tenant-scoped business database reads using typed inputs, authorization checks and bounded results."
 ---
 
 # Read connectors

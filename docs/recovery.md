@@ -1,6 +1,7 @@
 ---
 layout: doc
 title: "Durable runs and recovery"
+description: "Recover Yada runs from durable checkpoints using renewable leases, stable run IDs and operation receipts without blindly replaying uncertain writes."
 ---
 
 # Durable runs and recovery
