@@ -1,17 +1,34 @@
 import type { McpOAuth } from "./oauth.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { mcpConfig, type McpConfig } from "./config.js";
-import { connectMcpTransport, type McpAccess } from "./session.js";
+import { mcpConfig, type McpConfig, type McpReadConfig } from "./config.js";
+import {
+  connectMcpTransport,
+  type McpAccess,
+  type McpConnection,
+} from "./session.js";
+import type { Tool } from "../../core/contracts.js";
 import { coordinateOAuthTransport } from "./oauth-transport.js";
-export type { McpConfig } from "./config.js";
+export type { McpConfig, McpReadConfig, McpWriteMapping } from "./config.js";
 export type { McpAccess, McpConnection } from "./session.js";
+export function connectMcp(
+  config: McpReadConfig,
+  access: McpAccess,
+  signal?: AbortSignal,
+  oauth?: McpOAuth,
+): Promise<McpConnection>;
+export function connectMcp(
+  config: McpConfig,
+  access: McpAccess,
+  signal?: AbortSignal,
+  oauth?: McpOAuth,
+): Promise<McpConnection<Tool>>;
 export async function connectMcp(
   config: McpConfig,
   access: McpAccess,
   signal: AbortSignal = AbortSignal.timeout(10_000),
   oauth?: McpOAuth,
-) {
+): Promise<McpConnection<Tool>> {
   const settings = mcpConfig.parse(config);
   if (
     oauth &&
