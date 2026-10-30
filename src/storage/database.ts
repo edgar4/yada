@@ -1,4 +1,4 @@
-import { knex, type Knex } from "knex";
+import knex, { type Knex } from "knex";
 import { storageConfig, type StorageConfig } from "./config.js";
 export async function openDatabase(config: StorageConfig): Promise<Knex> {
   const options = storageConfig.parse(config);
