@@ -15,3 +15,11 @@ export type {
   McpAccess,
   McpConnection,
 } from "./connectors/mcp/index.js";
+export { createMcpOAuth } from "./connectors/mcp/oauth.js";
+export type {
+  McpOAuth,
+  McpOAuthStore,
+  OAuthSession,
+  OAuthPending,
+} from "./connectors/mcp/oauth.js";
+export { mcpServersFromEnv } from "./connectors/mcp/config.js";

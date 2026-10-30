@@ -32,6 +32,7 @@ async function setup(
     result?: CallToolResult;
     pages?: boolean;
     repeat?: boolean;
+    autoDiscover?: boolean;
   } = {},
 ) {
   const server = new McpServer(
@@ -62,7 +63,7 @@ async function setup(
       {
         name: "catalog",
         url: "https://example.test/mcp",
-        readTools: ["lookup"],
+        ...(options.autoDiscover ? {} : { readTools: ["lookup"] }),
       },
       { identity: owner, authorize },
       clientTransport,
@@ -261,4 +262,18 @@ it("accepts JSON Schema 2020-12 input", async () => {
 it("rejects invalid names before exposing tools", async () => {
   const s = await setup({ tools: [{ ...tool, name: "lookup space" }] });
   await expect(s.connect()).rejects.toThrow();
+});
+
+it("automatically discovers read-only tools without a filter", async () => {
+  const s = await setup({
+    autoDiscover: true,
+    tools: [
+      tool,
+      { ...tool, name: "write", annotations: { readOnlyHint: false } },
+      { name: "unknown", inputSchema: { type: "object" } },
+    ],
+  });
+  const c = await s.connect();
+  cleanups.push(c.close);
+  expect(c.tools.map((t) => t.spec.name)).toEqual(["catalog__lookup"]);
 });

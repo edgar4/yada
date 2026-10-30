@@ -31,7 +31,9 @@ export async function connectMcpTransport(
   };
   try {
     await abortable(() => client.connect(transport), signal);
-    const allowed = new Set(settings.readTools);
+    const allowed = settings.readTools
+      ? new Set(settings.readTools)
+      : undefined;
     const seen = new Set<string>();
     const cursors = new Set<string>();
     const tools: ReadTool[] = [];
@@ -46,7 +48,12 @@ export async function connectMcpTransport(
         if (seen.has(tool.name)) throw new Error("Duplicate MCP tool");
         seen.add(tool.name);
         if (seen.size > 1000) throw new Error("MCP tool limit exceeded");
-        if (!allowed.has(tool.name)) continue;
+        if (
+          allowed
+            ? !allowed.has(tool.name)
+            : tool.annotations?.readOnlyHint !== true
+        )
+          continue;
         if (tool.annotations?.readOnlyHint === false)
           throw new Error("MCP tool is marked as mutating");
         const name = `${settings.name}__${tool.name}`;
@@ -104,7 +111,7 @@ export async function connectMcpTransport(
         cursors.add(cursor);
       }
     } while (cursor);
-    if (tools.length !== allowed.size)
+    if (allowed && tools.length !== allowed.size)
       throw new Error("Configured MCP tool not found");
     return { tools, close };
   } catch (error) {
