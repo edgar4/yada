@@ -22,7 +22,7 @@ widget?.configure({
 
 Place `<yada-chat></yada-chat>` in the host markup. `defineYadaWidget()` explicitly registers the component, accepts an optional custom element name, and does nothing during server rendering. Configure the element after registration. Registration is idempotent. Rendering creates no global styles or UI outside the element's Shadow DOM.
 
-The host owns authentication, conversation identity, profile selection, and API deployment. `baseUrl` is an absolute HTTP(S) URL prefix; the client appends `/v1/conversations/...`. `credentials` defaults to `same-origin`. The optional `headers` callback runs for every request and retry so refreshed authentication can be used. Cross-origin deployments require the server to allow the host origin and relevant credentials/headers. The client does not persist credentials.
+The host owns authentication, conversation identity, profile selection, and API deployment. `baseUrl` is an absolute HTTP(S) URL prefix; the client appends `/v1/conversations/...`. Credentials, queries and fragments in that URL are rejected. API redirects fail rather than forwarding requests to another endpoint. `credentials` defaults to `same-origin`. The optional `headers` callback runs for every request and retry so refreshed authentication can be used. Cross-origin deployments require the server to allow the host origin and relevant credentials/headers. The client does not persist credentials.
 
 ## Framework-independent runs
 

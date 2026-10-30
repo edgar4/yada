@@ -43,6 +43,16 @@ const collect = async (events: AsyncGenerator<RunEvent>) => {
 describe("browser client", () => {
   it("validates configuration and stable request input", () => {
     expect(() => new BrowserClient({ baseUrl: "file:///a" })).toThrow("HTTP");
+    for (const baseUrl of [
+      "https://user@host.test/api",
+      "https://user:secret@host.test",
+      "https://host.test/api?next=/other",
+      "https://host.test/api#other",
+      "https://host.test/api?",
+      "https://host.test/api#",
+    ]) {
+      expect(() => new BrowserClient({ baseUrl })).toThrow("credentials");
+    }
     for (const maxRetries of [-1, 11, 0.5])
       expect(
         () => new BrowserClient({ baseUrl: "https://host.test", maxRetries }),
@@ -86,6 +96,10 @@ describe("browser client", () => {
       new Headers(transport.mock.calls[1]?.[1]?.headers).get("authorization"),
     ).toBe("Bearer 2");
     expect(transport.mock.calls[0]?.[1]?.credentials).toBe("include");
+    expect(transport.mock.calls.map((call) => call[1]?.redirect)).toEqual([
+      "error",
+      "error",
+    ]);
   });
 
   it("encodes paths and retrieves runs, approvals, decisions and cancellation", async () => {

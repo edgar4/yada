@@ -119,6 +119,18 @@ export class BrowserClient {
       throw new ClientError("Base URL must use HTTP or HTTPS");
     }
     if (
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      options.baseUrl.includes("?") ||
+      options.baseUrl.includes("#")
+    ) {
+      throw new ClientError(
+        "Base URL cannot contain credentials, a query or a fragment",
+      );
+    }
+    if (
       options.maxRetries !== undefined &&
       (!Number.isInteger(options.maxRetries) ||
         options.maxRetries < 0 ||
@@ -299,6 +311,7 @@ export class BrowserClient {
     if (body !== undefined) headers.set("content-type", "application/json");
     const response = await this.transport(url, {
       method,
+      redirect: "error",
       headers,
       credentials: this.options.credentials ?? "same-origin",
       ...(body === undefined ? {} : { body }),
