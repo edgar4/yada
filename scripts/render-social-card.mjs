@@ -3,7 +3,7 @@ import { fileURLToPath, URL } from "node:url";
 import { chromium } from "@playwright/test";
 
 const mark = await readFile(
-  new URL("../docs/assets/brand/yada-mark-light.svg", import.meta.url),
+  new URL("../docs/assets/brand/yada-mark-dark.svg", import.meta.url),
 );
 const browser = await chromium.launch({ headless: true });
 try {
@@ -12,7 +12,7 @@ try {
     deviceScaleFactor: 1,
   });
   await page.setContent(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Yada social preview</title><style>
-  * { box-sizing:border-box; } body { margin:0; width:1200px; height:630px; background:#FFF6E5; color:#1F1A3D; font-family:Arial,sans-serif; padding:56px 76px; border-bottom:12px solid #FFB547; }
+  * { box-sizing:border-box; } body { margin:0; width:1200px; height:630px; background:#FFFFFF; color:#1F1A3D; font-family:Arial,sans-serif; padding:56px 76px; border-bottom:12px solid #FFB547; }
   header { display:flex; align-items:center; gap:20px; } img { width:88px; height:88px; } .name { font-size:46px; font-weight:700; letter-spacing:-2px; } .name span { color:#E07A00; }
   .label { margin-left:auto; font-size:18px; font-weight:700; letter-spacing:2px; }
   h1 { font-size:76px; line-height:1.06; letter-spacing:-3px; margin:38px 0 26px; font-weight:700; }
