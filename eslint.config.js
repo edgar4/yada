@@ -19,7 +19,14 @@ export default ts.config(
     rules: {
       "no-restricted-imports": [
         "error",
-        { patterns: ["**/providers/**", "**/integrations/**", "node:*"] },
+        {
+          patterns: [
+            "**/providers/**",
+            "**/integrations/**",
+            "**/connectors/**",
+            "node:*",
+          ],
+        },
       ],
     },
   },

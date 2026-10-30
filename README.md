@@ -34,7 +34,7 @@ npm run demo:live
 
 The key belongs to your selected provider. Live requests use your provider account and may incur usage charges. Keep `.env` private.
 
-See [provider configuration](docs/configuration.md) for supported providers, model selection, and server-side configuration. See [runtime architecture](docs/architecture.md) for tool contracts and execution behavior.
+See [provider configuration](docs/configuration.md) for supported providers, model selection, and server-side configuration. See [MCP connections](docs/mcp.md) to connect external tool servers and [runtime architecture](docs/architecture.md) for execution behavior.
 
 ## Development
 
