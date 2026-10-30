@@ -9,3 +9,9 @@ export { createOpenAIProvider } from "./providers/openai.js";
 export { createGeminiProvider } from "./providers/gemini.js";
 export { createDeepSeekProvider } from "./providers/deepseek.js";
 export { createLocalProvider } from "./providers/local.js";
+export { connectMcp } from "./connectors/mcp/index.js";
+export type {
+  McpConfig,
+  McpAccess,
+  McpConnection,
+} from "./connectors/mcp/index.js";
