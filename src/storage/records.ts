@@ -24,9 +24,10 @@ export function recordStore(db: Knex, encryptionKey: string) {
   async function write(key: string, value: unknown, revision: number) {
     const id = idFor(key);
     const encrypted = cipher.seal(id, value);
+    const kind = z.array(z.string()).parse(JSON.parse(key))[0];
     if (revision === 0) {
       await db("yada_records")
-        .insert({ id, value: encrypted, revision: 1 })
+        .insert({ id, value: encrypted, revision: 1, kind })
         .onConflict("id")
         .ignore();
       const raw: unknown = await db("yada_records").where({ id }).first();
@@ -34,7 +35,7 @@ export function recordStore(db: Knex, encryptionKey: string) {
     } else {
       const updated = await db("yada_records")
         .where({ id, revision })
-        .update({ value: encrypted, revision: revision + 1 });
+        .update({ value: encrypted, revision: revision + 1, kind });
       if (updated !== 1) throw new StorageConflict();
     }
     return revision + 1;
@@ -55,5 +56,21 @@ export function recordStore(db: Knex, encryptionKey: string) {
     }
     throw new StorageConflict();
   }
-  return { read, write, mutate };
+  async function scan(kind: string, after = "", limit = 100) {
+    const rows: unknown = await db("yada_records")
+      .where({ kind })
+      .andWhere("id", ">", after)
+      .orderBy("id")
+      .limit(z.number().int().min(1).max(1000).parse(limit));
+    return z
+      .array(rowSchema.extend({ id: z.string() }))
+      .parse(rows)
+      .map((row) => ({ id: row.id, value: cipher.open(row.id, row.value) }));
+  }
+  async function remove(key: string) {
+    await db("yada_records")
+      .where({ id: idFor(key) })
+      .delete();
+  }
+  return { read, write, mutate, scan, remove };
 }

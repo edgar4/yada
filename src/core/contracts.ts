@@ -1,3 +1,4 @@
+import type { WriteTool, Suspension } from "./action.js";
 export type ProviderMetadata = Readonly<{
   provider: string;
   data: Record<string, unknown>;
@@ -50,7 +51,9 @@ export interface ReadTool {
     signal: AbortSignal,
   ): Promise<string>;
 }
-export type RunResult =
+export type Tool = ReadTool | WriteTool;
+export type RunResult = TerminalResult | Suspension;
+export type TerminalResult =
   | Readonly<{ status: "completed"; text: string }>
   | Readonly<{
       status: "failed";
