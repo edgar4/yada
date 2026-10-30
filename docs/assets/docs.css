@@ -36,15 +36,15 @@
   border-radius: 4px;
 }
 .docs-nav-group a[aria-current="page"] {
-  background: #e4ecd9;
-  color: #1d5036;
+  background: #ffe0aa;
+  color: #1f1a3d;
   font-weight: 650;
 }
 .docs-eyebrow {
   font-size: 10px;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: var(--green);
+  color: var(--accent);
   margin-bottom: 20px;
 }
 .prose {
@@ -83,13 +83,13 @@
   margin-bottom: 23px;
 }
 .prose a {
-  color: #28603f;
+  color: #814000;
 }
 .prose code {
   font-family: var(--mono);
   font-size: 0.83em;
   padding: 2px 4px;
-  background: #e9ede3;
+  background: #f5ebd9;
   border-radius: 3px;
 }
 .prose pre {
@@ -97,9 +97,9 @@
   font-size: 12px;
   line-height: 1.8;
   overflow: auto;
-  background: #e9ede3;
+  background: #f5ebd9;
   padding: 20px;
-  border: 1px solid #d5ddcd;
+  border: 1px solid #e2d3bd;
   border-radius: 5px;
   margin-bottom: 25px;
   overflow-wrap: normal;
@@ -123,14 +123,14 @@
   text-align: left;
   vertical-align: top;
   padding: 10px 12px;
-  border: 1px solid #d4dccd;
+  border: 1px solid #dcccb5;
 }
 .prose th {
-  background: #e9ede3;
+  background: #f5ebd9;
 }
 .prose blockquote {
   margin: 25px 0;
-  border-left: 3px solid #9db88c;
+  border-left: 3px solid var(--deep-amber);
   padding: 5px 0 5px 20px;
   color: var(--muted);
 }
@@ -150,7 +150,7 @@
 }
 .doc-bottom a {
   text-decoration: none;
-  color: var(--green);
+  color: var(--accent);
 }
 .mobile-docs-nav {
   display: none;
@@ -174,11 +174,11 @@
   }
   .mobile-docs-nav {
     display: block;
-    border: 1px solid #d0dac7;
+    border: 1px solid #dcccb5;
     border-radius: 5px;
     margin-bottom: 30px;
     padding: 13px 16px;
-    background: #eef2e7;
+    background: #f9edd9;
   }
   .mobile-docs-nav summary {
     cursor: pointer;
