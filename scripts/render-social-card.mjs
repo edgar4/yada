@@ -17,7 +17,7 @@ try {
   .label { margin-left:auto; font-size:18px; font-weight:700; letter-spacing:2px; }
   h1 { font-size:76px; line-height:1.06; letter-spacing:-3px; margin:38px 0 26px; font-weight:700; }
   p { margin:0; font-size:26px; line-height:1.5; } footer { margin-top:33px; font-size:21px; font-weight:700; letter-spacing:.2px; }
-  </style></head><body><header><img src="data:image/svg+xml;base64,${mark.toString("base64")}" alt="Yada knowing Y"><div class="name">yada<span>.</span></div><div class="label">TYPESCRIPT AGENT RUNTIME</div></header><h1>An assistant inside<br>your application.</h1><p>Typed tools · Approved actions · Durable runs</p><footer>yada.edgar.co.ke</footer></body></html>`);
+  </style></head><body><header><img src="data:image/svg+xml;base64,${mark.toString("base64")}" alt="Yada knowing Y"><div class="name">yada<span>.</span></div><div class="label">TYPESCRIPT AGENT RUNTIME</div></header><h1>An AI agent inside<br>your application.</h1><p>Typed tools · Approved actions · Durable runs</p><footer>yada.edgar.co.ke</footer></body></html>`);
   await page.evaluate(() => globalThis.document.fonts.ready);
   await page.screenshot({
     path: fileURLToPath(
