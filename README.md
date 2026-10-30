@@ -38,6 +38,8 @@ See [provider configuration](docs/configuration.md) for supported providers, mod
 
 Use [durable storage](docs/storage.md) to retain conversations and OAuth sessions across restarts, and [durable runs](docs/recovery.md) to resume interrupted execution. SQLite is the default; PostgreSQL and MySQL are also supported.
 
+See [packaging and deployment](docs/deployment.md) for installable tarballs, release artifacts and a local Docker example.
+
 ## Development
 
 ```sh

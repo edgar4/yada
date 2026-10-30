@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Operations console</title>
+    <style>
+      body {
+        margin: 0;
+        background: #111827;
+        color: #e2e8f0;
+        font:
+          14px/1.6 ui-monospace,
+          monospace;
+      }
+      header {
+        padding: 16px 24px;
+        border-bottom: 1px solid #334155;
+        color: #67e8f9;
+      }
+      main {
+        max-width: 1100px;
+        padding: 24px;
+        margin: auto;
+        display: grid;
+        grid-template-columns: 1fr 2fr;
+        gap: 32px;
+      }
+      h1 {
+        font-size: 24px;
+      }
+      button {
+        border-radius: 100px !important;
+        background: red !important;
+      }
+      textarea {
+        display: none !important;
+      }
+      yada-chat {
+        --yada-background: #1e293b;
+        --yada-color: #f1f5f9;
+        --yada-accent: #0e7490;
+        --yada-border: #94a3b8;
+        --yada-input-background: #0f172a;
+        --yada-radius: 2px;
+        --yada-font: 15px/1.6 ui-monospace, monospace;
+        --yada-focus: #67e8f9;
+        --yada-error: #fca5a5;
+      }
+      @media (max-width: 700px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body data-conversation="operations-demo" data-profile="operations">
+    <header>CONTROL ROOM / OPERATIONS</header>
+    <main>
+      <aside>
+        <h1>Operations assistant</h1>
+        <p>Inspect current state and review proposed changes.</p>
+      </aside>
+      <yada-chat></yada-chat>
+    </main>
+    <script type="module" src="./app.ts"></script>
+  </body>
+</html>
