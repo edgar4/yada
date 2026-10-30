@@ -14,10 +14,18 @@ const backupSchema = z.strictObject({
   ),
 });
 export type StorageBackup = z.infer<typeof backupSchema>;
+function maintenanceConfig(config: StorageConfig) {
+  const settings = storageConfig.parse(config);
+  if (settings.driver === "sqlite" && settings.filename === ":memory:")
+    throw new Error(
+      "Storage maintenance requires a persistent SQLite database",
+    );
+  return settings;
+}
 export async function backupStorage(
   config: StorageConfig,
 ): Promise<StorageBackup> {
-  const db = await openDatabase(config);
+  const db = await openDatabase(maintenanceConfig(config));
   try {
     const rows: unknown = await db("yada_records").select(
       "id",
@@ -35,7 +43,7 @@ export async function restoreStorage(
   backup: StorageBackup,
 ): Promise<void> {
   const parsed = backupSchema.parse(backup);
-  const settings = storageConfig.parse(config);
+  const settings = maintenanceConfig(config);
   const cipher = storageCipher(settings.encryptionKey);
   for (const row of parsed.records) cipher.open(row.id, row.value);
   const db = await openDatabase(settings);
@@ -53,7 +61,7 @@ export async function rotateStorageKey(
   config: StorageConfig,
   newKey: string,
 ): Promise<void> {
-  const settings = storageConfig.parse(config);
+  const settings = maintenanceConfig(config);
   storageConfig.parse({ ...settings, encryptionKey: newKey });
   const previous = storageCipher(settings.encryptionKey);
   const next = storageCipher(newKey);

@@ -11,6 +11,27 @@ import { createFakeProvider } from "../src/providers/fake.js";
 import { contextWindow } from "../src/core/limits.js";
 import { createWorker } from "../src/service/worker.js";
 import type { RunCheckpoint } from "../src/core/checkpoint.js";
+it("rejects in-memory SQLite for all config-based maintenance APIs", async () => {
+  const config = {
+    driver: "sqlite" as const,
+    filename: ":memory:",
+    encryptionKey: "ab".repeat(32),
+  };
+  const source = await createStorage(config);
+  const identity = { actorId: "actor", tenantId: "tenant" };
+  try {
+    await source.conversations.save(identity, "chat", [], 0);
+    for (const operation of [
+      () => backupStorage(config),
+      () => restoreStorage(config, { version: 1, records: [] }),
+      () => rotateStorageKey(config, "cd".repeat(32)),
+    ])
+      await expect(operation()).rejects.toThrow("persistent SQLite database");
+    expect(await source.conversations.load(identity, "chat")).toBeDefined();
+  } finally {
+    await source.close();
+  }
+});
 for (const driver of drivers)
   describe(`${driver} operations`, () => {
     it("restores encrypted backups and rotates keys without exposing plaintext", async () => {

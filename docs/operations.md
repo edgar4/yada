@@ -12,6 +12,8 @@ This does not discover provider pricing or guarantee the provider's final invoic
 
 ## Backup, restore and encryption keys
 
+SQLite maintenance requires a persistent database filename. These config-based APIs open their own connection and reject `:memory:`, which would address a different empty database.
+
 `backupStorage(config)` returns a versioned encrypted snapshot of all Yada records. The database encryption key is never embedded in the snapshot. Store snapshots and keys separately with restricted access. Snapshots contain encrypted conversations, jobs, runs, approvals and OAuth sessions. Treat them as sensitive even though payloads are encrypted.
 
 `restoreStorage(config, backup)` verifies every envelope with the supplied key and requires an empty destination. Inserts are transactional; a damaged or duplicate record rolls back the restore. Restore into a separate database and verify representative conversations before switching the application to it. Keep the original database available for rollback.
