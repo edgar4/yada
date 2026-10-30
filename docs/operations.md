@@ -32,4 +32,6 @@ Backups and external backend operation receipts have independent retention polic
 
 Worker `trace` callbacks report lifecycle outcomes and elapsed milliseconds without prompts, tokens, actor IDs, or arguments. Send these to your metrics system; use host-owned request correlation if needed. Protect detailed checkpoint inspection as privileged access.
 
+Trace callback failures do not interrupt workers. Job status updates are fenced by the current run lease in the same database transaction, so an expired worker cannot overwrite a newer worker's approval state. Repetitive progress events are capped; approval and terminal events remain deliverable.
+
 Monitor queued age, repeated retry events, lease failures, awaiting approvals and reconciling actions. Reconciling means an external write's result is uncertain: inspect its authoritative receipt rather than creating another operation. See [service composition](service.md), [approved actions](actions.md) and [run recovery](recovery.md).
