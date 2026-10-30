@@ -1,10 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { checkpointSchema, type RunCheckpoint } from "../core/checkpoint.js";
+import {
+  checkpointSchema,
+  turnSchema,
+  type RunCheckpoint,
+} from "../core/checkpoint.js";
 import type { Identity } from "../core/contracts.js";
 import type { recordStore } from "./records.js";
 const requestSchema = z.object({
   input: z.string(),
+  history: z.array(turnSchema).default([]),
   system: z.string(),
   profileId: z.string().min(1),
   provider: z.string(),
@@ -18,7 +23,7 @@ const runSchema = z.object({
   checkpoint: checkpointSchema.optional(),
   lease: z.object({ token: z.string(), expiresAt: z.number() }).optional(),
 });
-export type DurableRequest = z.infer<typeof requestSchema>;
+export type DurableRequest = z.input<typeof requestSchema>;
 export type DurableRun = z.infer<typeof runSchema>;
 export class RunLeaseError extends Error {
   constructor() {
@@ -40,6 +45,7 @@ export interface RunStore {
     checkpoint: RunCheckpoint,
     leaseMs: number,
   ): Promise<void>;
+  release(identity: Identity, id: string, token: string): Promise<void>;
   renew(
     identity: Identity,
     id: string,
@@ -102,6 +108,15 @@ export function createRunStore(
             checkpoint: parsed,
             lease: { token, expiresAt: Date.now() + leaseMs },
           },
+          result: undefined,
+        };
+      });
+    },
+    async release(identity, id, token) {
+      await records.mutate(key(identity, id), (value) => {
+        const state = owned(value, token);
+        return {
+          value: { ...state, lease: { token, expiresAt: 0 } },
           result: undefined,
         };
       });

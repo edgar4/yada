@@ -23,11 +23,17 @@ export async function openDatabase(config: StorageConfig): Promise<Knex> {
     }
     await db.migrate.latest({
       migrationSource: {
-        getMigrations: () => Promise.resolve(["001_records"]),
+        getMigrations: () => Promise.resolve(["001_records", "002_discovery"]),
         getMigrationName: (name) => String(name),
-        getMigration: () =>
+        getMigration: (name) =>
           Promise.resolve({
             up: async (tx: Knex) => {
+              if (name === "002_discovery") {
+                await tx.schema.alterTable("yada_records", (table) => {
+                  table.string("kind", 40).index();
+                });
+                return;
+              }
               await tx.schema.createTable("yada_records", (table) => {
                 table.string("id", 64).primary();
                 table.text("value", "longtext").notNullable();
@@ -35,6 +41,12 @@ export async function openDatabase(config: StorageConfig): Promise<Knex> {
               });
             },
             down: async (tx: Knex) => {
+              if (name === "002_discovery") {
+                await tx.schema.alterTable("yada_records", (table) => {
+                  table.dropColumn("kind");
+                });
+                return;
+              }
               await tx.schema.dropTable("yada_records");
             },
           }),
