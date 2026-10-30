@@ -107,14 +107,6 @@ summary:focus-visible,
 .footer-brand:hover {
   color: inherit;
 }
-.brand-dot {
-  width: 0.24em;
-  height: 0.24em;
-  border-radius: 50%;
-  background: var(--deep-amber);
-  align-self: flex-end;
-  margin: 0 0 0.2em -9px;
-}
 .brand-mark {
   display: block;
   border-radius: 10px;
@@ -154,25 +146,11 @@ summary:focus-visible,
 .skip-link:focus {
   transform: translateY(0);
 }
-.eyebrow {
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
+.kicker {
+  font-size: 15px;
   font-weight: 600;
-  line-height: 1.5;
-  margin: 0 0 22px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.eyebrow::before {
-  content: "";
-  flex: none;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--deep-amber);
+  color: var(--accent);
+  margin-bottom: 20px;
 }
 h1,
 h2,
@@ -302,10 +280,6 @@ h3 {
   }
   .site-header nav {
     gap: 12px;
-  }
-  .eyebrow {
-    font-size: 10px;
-    letter-spacing: 1px;
   }
   h1 {
     font-size: 40px;
