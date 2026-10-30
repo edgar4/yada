@@ -1,5 +1,5 @@
 import { expect, it, describe } from "vitest";
-import { createFakeProvider } from "yada";
+import { createFakeProvider } from "@edgaralochi/yada";
 import {
   createStarterApp,
   type StarterAssets,

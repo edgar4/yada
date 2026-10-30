@@ -2,7 +2,7 @@ import { once } from "node:events";
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { createNodeServer, createStorage } from "yada";
+import { createNodeServer, createStorage } from "@edgaralochi/yada";
 import { createStarterApp } from "./app.js";
 import { starterConfigFromEnv } from "./config.js";
 

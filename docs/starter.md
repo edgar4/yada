@@ -59,13 +59,13 @@ This starter does not implement multiple user accounts. In a multi-user host, re
 
 ## Adapt it
 
-`examples/starter/tools.ts` contains two scoped read tools: UTC time and a configuration guide. Replace or extend them with your application's typed tools. `app.ts` composes the provider, worker, authentication and optional MCP connections through Yada's public APIs. The UI reuses `yada/widget` and `yada/client`.
+`examples/starter/tools.ts` contains two scoped read tools: UTC time and a configuration guide. Replace or extend them with your application's typed tools. `app.ts` composes the provider, worker, authentication and optional MCP connections through Yada's public APIs. The UI reuses `@edgaralochi/yada/widget` and `@edgaralochi/yada/client`.
 
 Configured MCP tools inherit the starter workspace identity. Add only servers you trust and explicitly review any write mappings. The widget displays the existing approval flow; MCP writes still require the [server compatibility contract](mcp.md#approved-writes).
 
 Finish or cancel active runs before changing their provider, tools or execution limits. Recovery requires the configuration that created an unfinished run; restore that configuration if a change leaves a run waiting.
 
-To reuse the starter outside this repository, copy the contents of `examples/starter/` into a new ESM project, install a [Yada tarball](deployment.md), `zod`, `tsx` and `esbuild`, then run `node init.mjs`, `node build.mjs` and `node --env-file=.env.starter --import tsx server.ts`. Its imports use Yada's public package exports; generated assets and SQLite data stay under the working directory's `work/starter/` folder.
+To reuse the starter outside this repository, copy the contents of `examples/starter/` into a new ESM project, install [`@edgaralochi/yada`](deployment.md), `zod`, `tsx` and `esbuild`, then run `node init.mjs`, `node build.mjs` and `node --env-file=.env.starter --import tsx server.ts`. Its imports use Yada's public package exports; generated assets and SQLite data stay under the working directory's `work/starter/` folder.
 
 ## Deploy it
 

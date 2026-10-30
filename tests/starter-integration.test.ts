@@ -3,7 +3,7 @@ import { chromium } from "@playwright/test";
 import { build } from "esbuild";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
-import { createFakeProvider, createNodeServer } from "yada";
+import { createFakeProvider, createNodeServer } from "@edgaralochi/yada";
 import { createStarterApp } from "../examples/starter/app.js";
 import { starterConfigFromEnv } from "../examples/starter/config.js";
 import { storageFixture } from "./helpers/storage.js";

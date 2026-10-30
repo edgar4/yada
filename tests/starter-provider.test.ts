@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { it, expect } from "vitest";
 import { once } from "node:events";
-import { createNodeServer } from "yada";
+import { createNodeServer } from "@edgaralochi/yada";
 import { createStarterApp } from "../examples/starter/app.js";
 import { starterConfigFromEnv } from "../examples/starter/config.js";
 import { starterIdentity } from "../examples/starter/auth.js";

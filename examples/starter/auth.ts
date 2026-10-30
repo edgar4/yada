@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { createStarterCookies } from "./cookies.js";
 import { z } from "zod";
-import type { Identity } from "yada";
+import type { Identity } from "@edgaralochi/yada";
 
 export const starterIdentity: Identity = Object.freeze({
   actorId: "owner",

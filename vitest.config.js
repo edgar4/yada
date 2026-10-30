@@ -5,17 +5,17 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: /^yada$/,
+        find: /^@edgaralochi\/yada$/,
         replacement: fileURLToPath(new URL("./src/index.ts", import.meta.url)),
       },
       {
-        find: /^yada\/client$/,
+        find: /^@edgaralochi\/yada\/client$/,
         replacement: fileURLToPath(
           new URL("./src/client/index.ts", import.meta.url),
         ),
       },
       {
-        find: /^yada\/widget$/,
+        find: /^@edgaralochi\/yada\/widget$/,
         replacement: fileURLToPath(
           new URL("./src/widget/index.ts", import.meta.url),
         ),

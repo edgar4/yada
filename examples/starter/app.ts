@@ -8,7 +8,7 @@ import {
   type ProviderAdapter,
   type Tool,
   type YadaStorage,
-} from "yada";
+} from "@edgaralochi/yada";
 import { createStarterAuth, starterIdentity } from "./auth.js";
 import type { StarterConfig } from "./config.js";
 import { starterTools } from "./tools.js";

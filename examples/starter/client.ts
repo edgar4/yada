@@ -1,9 +1,9 @@
-import { BrowserClient, ClientError } from "yada/client";
+import { BrowserClient, ClientError } from "@edgaralochi/yada/client";
 import {
   defineYadaWidget,
   type YadaWidget,
   type WidgetRunDetail,
-} from "yada/widget";
+} from "@edgaralochi/yada/widget";
 
 function element(id: string): HTMLElement {
   const node = document.getElementById(id);

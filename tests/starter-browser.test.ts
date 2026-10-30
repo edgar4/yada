@@ -19,7 +19,7 @@ let loginGate: Promise<void> | undefined;
 let submissions = 0;
 const jobs = new Map<string, Job>();
 const importMap =
-  '<script type="importmap">{"imports":{"yada/client":"/src/client/index.js","yada/widget":"/src/widget/index.js","zod":"/node_modules/zod/index.js"}}</script>';
+  '<script type="importmap">{"imports":{"@edgaralochi/yada/client":"/src/client/index.js","@edgaralochi/yada/widget":"/src/widget/index.js","zod":"/node_modules/zod/index.js"}}</script>';
 const server = createNodeServer(async (request) => {
   const path = new URL(request.url).pathname;
   if (path === "/") {

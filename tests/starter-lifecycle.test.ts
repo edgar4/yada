@@ -4,13 +4,13 @@ import {
   createFakeProvider,
   type McpConnection,
   type Tool,
-} from "yada";
+} from "@edgaralochi/yada";
 import { createStarterApp } from "../examples/starter/app.js";
 import { starterConfigFromEnv } from "../examples/starter/config.js";
 import { storageFixture } from "./helpers/storage.js";
 
-vi.mock("yada", async (original) => ({
-  ...(await original<typeof import("yada")>()),
+vi.mock("@edgaralochi/yada", async (original) => ({
+  ...(await original<typeof import("@edgaralochi/yada")>()),
   connectMcp: vi.fn(),
 }));
 
