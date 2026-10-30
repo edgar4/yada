@@ -31,7 +31,7 @@ await runDurable({
   runId: process.env["YADA_CRASH_ID"] ?? "",
   profileId: "test-v1",
   store: store.runs,
-  leaseMs: 300,
+  leaseMs: 1000,
   identity: { actorId: "actor", tenantId: "tenant" },
   provider,
   tools: [tool],

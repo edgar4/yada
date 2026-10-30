@@ -1,3 +1,4 @@
+import { contextWindow, type RunLimits } from "../core/limits.js";
 import { operationId } from "../storage/actions.js";
 import { actionExecutor } from "./actions.js";
 import { setTimeout as delay } from "node:timers/promises";
@@ -10,6 +11,8 @@ export type AgentProfile = Readonly<{
   provider: ProviderAdapter;
   tools: readonly Tool[];
   system: string;
+  limits?: RunLimits;
+  historyChars?: number;
   maxRounds?: number;
   maxToolCalls?: number;
   timeoutMs?: number;
@@ -73,7 +76,7 @@ export function createWorker(options: {
             identity,
             JSON.stringify([conversationId, job.id]),
           ),
-          history,
+          history: contextWindow(history, profile.historyChars ?? 32_000),
           input: job.input,
           identity,
           runId: JSON.stringify([conversationId, job.id]),

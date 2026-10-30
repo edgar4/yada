@@ -1,3 +1,4 @@
+import { limitsSchema } from "../core/limits.js";
 import { turnSchema } from "../core/checkpoint.js";
 import { run } from "../core/runtime.js";
 import type { RunStore } from "./runs.js";
@@ -12,6 +13,7 @@ export async function runDurable(
   const { store, runId, profileId, leaseMs = 30_000, ...runtime } = options;
   const request = {
     input: options.input,
+    limits: limitsSchema.parse(options.limits ?? {}),
     history: turnSchema.array().parse(options.history ?? []),
     system: options.system,
     profileId,

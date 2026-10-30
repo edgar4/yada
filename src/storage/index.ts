@@ -1,3 +1,4 @@
+import { createRetention } from "./retention.js";
 import { createActionStore, type ActionStore } from "./actions.js";
 import { createJobStore, type JobStore } from "./jobs.js";
 import {
@@ -22,6 +23,7 @@ export interface YadaStorage {
   runs: RunStore;
   jobs: JobStore;
   actions: ActionStore;
+  retention: ReturnType<typeof createRetention>;
   conversations: ConversationStore;
   oauth: McpOAuthStore;
   close: () => Promise<void>;
@@ -40,6 +42,7 @@ export async function createStorage(
     runs: createRunStore(records),
     jobs: createJobStore(records),
     actions: createActionStore(records),
+    retention: createRetention(records),
     conversations: createConversationStore(records),
     oauth: {
       async load(id) {

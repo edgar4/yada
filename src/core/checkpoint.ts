@@ -48,6 +48,13 @@ export const checkpointSchema = z.object({
   pending: z.array(call),
   rounds: z.number().int().nonnegative(),
   calls: z.number().int().nonnegative(),
+  reservedCostMicros: z.number().int().nonnegative().optional(),
+  usage: z
+    .object({
+      inputTokens: z.number().int().nonnegative(),
+      outputTokens: z.number().int().nonnegative(),
+    })
+    .optional(),
   outcome: runResultSchema.optional(),
 });
 export type RunCheckpoint = z.infer<typeof checkpointSchema>;

@@ -18,6 +18,8 @@ const stateSchema = z.object({
   identity: identitySchema,
   id: z.string(),
   messages: z.array(messageSchema),
+  deleted: z.boolean().default(false),
+  retiredRuns: z.array(z.string()).default([]),
   jobs: z.array(jobSchema),
 });
 export class JobConflict extends Error {
@@ -91,6 +93,8 @@ export function createJobStore(
         conversationKey(identity, conversationId),
         (value) => {
           const state = stateFrom(value, identity, conversationId);
+          if (state.deleted) throw new Error("Conversation erased");
+          if (state.retiredRuns.includes(parsed.id)) throw new JobConflict();
           const existing = state.jobs.find((job) => job.id === parsed.id);
           if (existing) {
             if (
@@ -187,6 +191,7 @@ export function createJobStore(
           (job) => isTerminal(job.status) && job.updatedAt < before,
         );
         state.jobs = state.jobs.filter((job) => !removed.includes(job));
+        state.retiredRuns.push(...removed.map((job) => job.id));
         return { value: state, result: removed.map((job) => job.id) };
       }),
   };

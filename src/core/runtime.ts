@@ -1,3 +1,4 @@
+import { limitsSchema, type RunLimits } from "./limits.js";
 import type { ActionExecutor } from "./action.js";
 import { abortable } from "./abort.js";
 import {
@@ -22,12 +23,14 @@ export async function run(options: {
   signal: AbortSignal;
   history?: readonly Turn[];
   executeWrite?: ActionExecutor;
+  limits?: RunLimits;
   maxRounds?: number;
   maxToolCalls?: number;
   checkpoint?: RunCheckpoint;
   persist?: (checkpoint: RunCheckpoint) => Promise<void>;
 }): Promise<RunResult> {
   const { provider, signal } = options;
+  const limits = limitsSchema.parse(options.limits ?? {});
   const rounds = options.maxRounds ?? 8;
   const callLimit = options.maxToolCalls ?? 16;
   if (
@@ -117,6 +120,22 @@ export async function run(options: {
       if (state.rounds >= rounds)
         return await finish({ status: "failed", code: "limit" });
       signal.throwIfAborted();
+      const contextSize =
+        options.system.length +
+        JSON.stringify(state.messages).length +
+        JSON.stringify(visible.map((tool) => tool.spec)).length;
+      if (contextSize > limits.maxContextChars)
+        return await finish({ status: "failed", code: "limit" });
+      if (
+        limits.maxCostMicros !== undefined &&
+        limits.costPerCallMicros !== undefined
+      ) {
+        const reserved =
+          (state.reservedCostMicros ?? 0) + limits.costPerCallMicros;
+        if (reserved > limits.maxCostMicros)
+          return await finish({ status: "failed", code: "limit" });
+        state.reservedCostMicros = reserved;
+      }
       state.rounds++;
       await save();
       const result = await abortable(
@@ -130,6 +149,13 @@ export async function run(options: {
         signal,
       );
       signal.throwIfAborted();
+      if (result.usage)
+        state.usage = {
+          inputTokens:
+            (state.usage?.inputTokens ?? 0) + result.usage.inputTokens,
+          outputTokens:
+            (state.usage?.outputTokens ?? 0) + result.usage.outputTokens,
+        };
       if (result.finishReason === "length" || result.finishReason === "other")
         return await finish({ status: "failed", code: "invalid_response" });
       if (!result.toolCalls.length)
