@@ -8,7 +8,7 @@ export function actionExecutor(
   runId: string,
   ttlMs = 600_000,
 ): ActionExecutor {
-  return async (tool, call, signal) => {
+  const execute: ActionExecutor = async (tool, call, signal) => {
     const id = operationId(identity, runId, call.id);
     let state = await store.load(identity, id);
     if (!state) {
@@ -86,4 +86,12 @@ export function actionExecutor(
     await store.receipt(identity, id, receipt);
     return receipt;
   };
+  execute.unresolved = async (call) => {
+    const id = operationId(identity, runId, call.id);
+    const action = await store.load(identity, id);
+    return action?.status === "executing"
+      ? { status: "reconciling", approvalId: id }
+      : undefined;
+  };
+  return execute;
 }

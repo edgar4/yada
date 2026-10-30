@@ -28,11 +28,13 @@ export type Suspension = Readonly<{
   status: "awaiting_approval" | "reconciling";
   approvalId: string;
 }>;
-export type ActionExecutor = (
+export type ActionExecutor = ((
   tool: WriteTool,
   call: ToolCall,
   signal: AbortSignal,
-) => Promise<string | Suspension>;
+) => Promise<string | Suspension>) & {
+  unresolved?: (call: ToolCall) => Promise<Suspension | undefined>;
+};
 export function writeTool<S extends z.ZodType>(options: {
   name: string;
   description: string;

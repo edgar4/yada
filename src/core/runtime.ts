@@ -63,7 +63,15 @@ export async function run(options: {
       throw new CheckpointError();
     }
   };
-  const finish = async (result: TerminalResult) => {
+  const finish = async (result: TerminalResult): Promise<RunResult> => {
+    try {
+      for (const call of state.pending) {
+        const unresolved = await options.executeWrite?.unresolved?.(call);
+        if (unresolved) return unresolved;
+      }
+    } catch {
+      throw new CheckpointError();
+    }
     state.outcome = result;
     await save();
     return result;
