@@ -1,25 +1,35 @@
-# Provider configuration
+# LLM provider configuration
 
-Select a provider and supply its key. Yada supplies the default model.
-
-```ts
-const provider = createProvider({
-  provider: "anthropic",
-  apiKey: secretFromYourServer,
-});
-```
-
-Import `createProvider` from Yada's public entry point. Keep this configuration on the server. An optional `model` field overrides the default.
+Choose your model provider, its model ID, and the API key from your account with that provider. These are provider credentials; Yada does not issue an API key.
 
 For the live example, copy `.env.example` to `.env`:
 
 ```dotenv
-YADA_PROVIDER=anthropic
-YADA_API_KEY=your-key
+LLM_PROVIDER=anthropic
+LLM_MODEL=claude-sonnet-4-6
+LLM_API_KEY=your-anthropic-api-key
 ```
 
-Run `npm run demo:live`. The optional `YADA_MODEL` overrides the model. `providerConfigFromEnv` converts these variables into the same configuration object; it does not read environment variables itself.
+| Setting        | Meaning                                                              |
+| -------------- | -------------------------------------------------------------------- |
+| `LLM_PROVIDER` | The company or service hosting the model.                            |
+| `LLM_MODEL`    | The exact API model ID offered by that provider, not a display name. |
+| `LLM_API_KEY`  | The key issued by the selected provider for your account.            |
 
-Anthropic is currently the only implemented live provider. Its default is `claude-sonnet-4-6`, a [version-specific model ID](https://platform.claude.com/docs/en/about-claude/models/model-ids-and-versions). Unsupported providers and blank values fail validation. Configuration errors never include the supplied secret.
+Run `npm run demo:live`. Keep credentials on the server and outside version control.
 
-New adapters should use this same provider/key configuration contract and supply their own default model. Provider-specific credentials should only be introduced when an authentication mechanism actually requires them.
+The equivalent server-side configuration is:
+
+```ts
+const provider = createProvider({
+  provider: "anthropic",
+  model: "claude-sonnet-4-6",
+  apiKey: secretFromYourServer,
+});
+```
+
+Import `createProvider` from Yada's public entry point. `providerConfigFromEnv` converts the environment settings into this same object. You may omit the model to use the adapter's default; the example includes it so the selection is explicit.
+
+When switching providers, replace all three values: provider, its model ID, and its API key. The field names stay the same. Anthropic is currently the only implemented live adapter; OpenAI and Gemini adapters are not available yet. Unsupported providers and blank settings fail validation without including the supplied secret in the error.
+
+The Anthropic default is `claude-sonnet-4-6`. Use the provider's exact model ID for other models or versions.

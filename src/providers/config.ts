@@ -10,7 +10,7 @@ export function createProvider(config: ProviderConfig) {
   const result = providerConfig.safeParse(config);
   if (!result.success)
     throw new Error(
-      "Invalid provider configuration: choose a supported provider and provide an API key; model is optional.",
+      "Invalid provider configuration: choose a supported provider and provide that provider's API key; model is optional.",
     );
   return createAnthropicProvider({
     apiKey: result.data.apiKey,
@@ -21,13 +21,13 @@ export function providerConfigFromEnv(
   env: Readonly<Record<string, string | undefined>>,
 ): ProviderConfig {
   const result = providerConfig.safeParse({
-    provider: env["YADA_PROVIDER"],
-    apiKey: env["YADA_API_KEY"],
-    ...(env["YADA_MODEL"] === undefined ? {} : { model: env["YADA_MODEL"] }),
+    provider: env["LLM_PROVIDER"],
+    apiKey: env["LLM_API_KEY"],
+    ...(env["LLM_MODEL"] === undefined ? {} : { model: env["LLM_MODEL"] }),
   });
   if (!result.success)
     throw new Error(
-      "Invalid provider configuration: check YADA_PROVIDER, YADA_API_KEY, and optional YADA_MODEL.",
+      "Invalid provider configuration: check LLM_PROVIDER, LLM_API_KEY, and optional LLM_MODEL.",
     );
   return result.data;
 }

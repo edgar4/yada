@@ -34,8 +34,8 @@ it.each([undefined, "custom-model"])(
 it("reads common names and ignores unrelated environment", () => {
   expect(
     providerConfigFromEnv({
-      YADA_PROVIDER: "anthropic",
-      YADA_API_KEY: " key ",
+      LLM_PROVIDER: "anthropic",
+      LLM_API_KEY: " key ",
       UNRELATED: "value",
     }),
   ).toEqual({ provider: "anthropic", apiKey: "key" });
@@ -43,17 +43,17 @@ it("reads common names and ignores unrelated environment", () => {
 it("reads optional model", () => {
   expect(
     providerConfigFromEnv({
-      YADA_PROVIDER: "anthropic",
-      YADA_API_KEY: "key",
-      YADA_MODEL: "custom",
+      LLM_PROVIDER: "anthropic",
+      LLM_API_KEY: "key",
+      LLM_MODEL: "custom",
     }).model,
   ).toBe("custom");
 });
 it.each([
   {},
-  { YADA_PROVIDER: "unknown", YADA_API_KEY: "secret" },
-  { YADA_PROVIDER: "anthropic", YADA_API_KEY: " " },
-  { YADA_PROVIDER: "anthropic", YADA_API_KEY: "secret", YADA_MODEL: "" },
+  { LLM_PROVIDER: "unknown", LLM_API_KEY: "secret" },
+  { LLM_PROVIDER: "anthropic", LLM_API_KEY: " " },
+  { LLM_PROVIDER: "anthropic", LLM_API_KEY: "secret", LLM_MODEL: "" },
 ])("rejects invalid environment without leaking secrets", (env) => {
   expect(() => providerConfigFromEnv(env)).toThrow(
     "Invalid provider configuration",
