@@ -1,7 +1,7 @@
 import js from "@eslint/js";
 import ts from "typescript-eslint";
 export default ts.config(
-  { ignores: ["dist/**", "coverage/**", "work/**"] },
+  { ignores: ["dist/**", "coverage/**", "work/**", "yada-branding/**"] },
   js.configs.recommended,
   ...ts.configs.strictTypeChecked,
   {

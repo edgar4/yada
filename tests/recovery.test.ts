@@ -240,22 +240,35 @@ for (const driver of drivers)
     });
     it("aborts execution when lease renewal fails without saving a terminal result", async () => {
       const s = await setup();
+      let started = false;
+      const aborted = vi.fn();
+      const provider = createFakeProvider(({ signal }) => {
+        signal.addEventListener("abort", aborted, { once: true });
+        started = true;
+        return new Promise<never>(() => {});
+      });
       const renew = vi.fn(() => Promise.reject(new RunLeaseError()));
       await expect(
         runDurable({
           runId: s.id,
           profileId: "v1",
-          store: { ...s.store.runs, renew },
-          leaseMs: 100,
+          store: {
+            ...s.store.runs,
+            renew: (...args) =>
+              started ? renew() : s.store.runs.renew(...args),
+          },
+          leaseMs: 1500,
           identity,
-          provider: createFakeProvider(() => new Promise<never>(() => {})),
+          provider,
           tools: [],
           input: "Hi",
           system: "Help",
           signal: AbortSignal.timeout(3000),
         }),
       ).rejects.toBeInstanceOf(CheckpointError);
+      expect(provider.requests).toHaveLength(1);
       expect(renew).toHaveBeenCalledOnce();
+      expect(aborted).toHaveBeenCalledOnce();
       const state = await s.store.runs.load(identity, s.id);
       expect(state?.checkpoint?.rounds).toBe(1);
       expect(state?.checkpoint?.outcome).toBeUndefined();
