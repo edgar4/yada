@@ -50,7 +50,7 @@ Before a live cutover, validate application authentication, cross-tenant isolati
 
 ## Project website
 
-The project website uses GitHub Pages with the `main` branch’s `/docs` directory and its supported Jekyll renderer. Edit `docs/index.html` for the landing page, `docs/assets/` for styling and browser behavior, and Markdown files in `docs/` for technical guides. Site links follow `url` and `baseurl` in `docs/_config.yml`: use an empty `baseurl` for a custom domain or the repository path for a project site. A configured custom domain is retained in `docs/CNAME`.
+The project website lives in `site/` and is published to GitHub Pages by the Pages workflow. Edit `site/index.html` for the landing page, `site/assets/` for styling and browser behavior, and Markdown files in `docs/` for technical guides. The workflow copies the guides into the site before the Jekyll build, so guides stay readable on GitHub and publish at the site root. Site links follow `url` and `baseurl` in `site/_config.yml`: use an empty `baseurl` for a custom domain or the repository path for a project site. A configured custom domain is retained in `site/CNAME`.
 
 New guides use this front matter followed by a Markdown heading and content:
 
@@ -62,10 +62,10 @@ description: "A concise description of this guide’s specific topic."
 ---
 ```
 
-Add guides to `docs/_data/navigation.yml`. Relative Markdown links between guides become HTML links during the Pages build. The Pages checks workflow renders the site with GitHub’s official Jekyll action, verifies internal links and desktop/mobile accessibility, and uploads rendered pages and screenshots as the `pages-preview` artifact. Publishing stays with the existing GitHub Pages branch configuration.
+Add guides to `site/_data/navigation.yml`. Relative Markdown links between guides become HTML links during the Pages build. The Pages workflow renders the site with GitHub’s official Jekyll action, verifies internal links and desktop/mobile accessibility, and uploads rendered pages and screenshots as the `pages-preview` artifact. On `main` it then deploys the checked build; set the repository’s Pages source to GitHub Actions.
 
 Each published guide supplies its own title and description. The shared head emits canonical, Open Graph and Twitter Card metadata, plus structured source-code and page information. Canonical URLs, crawl files and social image links use `url` and `baseurl` together. The sitemap contains published landing and guide pages; it omits assets and crawl files. The custom-domain deployment serves `robots.txt` at the host root. A project-path deployment cannot control its domain’s root robots file.
 
-The shared PNG social card is `docs/assets/brand/yada-social.png`. Preserve its 1200 × 630 dimensions and descriptive alternative text when replacing it. Regenerate the selected-brand card with `node scripts/render-social-card.mjs` after installing Chromium. `scripts/check-seo.mjs`, invoked by the Pages checker, verifies unique metadata, canonical URLs, JSON-LD, sitemap coverage, robots directives and the PNG image. Search engines and social platforms decide how to display this information; metadata does not guarantee indexing or a particular search appearance.
+The shared PNG social card is `site/assets/brand/yada-social.png`. Preserve its 1200 × 630 dimensions and descriptive alternative text when replacing it. Regenerate the selected-brand card with `node scripts/render-social-card.mjs` after installing Chromium. `scripts/check-seo.mjs`, invoked by the Pages checker, verifies unique metadata, canonical URLs, JSON-LD, sitemap coverage, robots directives and the PNG image. Search engines and social platforms decide how to display this information; metadata does not guarantee indexing or a particular search appearance.
 
 Implementation references: [canonical URLs](https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls), [sitemap guidance](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap), [root robots files](https://developers.google.com/crawling/docs/robots-txt/create-robots-txt), and [SoftwareSourceCode properties](https://schema.org/SoftwareSourceCode).

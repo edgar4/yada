@@ -5,71 +5,90 @@ description: "Build an assistant inside your application with Yada: a TypeScript
 ---
 
 <main id="main" tabindex="-1">
-  <section class="hero wrap" aria-labelledby="hero-title">
-    <div class="hero-copy">
-      <p class="eyebrow">
-        <span class="status-dot" aria-hidden="true"></span> A TypeScript agent
-        runtime
-      </p>
-      <h1 id="hero-title">
-        A capable assistant.<br /><span>Inside your app.</span>
-      </h1>
-      <p class="hero-description">
-        Turn a conversation into useful work. Connect your model, your tools,
-        and your application’s rules. Yada brings the runtime together.
-      </p>
-      <div class="hero-actions">
-        <a class="button button-primary" href="#get-started"
-          >Build with Yada <span aria-hidden="true">↗</span></a
-        ><a class="text-link" href="{{ '/architecture.html' | relative_url }}"
-          >Explore the runtime <span aria-hidden="true">→</span></a
-        >
-      </div>
-      <p class="hero-detail">
-        Node 24 <span aria-hidden="true">/</span> ESM + TypeScript
-        <span aria-hidden="true">/</span> Your infrastructure
-      </p>
-    </div>
-    <div class="flow-window" aria-label="Illustrative assistant workflow">
-      <div class="window-bar">
-        <span class="window-dots" aria-hidden="true"><i></i><i></i><i></i></span
-        ><span>YOUR APPLICATION / ASSISTANT</span
-        ><span class="window-badge">Example</span>
-      </div>
-      <div class="flow-body">
-        <div class="flow-message">
-          <span class="flow-label">YOU</span>
-          <p>Find this customer’s latest order.</p>
-        </div>
-        <div class="tool-call">
-          <div>
-            <span class="tool-symbol" aria-hidden="true">↳</span>
-            order_lookup<span class="read-badge">READ TOOL</span>
-          </div>
-          <p>Order #1042 <span aria-hidden="true">·</span> Ready to ship</p>
-        </div>
-        <div class="flow-message assistant-message">
-          <span class="assistant-identity"
-            ><img
-              src="{{ '/assets/brand/yada-avatar-smile.svg' | relative_url }}"
-              width="28"
-              height="28"
-              alt=""
-            /><span class="flow-label">YADA</span></span
+  <section class="hero on-ink" aria-labelledby="hero-title">
+    <svg class="hero-strokes" viewBox="0 0 120 120" aria-hidden="true">
+      <g fill="none" stroke-linecap="round" stroke-width="12">
+        <path d="M30 32 Q45 46 60 60" />
+        <path d="M90 32 Q75 46 60 60" />
+        <path d="M60 60 Q60 75 60 90" />
+      </g>
+      <circle cx="60" cy="60" r="9" />
+    </svg>
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <p class="eyebrow">Yada · Hebrew for “to know”</p>
+        <h1 id="hero-title">
+          A capable assistant.<br /><span>Inside your app.</span>
+        </h1>
+        <p class="hero-description">
+          Turn a conversation into useful work. Connect your model, your tools,
+          and your application’s rules. Yada brings the runtime together.
+        </p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#get-started"
+            >Build with Yada <span aria-hidden="true">↗</span></a
+          ><a class="text-link" href="{{ '/architecture.html' | relative_url }}"
+            >Explore the runtime <span aria-hidden="true">→</span></a
           >
-          <p>Found it. Would you like to update the delivery note?</p>
         </div>
-        <div class="approval-preview">
-          <span class="approval-icon" aria-hidden="true">✓</span>
-          <div>
-            <strong>Your approval comes first.</strong
-            ><span>Writes wait for an authorized decision.</span>
+        <p class="hero-detail">
+          <span>Node 24</span><span>ESM + TypeScript</span
+          ><span>Your infrastructure</span>
+        </p>
+      </div>
+      <div class="hero-demo">
+        <svg
+          class="yada-face"
+          id="yada-face"
+          viewBox="0 0 120 120"
+          role="img"
+          aria-label="Yada"
+        >
+          <circle cx="60" cy="60" r="60" fill="#FFFFFF" />
+          <g
+            stroke="#1F1A3D"
+            stroke-width="12"
+            fill="none"
+            stroke-linecap="round"
+          >
+            <path data-part="l" d="M30 32 Q45 46 60 60" />
+            <path data-part="r" d="M90 32 Q75 46 60 60" />
+            <path data-part="s" d="M60 60 Q60 75 60 90" />
+          </g>
+          <circle data-part="d" cx="60" cy="60" r="9" fill="#E07A00" />
+        </svg>
+        <div class="flow-window" aria-label="Illustrative assistant workflow">
+          <div class="window-bar">
+            <span>Your application / Assistant</span
+            ><span class="window-badge">Example</span>
+          </div>
+          <ol class="flow-body">
+            <li class="flow-message" data-face="neutral">
+              <span class="flow-label">You</span>
+              <p>Find this customer’s latest order.</p>
+            </li>
+            <li class="tool-call" data-face="thinking">
+              <span class="flow-label"
+                >order_lookup <span class="read-badge">Read tool</span></span
+              >
+              <p>Order #1042 <span aria-hidden="true">·</span> Ready to ship</p>
+            </li>
+            <li class="flow-message assistant-message" data-face="smile">
+              <span class="flow-label">Yada</span>
+              <p>Found it. Would you like to update the delivery note?</p>
+            </li>
+            <li class="approval-preview" data-face="wink">
+              <span class="approval-icon" aria-hidden="true">✓</span>
+              <div>
+                <strong>Your approval comes first.</strong
+                ><span>Writes wait for an authorized decision.</span>
+              </div>
+            </li>
+          </ol>
+          <div class="window-foot">
+            Your tools supply the data. Your backend holds the keys.
           </div>
         </div>
-      </div>
-      <div class="window-foot">
-        <span class="small-dot" aria-hidden="true"></span> Your tools supply the
-        data. Your backend holds the keys.
       </div>
     </div>
   </section>
@@ -77,10 +96,11 @@ description: "Build an assistant inside your application with Yada: a TypeScript
   <section class="runtime-strip" aria-label="Runtime components">
     <div class="wrap strip-inner">
       <p>One runtime. The pieces your app needs.</p>
-      <div>
-        <span>Server runtime</span><span>Browser SDK</span
-        ><span>Web component</span>
-      </div>
+      <ul>
+        <li>Server runtime</li>
+        <li>Browser SDK</li>
+        <li>Web component</li>
+      </ul>
     </div>
   </section>
 
@@ -97,6 +117,13 @@ description: "Build an assistant inside your application with Yada: a TypeScript
     </div>
     <ol class="lifecycle">
       <li>
+        <img
+          class="step-face"
+          src="{{ '/assets/brand/yada-avatar-neutral.svg' | relative_url }}"
+          width="64"
+          height="64"
+          alt=""
+        />
         <span class="step-number">01</span>
         <h3>Connect a model</h3>
         <p>
@@ -105,6 +132,13 @@ description: "Build an assistant inside your application with Yada: a TypeScript
         </p>
       </li>
       <li>
+        <img
+          class="step-face"
+          src="{{ '/assets/brand/yada-avatar-thinking.svg' | relative_url }}"
+          width="64"
+          height="64"
+          alt=""
+        />
         <span class="step-number">02</span>
         <h3>Define the tools</h3>
         <p>
@@ -113,6 +147,13 @@ description: "Build an assistant inside your application with Yada: a TypeScript
         </p>
       </li>
       <li>
+        <img
+          class="step-face"
+          src="{{ '/assets/brand/yada-avatar-smile.svg' | relative_url }}"
+          width="64"
+          height="64"
+          alt=""
+        />
         <span class="step-number">03</span>
         <h3>Approve the action</h3>
         <p>
@@ -121,6 +162,13 @@ description: "Build an assistant inside your application with Yada: a TypeScript
         </p>
       </li>
       <li>
+        <img
+          class="step-face"
+          src="{{ '/assets/brand/yada-avatar-wink.svg' | relative_url }}"
+          width="64"
+          height="64"
+          alt=""
+        />
         <span class="step-number">04</span>
         <h3>Keep the thread</h3>
         <p>
@@ -145,7 +193,7 @@ description: "Build an assistant inside your application with Yada: a TypeScript
     </div>
     <div class="block-list">
       <div class="block-row">
-        <span class="block-index" aria-hidden="true">A /</span>
+        <span class="block-index" aria-hidden="true">A</span>
         <div>
           <h3>Bring your model</h3>
           <p>
@@ -158,7 +206,7 @@ description: "Build an assistant inside your application with Yada: a TypeScript
         </div>
       </div>
       <div class="block-row">
-        <span class="block-index" aria-hidden="true">B /</span>
+        <span class="block-index" aria-hidden="true">B</span>
         <div>
           <h3>Connect real application tools</h3>
           <p>
@@ -171,7 +219,7 @@ description: "Build an assistant inside your application with Yada: a TypeScript
         </div>
       </div>
       <div class="block-row">
-        <span class="block-index" aria-hidden="true">C /</span>
+        <span class="block-index" aria-hidden="true">C</span>
         <div>
           <h3>Keep durable state</h3>
           <p>
@@ -186,7 +234,11 @@ description: "Build an assistant inside your application with Yada: a TypeScript
     </div>
   </section>
 
-  <section class="start-section" id="get-started" aria-labelledby="start-title">
+  <section
+    class="start-section on-ink"
+    id="get-started"
+    aria-labelledby="start-title"
+  >
     <div class="wrap start-grid">
       <div class="start-copy">
         <p class="eyebrow">FROM ZERO TO A TOOL CALL</p>
