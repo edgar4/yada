@@ -8,8 +8,16 @@ const identifier = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,62}$/);
 const configuration = z.discriminatedUnion("driver", [
   z.strictObject({ driver: z.literal("sqlite"), filename: z.string().min(1) }),
   z.strictObject({
-    driver: z.enum(["postgres", "mysql"]),
-    url: z.string().min(1),
+    driver: z.literal("postgres"),
+    url: z
+      .url()
+      .refine((value) =>
+        ["postgres:", "postgresql:"].includes(new URL(value).protocol),
+      ),
+  }),
+  z.strictObject({
+    driver: z.literal("mysql"),
+    url: z.url().refine((value) => new URL(value).protocol === "mysql:"),
   }),
 ]);
 export type ReadDatabaseConfig = z.infer<typeof configuration>;

@@ -96,3 +96,12 @@ it("rejects oversized database output and propagates query errors", async () => 
       .execute({ id: "a" }, identity, signal()),
   ).rejects.toThrow();
 });
+
+it("rejects mismatched database connection schemes", () => {
+  expect(() =>
+    createReadDatabase({ driver: "postgres", url: "https://example.com" }),
+  ).toThrow();
+  expect(() =>
+    createReadDatabase({ driver: "mysql", url: "postgres://localhost/db" }),
+  ).toThrow();
+});
