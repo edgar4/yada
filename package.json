@@ -12,7 +12,7 @@
     "test": "vitest run --coverage",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
     "demo": "node --import tsx examples/basic.ts",
-    "demo:live": "node --env-file-if-exists=.env --import tsx examples/anthropic.ts"
+    "demo:live": "node --env-file-if-exists=.env --import tsx examples/live.ts"
   },
   "dependencies": {
     "@langchain/anthropic": "1.6.0",

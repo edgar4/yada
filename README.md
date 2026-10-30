@@ -2,7 +2,7 @@
 
 Standalone TypeScript assistant runtime, under development.
 
-See [runtime architecture](docs/architecture.md) for contracts and execution boundaries.
+See [provider configuration](docs/configuration.md) and [runtime architecture](docs/architecture.md) for contracts and execution boundaries.
 
 ```sh
 nvm use
@@ -15,7 +15,7 @@ The first slice supports typed read tools, a deterministic provider, and an Anth
 
 Core owns contracts and execution. Providers depend on core contracts. Applications compose dependencies through the public exports in `src/index.ts`. Runtime schemas validate model-supplied arguments before invoking typed handlers.
 
-For an opt-in live model run, copy `.env.example` to `.env`, set your Anthropic key and model, then run `npm run demo:live`. This sends a request to the provider and may incur usage charges. Automated tests use mocked responses and require no credentials.
+For an opt-in live model run, copy `.env.example` to `.env`, select the provider and enter your API key, then run `npm run demo:live`. This sends a request to the provider and may incur usage charges. Automated tests use mocked responses and require no credentials.
 
 The adapter mapping follows Talon's existing implementation and the [LangChain ChatAnthropic contract](https://reference.langchain.com/javascript/langchain-anthropic/ChatAnthropic).
 

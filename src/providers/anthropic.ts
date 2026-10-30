@@ -3,7 +3,7 @@ import { z } from "zod";
 import { chatModelAdapter } from "./langchain.js";
 const configSchema = z.strictObject({
   apiKey: z.string().trim().min(1),
-  model: z.string().trim().min(1),
+  model: z.string().trim().min(1).default("claude-sonnet-4-6"),
   maxTokens: z.number().int().positive().default(1024),
 });
 export function createAnthropicProvider(config: z.input<typeof configSchema>) {

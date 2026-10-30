@@ -1,15 +1,11 @@
 import { z } from "zod";
-import { createAnthropicProvider, readTool, run } from "../src/index.js";
-const config = z
-  .object({
-    YADA_ANTHROPIC_API_KEY: z.string().min(1),
-    YADA_ANTHROPIC_MODEL: z.string().min(1),
-  })
-  .parse(process.env);
-const provider = createAnthropicProvider({
-  apiKey: config.YADA_ANTHROPIC_API_KEY,
-  model: config.YADA_ANTHROPIC_MODEL,
-});
+import {
+  createProvider,
+  providerConfigFromEnv,
+  readTool,
+  run,
+} from "../src/index.js";
+const provider = createProvider(providerConfigFromEnv(process.env));
 const tool = readTool({
   name: "catalog_lookup",
   description: "Look up product availability by ID.",
