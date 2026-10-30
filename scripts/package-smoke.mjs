@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifyStarter } from "./starter-smoke.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const temporary = await mkdtemp(join(tmpdir(), "yada-package-"));
@@ -94,7 +95,10 @@ void [runtime, client, widget];
     ],
     temporary,
   );
-  console.log(`Installed and verified ${packed.name}@${packed.version}`);
+  await verifyStarter(root, temporary, execute, npm);
+  console.log(
+    `Installed and verified ${packed.name}@${packed.version} and its standalone starter`,
+  );
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }

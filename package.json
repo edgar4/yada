@@ -14,7 +14,10 @@
     "demo:live": "node --env-file-if-exists=.env --import tsx examples/live.ts",
     "prepack": "npm run build",
     "test:package": "node scripts/package-smoke.mjs",
-    "test:deployment": "node scripts/deployment-smoke.mjs"
+    "test:deployment": "node scripts/deployment-smoke.mjs",
+    "starter:init": "node examples/starter/init.mjs",
+    "starter:build": "npm run build && node examples/starter/build.mjs",
+    "starter": "npm run starter:build && node --env-file=.env.starter --import tsx examples/starter/server.ts"
   },
   "dependencies": {
     "@langchain/anthropic": "1.6.0",

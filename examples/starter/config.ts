@@ -25,7 +25,8 @@ export function starterConfigFromEnv(
 ) {
   const result = settings.safeParse({
     password: env["YADA_STARTER_PASSWORD"],
-    origin: env["YADA_STARTER_ORIGIN"] ?? "http://localhost:3000",
+    origin:
+      env["YADA_STARTER_ORIGIN"] ?? `http://localhost:${env["PORT"] ?? "3000"}`,
     port: env["PORT"] ?? "3000",
   });
   if (!result.success)
