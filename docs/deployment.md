@@ -12,7 +12,7 @@ npm install /absolute/path/yada-0.1.0.tgz
 
 Import the runtime from `yada`, the browser client from `yada/client`, and the widget from `yada/widget`. Browser modules are ESM intended for your application's bundler, with dependencies resolved from the installed package. All three exports include TypeScript declarations. Only compiled code, documentation, the README and package metadata enter the archive. `npm run test:package` installs the archive in a fresh directory, imports all exports, runs a deterministic provider and SQLite, and checks consumer declaration resolution.
 
-The package remains private. Source ownership and distribution licensing have not been established; do not publish it or assume permission to redistribute it. The release workflow validates a `v<package version>` tag or a manual run and uploads the tarball and SHA-256 checksum as CI artifacts. It does not publish to a registry or create a public release. Bump `package.json` and its lockfile together before creating a version tag. Download the artifact from that workflow run and verify `sha256sum -c SHA256SUMS` before installing it.
+The package remains private. The release workflow validates a `v<package version>` tag or a manual run and uploads the tarball and SHA-256 checksum as CI artifacts. It does not publish to a registry or create a public release. Bump `package.json` and its lockfile together before creating a version tag. Download the artifact from that workflow run and verify `sha256sum -c SHA256SUMS` before installing it.
 
 ## Local container example
 
@@ -29,11 +29,13 @@ docker run --rm --init --name yada -p 127.0.0.1:3000:3000 \
   -v yada-data:/data yada:0.1.0
 ```
 
-Retain the encryption key securely across restarts. A new key cannot read existing encrypted records. The image runs as the unprivileged `node` user and handles SIGTERM by closing HTTP admission, stopping its worker and closing storage. Allow enough termination grace for active requests and worker shutdown.
+Retain the encryption key securely across restarts. A new key cannot read existing encrypted records. The image runs as the unprivileged `node` user and handles SIGTERM by stopping HTTP admission, disconnecting active event streams, stopping its worker and closing storage. Disconnected clients can reconnect and replay persisted events after restart. Allow enough termination grace for worker shutdown.
+
+Run `npm run test:deployment` with Docker running to build the image and verify authentication, submission, event replay, restart persistence and SIGTERM with an open stream. The smoke test creates and removes its own temporary container, image and data volume.
 
 For your application, replace the composition module with your own `.mjs` file mounted at `/app/server.mjs`. It can import `yada` from the image. Resolve actor and tenant identity in `authenticate(request)` from a verified server session; never derive identity from message bodies. Authorize every requested profile. Keep provider credentials, storage keys, OAuth tokens and mutation approval secrets on the server. Configure exact allowed browser origins, and implement CSRF/session controls in your host or proxy.
 
-Terminate TLS at your reverse proxy. Forward authenticated fetch/SSE requests without buffering, preserve reconnect cursors, and set proxy/request timeouts for the intended run duration. Stream disconnects must not become new run submissions. Keep the worker running independently of browser connections. Do not expose a privileged worker or database endpoint publicly.
+Terminate TLS at your reverse proxy. Forward authenticated fetch/NDJSON event streams without buffering, preserve reconnect cursors, and set proxy/request timeouts for the intended run duration. Stream disconnects must not become new run submissions. Keep the worker running independently of browser connections. Do not expose a privileged worker or database endpoint publicly.
 
 Use SQLite on persistent local storage for a single host, or configure PostgreSQL/MySQL with `YADA_STORAGE_DRIVER`, `YADA_STORAGE_URL` and `YADA_STORAGE_KEY` for shared durable storage. See [storage](storage.md) and [recovery](recovery.md). Back up the database and key separately, test restoration, and retain an image/tarball checksum for rollback. Before rolling back application code, confirm its stored schema/checkpoint compatibility and stop admission while replacing workers. Never retry an uncertain external mutation without checking its durable operation receipt.
 

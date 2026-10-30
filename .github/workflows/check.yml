@@ -16,3 +16,11 @@ jobs:
       - run: npm run check
       - run: npm run demo
       - run: npm run test:package
+  deployment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm run test:deployment
