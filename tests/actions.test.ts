@@ -265,3 +265,22 @@ it("reconciles an uncertain write even after cancellation was requested", async 
   expect(t.execute).toHaveBeenCalledOnce();
   await resumed.stop();
 });
+it("cancels a stuck preparation before any write begins", async () => {
+  const s = await storageFixture("sqlite");
+  const t = toolFixture();
+  t.prepare.mockImplementation(() => new Promise<never>(() => {}));
+  await expect(
+    actionExecutor(s.storage.actions, s.identity, "stuck")(
+      t.tool,
+      call,
+      AbortSignal.timeout(30),
+    ),
+  ).rejects.toThrow("cancelled");
+  expect(t.execute).not.toHaveBeenCalled();
+  expect(
+    await s.storage.actions.load(
+      s.identity,
+      operationId(s.identity, "stuck", call.id),
+    ),
+  ).toBeUndefined();
+});

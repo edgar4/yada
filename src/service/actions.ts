@@ -12,7 +12,10 @@ export function actionExecutor(
     const id = operationId(identity, runId, call.id);
     let state = await store.load(identity, id);
     if (!state) {
-      const prepared = await tool.prepare(call.args, identity, signal);
+      const prepared = await abortable(
+        () => tool.prepare(call.args, identity, signal),
+        signal,
+      );
       state = await store.propose(identity, {
         id,
         runId,
@@ -39,10 +42,13 @@ export function actionExecutor(
     if (state.status === "declined" || state.status === "expired")
       return "Action declined or expired; no change was made.";
     if (state.status === "approved") {
-      const current = await tool.prepare(call.args, identity, signal);
+      const current = await abortable(
+        () => tool.prepare(call.args, identity, signal),
+        signal,
+      );
       if (current.version !== state.version)
         throw new Error("Action state changed; prepare a new action");
-      if (!(await tool.authorize(identity)))
+      if (!(await abortable(() => tool.authorize(identity), signal)))
         throw new Error("Action permission revoked");
       signal.throwIfAborted();
       if (await store.begin(identity, id)) {
