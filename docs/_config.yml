@@ -1,10 +1,8 @@
 title: Yada
 description: A TypeScript agent runtime for assistants that work inside your application.
-url: https://yada.edgar.co.ke
-baseurl: ""
+url: https://edgar4.github.io
+baseurl: /yada
 theme: null
-include:
-  - CNAME
 plugins:
   - jekyll-relative-links
 relative_links:

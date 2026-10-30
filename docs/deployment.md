@@ -49,7 +49,7 @@ Before a live cutover, validate application authentication, cross-tenant isolati
 
 ## Project website
 
-The project website uses GitHub Pages with the `main` branch’s `/docs` directory and its supported Jekyll renderer. Edit `docs/index.html` for the landing page, `docs/assets/` for styling and browser behavior, and Markdown files in `docs/` for technical guides. Keep `docs/CNAME` unchanged when editing site content.
+The project website uses GitHub Pages with the `main` branch’s `/docs` directory and its supported Jekyll renderer at `https://edgar4.github.io/yada/`. Edit `docs/index.html` for the landing page, `docs/assets/` for styling and browser behavior, and Markdown files in `docs/` for technical guides. Site links use the `/yada` project path configured in `docs/_config.yml`.
 
 New guides use this front matter followed by a Markdown heading and content:
 

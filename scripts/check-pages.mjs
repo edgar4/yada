@@ -9,12 +9,11 @@ import AxeBuilder from "@axe-core/playwright";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const output = join(root, "work/pages");
+const mount = "/yada";
 const files = (await readdir(output)).filter((name) => name.endsWith(".html"));
 assert(files.includes("index.html"));
-assert.equal(
-  await readFile(join(output, "CNAME"), "utf8"),
-  await readFile(join(root, "docs/CNAME"), "utf8"),
-);
+await assert.rejects(readFile(join(output, "CNAME")), { code: "ENOENT" });
+await assert.rejects(readFile(join(root, "docs/CNAME")), { code: "ENOENT" });
 const mime = {
   ".html": "text/html",
   ".css": "text/css",
@@ -22,7 +21,12 @@ const mime = {
   ".svg": "image/svg+xml",
 };
 const server = createServer((request, response) => {
-  const path = new URL(request.url, "http://localhost").pathname;
+  const pathname = new URL(request.url, "http://localhost").pathname;
+  if (!pathname.startsWith(`${mount}/`)) {
+    response.writeHead(404).end();
+    return;
+  }
+  const path = pathname.slice(mount.length);
   const target = resolve(
     output,
     `.${path.endsWith("/") ? `${path}index.html` : path}`,
@@ -60,7 +64,7 @@ try {
     const page = await context.newPage();
     page.on("pageerror", (error) => failures.push(error.message));
     for (const name of files) {
-      const response = await page.goto(`${base}/${name}`);
+      const response = await page.goto(`${base}${mount}/${name}`);
       assert.equal(response.status(), 200, name);
       assert.deepEqual(failures, [], `${name}: browser errors`);
       assert.equal(await page.locator("h1").count(), 1, `${name}: one h1`);
@@ -132,7 +136,9 @@ try {
         await page.keyboard.press("Enter");
         assert.equal(await page.locator(":focus").getAttribute("id"), "main");
       } else {
-        const current = page.locator(`a[aria-current=page][href="/${name}"]`);
+        const current = page.locator(
+          `a[aria-current=page][href="${mount}/${name}"]`,
+        );
         assert.equal(
           await current.count(),
           2,
@@ -155,6 +161,10 @@ try {
     }
     for (const href of links) {
       const url = new URL(href);
+      assert(
+        url.pathname.startsWith(`${mount}/`),
+        `Project path missing: ${href}`,
+      );
       assert.equal((await context.request.get(url.href)).status(), 200, href);
       await page.goto(url.href);
       if (url.hash)
