@@ -10,6 +10,10 @@ export type WidgetOptions = Readonly<{
   conversationId: string;
   profileId: string;
 }>;
+export type WidgetRunDetail = Readonly<{
+  conversationId: string;
+  runId: string;
+}>;
 export interface YadaWidget extends HTMLElement {
   configure(options: WidgetOptions): void;
   resume(runId: string): Promise<void>;
@@ -120,6 +124,16 @@ export function defineYadaWidget(name = "yada-chat"): void {
         this.cursor = 0;
         this.appendMessage(`You: ${this.prompt.value}`);
         this.prompt.value = "";
+        this.dispatchEvent(
+          new CustomEvent<WidgetRunDetail>("yada-run", {
+            detail: {
+              conversationId: this.options.conversationId,
+              runId: this.input.id,
+            },
+            bubbles: true,
+            composed: true,
+          }),
+        );
         void this.start(true);
       });
       this.retry.addEventListener("click", () => {

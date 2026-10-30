@@ -13,7 +13,11 @@ import { createServer, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import ts from "typescript";
-import { defineYadaWidget, type YadaWidget } from "../src/widget/index.js";
+import {
+  defineYadaWidget,
+  type YadaWidget,
+  type WidgetRunDetail,
+} from "../src/widget/index.js";
 
 const malicious = '<img src=x onerror="globalThis.compromised=true">';
 const queued = { version: 1, sequence: 1, type: "queued", at: 1 };
@@ -386,6 +390,14 @@ describe("browser widget", () => {
   it("retries failed creation with the same id and reports failed decisions and cancellation", async () => {
     createFailure = true;
     const page = await open();
+    await page.evaluate(() => {
+      document.addEventListener("yada-run", (event) => {
+        sessionStorage.setItem(
+          "run",
+          JSON.stringify((event as CustomEvent<WidgetRunDetail>).detail),
+        );
+      });
+    });
     const widget = await start(page);
     await widget
       .getByRole("button", { name: "Reconnect", exact: true })
@@ -397,6 +409,13 @@ describe("browser widget", () => {
       .click();
     await widget.getByRole("button", { name: "Approve action" }).waitFor();
     expect(new Set(inputs).size).toBe(1);
+    const saved: unknown = JSON.parse(
+      await page.evaluate(() => sessionStorage.getItem("run") ?? "null"),
+    );
+    expect(saved).toEqual({
+      conversationId: "chat",
+      runId: (JSON.parse(inputs[0] ?? "null") as { id: string }).id,
+    });
     decisionFailure = true;
     await widget.getByRole("button", { name: "Approve action" }).click();
     await expect
