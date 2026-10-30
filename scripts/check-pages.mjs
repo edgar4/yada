@@ -9,11 +9,23 @@ import AxeBuilder from "@axe-core/playwright";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const output = join(root, "work/pages");
-const mount = "/yada";
+const config = await readFile(join(root, "docs/_config.yml"), "utf8");
+const baseurl = /^baseurl:[ \t]*(?:"([^"]*)"|'([^']*)'|([^\s#]*))[ \t]*$/m.exec(
+  config,
+);
+assert(baseurl, "Set an explicit baseurl in docs/_config.yml");
+const mount = baseurl[1] ?? baseurl[2] ?? baseurl[3];
 const files = (await readdir(output)).filter((name) => name.endsWith(".html"));
 assert(files.includes("index.html"));
-await assert.rejects(readFile(join(output, "CNAME")), { code: "ENOENT" });
-await assert.rejects(readFile(join(root, "docs/CNAME")), { code: "ENOENT" });
+const cname = await readFile(join(root, "docs/CNAME"), "utf8").catch(
+  (error) => {
+    if (error.code !== "ENOENT") throw error;
+    return undefined;
+  },
+);
+if (cname === undefined)
+  await assert.rejects(readFile(join(output, "CNAME")), { code: "ENOENT" });
+else assert.equal(await readFile(join(output, "CNAME"), "utf8"), cname);
 const mime = {
   ".html": "text/html",
   ".css": "text/css",
