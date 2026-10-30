@@ -1,6 +1,10 @@
 export type * from "./core/contracts.js";
 export { run } from "./core/runtime.js";
 export { readTool } from "./core/tool.js";
+export { httpReadTool, reviewedOpenApiGet } from "./connectors/http.js";
+export { createReadDatabase } from "./connectors/database.js";
+export type { ReadDatabaseConfig } from "./connectors/database.js";
+export { reconnectingMcp } from "./connectors/mcp/reconnect.js";
 export { createFakeProvider } from "./providers/fake.js";
 export { createAnthropicProvider } from "./providers/anthropic.js";
 export { createProvider, providerConfigFromEnv } from "./providers/config.js";

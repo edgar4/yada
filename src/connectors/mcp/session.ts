@@ -14,6 +14,7 @@ export type McpAccess = Readonly<{
 export type McpConnection = Readonly<{
   tools: readonly ReadTool[];
   close: () => Promise<void>;
+  isConnected?: () => boolean;
 }>;
 export async function connectMcpTransport(
   config: McpConfig,
@@ -25,12 +26,17 @@ export async function connectMcpTransport(
   const owner = Object.freeze({ ...access.identity });
   const client = new Client({ name: "yada", version: "0.1.0" });
   let closed = false;
+  let connected = false;
+  client.onclose = () => {
+    connected = false;
+  };
   const close = async () => {
     closed = true;
     await client.close();
   };
   try {
     await abortable(() => client.connect(transport), signal);
+    connected = true;
     const allowed = settings.readTools
       ? new Set(settings.readTools)
       : undefined;
@@ -113,7 +119,7 @@ export async function connectMcpTransport(
     } while (cursor);
     if (allowed && tools.length !== allowed.size)
       throw new Error("Configured MCP tool not found");
-    return { tools, close };
+    return { tools, close, isConnected: () => connected && !closed };
   } catch (error) {
     await close();
     throw error;
