@@ -14,7 +14,7 @@ import {
   messageSchema,
 } from "./conversations.js";
 import type { recordStore } from "./records.js";
-import { requireRunLease, RunLeaseError } from "./runs.js";
+import { withRunLease, RunLeaseError, type RunOwnership } from "./runs.js";
 const stateSchema = z.object({
   identity: identitySchema,
   id: z.string(),
@@ -48,7 +48,7 @@ export interface JobStore {
     id: string,
     event: Omit<RunEvent, "version" | "sequence" | "at">,
     outcome?: TerminalResult,
-    lease?: Readonly<{ runId: string; token: string }>,
+    lease?: RunOwnership,
   ): Promise<Job>;
   cancel(identity: Identity, conversationId: string, id: string): Promise<void>;
   pending(after?: string): Promise<{
@@ -175,20 +175,10 @@ export function createJobStore(
       if (!lease) return records.mutate(key, change);
       if (lease.runId !== JSON.stringify([conversationId, id]))
         return Promise.reject(new RunLeaseError());
-      return records.transaction(async (tx) => {
-        const runKey = JSON.stringify([
-          "run",
-          identity.tenantId,
-          identity.actorId,
-          lease.runId,
-        ]);
-        const run = await tx.read(runKey);
-        if (!run) throw new RunLeaseError();
-        requireRunLease(run.value, lease.token);
-        await tx.write(runKey, run.value, run.revision);
-        requireRunLease(run.value, lease.token);
+      return withRunLease(records, identity, lease, async (tx, assertOwned) => {
         const conversation = await tx.read(key);
         const next = change(conversation?.value);
+        assertOwned();
         await tx.write(key, next.value, conversation?.revision ?? 0);
         return next.result;
       });

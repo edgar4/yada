@@ -34,6 +34,7 @@ export type ActionExecutor = ((
   signal: AbortSignal,
 ) => Promise<string | Suspension>) & {
   unresolved?: (call: ToolCall) => Promise<Suspension | undefined>;
+  withLease?: (token: string) => ActionExecutor;
 };
 export function writeTool<S extends z.ZodType>(options: {
   name: string;

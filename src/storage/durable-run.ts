@@ -44,6 +44,8 @@ export async function runDurable(
   if (state.checkpoint?.outcome) return state.checkpoint.outcome;
   if (!state.lease) throw new Error("Missing run lease");
   const token = state.lease.token;
+  const executeWrite =
+    runtime.executeWrite?.withLease?.(token) ?? runtime.executeWrite;
   const controller = new AbortController();
   const signal = AbortSignal.any([options.signal, controller.signal]);
   let lost: Error | undefined;
@@ -69,6 +71,7 @@ export async function runDurable(
   try {
     const result = await run({
       ...runtime,
+      ...(executeWrite ? { executeWrite } : {}),
       signal,
       ...(state.checkpoint ? { checkpoint: state.checkpoint } : {}),
       persist: async (checkpoint) => {
