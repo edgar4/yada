@@ -156,6 +156,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.input = undefined;
       this.cursor = 0;
       this.active = false;
+      this.cancel.disabled = false;
       this.log.replaceChildren();
       this.error.textContent = "";
       this.status.textContent = "Ready";
@@ -171,6 +172,8 @@ export function defineYadaWidget(name = "yada-chat"): void {
       const controller = new AbortController();
       this.controller = controller;
       this.status.textContent = "Loading conversation";
+      this.active = true;
+      this.update();
       try {
         const job = await options.client.getRun(
           options.conversationId,
@@ -188,8 +191,12 @@ export function defineYadaWidget(name = "yada-chat"): void {
         this.update();
         void this.start(false, job);
       } catch (error) {
-        if (!controller.signal.aborted)
+        if (this.isCurrent(controller)) {
+          this.active = false;
           this.error.textContent = "Could not load the saved run.";
+          this.status.textContent = "Ready";
+          this.update();
+        }
         throw error;
       }
     }
@@ -206,7 +213,11 @@ export function defineYadaWidget(name = "yada-chat"): void {
     private update(): void {
       this.send.disabled = !this.options || this.active;
       this.prompt.disabled = !this.options || this.active;
-      this.cancel.hidden = !this.active;
+      this.cancel.hidden = !this.active || !this.input;
+    }
+
+    private isCurrent(controller: AbortController): boolean {
+      return this.controller === controller && !controller.signal.aborted;
     }
 
     private appendMessage(text: string): void {
@@ -224,6 +235,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       const { client, conversationId } = this.options;
       const input = this.input;
       this.active = true;
+      this.cancel.disabled = false;
       this.error.textContent = "";
       this.retry.hidden = true;
       this.status.textContent = "Connecting";
@@ -246,14 +258,16 @@ export function defineYadaWidget(name = "yada-chat"): void {
           after: this.cursor,
           signal: controller.signal,
           onReconnect: () => {
-            this.status.textContent = "Reconnecting";
+            if (this.isCurrent(controller))
+              this.status.textContent = "Reconnecting";
           },
         })) {
+          if (!this.isCurrent(controller)) return;
           this.cursor = event.sequence;
           await this.showEvent(event, controller.signal);
         }
       } catch {
-        if (controller.signal.aborted) return;
+        if (!this.isCurrent(controller)) return;
         this.error.textContent =
           "Connection failed. Reconnect to resume this run.";
         this.status.textContent = "Disconnected";
@@ -266,6 +280,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       signal: AbortSignal,
       restore = false,
     ): Promise<void> {
+      signal.throwIfAborted();
       this.status.textContent = event.type.replaceAll("_", " ");
       if (event.text && !restore) this.appendMessage(event.text);
       this.approval.hidden = true;
@@ -297,42 +312,64 @@ export function defineYadaWidget(name = "yada-chat"): void {
     }
 
     private async cancelRun(): Promise<void> {
-      if (!this.options || !this.input || !this.controller) return;
+      const { options, input, controller } = this;
+      if (!options || !input || !controller || !this.isCurrent(controller))
+        return;
       this.cancel.disabled = true;
       try {
-        await this.options.client.cancel(
-          this.options.conversationId,
-          this.input.id,
-          this.controller.signal,
+        await options.client.cancel(
+          options.conversationId,
+          input.id,
+          controller.signal,
         );
-        if (this.active) this.status.textContent = "Cancellation requested";
+        if (this.isCurrent(controller) && this.active)
+          this.status.textContent = "Cancellation requested";
       } catch {
-        if (!this.controller.signal.aborted)
+        if (this.isCurrent(controller) && this.active)
           this.error.textContent = "Cancellation failed. Try again.";
       } finally {
-        this.cancel.disabled = false;
+        if (this.isCurrent(controller)) this.cancel.disabled = false;
       }
     }
 
     private async decide(approved: boolean): Promise<void> {
-      if (!this.options || !this.input || !this.approvalId || !this.controller)
+      const { options, input, approvalId, controller, cursor } = this;
+      if (
+        !options ||
+        !input ||
+        !approvalId ||
+        !controller ||
+        !this.isCurrent(controller)
+      )
         return;
       this.approve.disabled = this.decline.disabled = true;
       try {
-        await this.options.client.decide(
-          this.options.conversationId,
-          this.input.id,
-          this.approvalId,
+        await options.client.decide(
+          options.conversationId,
+          input.id,
+          approvalId,
           approved,
-          this.controller.signal,
+          controller.signal,
         );
+        if (
+          !this.isCurrent(controller) ||
+          !this.active ||
+          this.cursor !== cursor ||
+          this.approvalId !== approvalId
+        )
+          return;
         this.approval.hidden = true;
         this.status.textContent = approved
           ? "Action approved"
           : "Action declined";
         this.cancel.focus();
       } catch {
-        if (!this.controller.signal.aborted) {
+        if (
+          this.isCurrent(controller) &&
+          this.active &&
+          this.cursor === cursor &&
+          this.approvalId === approvalId
+        ) {
           this.error.textContent =
             "Approval decision failed. Reconnect to review its current status.";
           this.retry.hidden = false;

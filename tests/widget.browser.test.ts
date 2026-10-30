@@ -18,6 +18,15 @@ import {
   type YadaWidget,
   type WidgetRunDetail,
 } from "../src/widget/index.js";
+import type { BrowserClient } from "../src/client/index.js";
+
+declare global {
+  interface Window {
+    configureTestWidget: (widget: YadaWidget) => void;
+    createTestClient: (baseUrl: string) => BrowserClient;
+    finishedOperations: number;
+  }
+}
 
 const malicious = '<img src=x onerror="globalThis.compromised=true">';
 const queued = { version: 1, sequence: 1, type: "queued", at: 1 };
@@ -35,8 +44,14 @@ let reconnectOnce = false;
 let createFailure = false;
 let decisionFailure = false;
 let cancelFailure = false;
+let operationMode: "hold" | "terminal" | undefined;
+let heldOperation: ServerResponse | undefined;
+let holdRun = false;
+let redirectTargetHits = 0;
+let heldRun: ServerResponse | undefined;
 let connections = 0;
 let closed = 0;
+const operationResponse = () => heldOperation;
 const cursors: string[] = [];
 const inputs: string[] = [];
 const streams = new Set<ServerResponse>();
@@ -55,7 +70,17 @@ body { background:#f4f5f8; } button { background:rgb(255,0,0)!important; } texta
 <body><main><h1>Host application</h1><div class="retail"><yada-chat></yada-chat></div><div class="console"><yada-chat></yada-chat></div></main>
 <script type="module">import { BrowserClient } from '/src/client/index.js'; import { defineYadaWidget } from '/src/widget/index.js';
 defineYadaWidget(); defineYadaWidget();
-for (const widget of document.querySelectorAll('yada-chat')) widget.configure({client:new BrowserClient({baseUrl:location.origin+'/api',reconnectDelayMs:5,maxRetries:1}),conversationId:'chat',profileId:'support'});
+window.finishedOperations = 0;
+window.createTestClient = baseUrl => {
+  const client = new BrowserClient({baseUrl,reconnectDelayMs:5,maxRetries:1});
+  for (const method of ['cancel','decide']) {
+    const call = client[method].bind(client);
+    client[method] = async (...args) => { try { await call(...args); } finally { window.finishedOperations++; } };
+  }
+  return client;
+};
+window.configureTestWidget = widget => widget.configure({client:window.createTestClient(location.origin+'/api'),conversationId:'chat',profileId:'support'});
+for (const widget of document.querySelectorAll('yada-chat')) window.configureTestWidget(widget);
 </script></body></html>`;
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", "http://localhost");
@@ -64,6 +89,12 @@ const server = createServer((request, response) => {
     response.end(html);
     return;
   }
+  if (url.pathname.startsWith("/redirect/")) {
+    response.writeHead(302, { location: "/api/redirect-target" });
+    response.end();
+    return;
+  }
+  if (url.pathname === "/api/redirect-target") redirectTargetHits++;
   if (url.pathname.startsWith("/api/")) {
     response.setHeader("content-type", "application/json");
     if (request.method === "POST" && url.pathname.endsWith("/runs")) {
@@ -119,6 +150,11 @@ const server = createServer((request, response) => {
       });
       request.on("end", () => {
         decision = (JSON.parse(body) as { approved: boolean }).approved;
+        if (operationMode) {
+          heldOperation = response;
+          if (operationMode === "terminal") finish("completed");
+          return;
+        }
         response.end("{}");
         finish("completed");
       });
@@ -129,6 +165,11 @@ const server = createServer((request, response) => {
         return;
       }
       cancelRequested = true;
+      if (operationMode) {
+        heldOperation = response;
+        if (operationMode === "terminal") finish("cancelled");
+        return;
+      }
       response.end("{}");
       finish("cancelled");
     } else if (url.pathname.endsWith("/approvals/action")) {
@@ -141,6 +182,10 @@ const server = createServer((request, response) => {
         }),
       );
     } else {
+      if (holdRun) {
+        heldRun = response;
+        return;
+      }
       response.end(
         JSON.stringify({
           id: "run",
@@ -224,10 +269,16 @@ afterAll(async () => {
   });
 });
 afterEach(async () => {
+  heldOperation?.destroy();
+  heldRun?.destroy();
   for (const context of browser.contexts()) await context.close();
 });
 beforeEach(() => {
   decision = undefined;
+  operationMode = undefined;
+  heldOperation = heldRun = undefined;
+  holdRun = false;
+  redirectTargetHits = 0;
   cancelRequested =
     reconnectOnce =
     createFailure =
@@ -426,6 +477,118 @@ describe("browser widget", () => {
     await expect
       .poll(async () => widget.getByRole("alert").textContent())
       .toContain("Cancellation failed");
+    await page.close();
+  });
+  it("keeps a newly configured run isolated from stale decision and cancellation callbacks", async () => {
+    for (const operation of ["Cancel run", "Approve action"]) {
+      operationMode = "hold";
+      heldOperation = undefined;
+      const page = await open();
+      const widget = await start(page);
+      await widget.getByRole("button", { name: "Approve action" }).waitFor();
+      await widget.getByRole("button", { name: operation }).click();
+      await expect.poll(() => heldOperation !== undefined).toBe(true);
+      await page.evaluate(() => {
+        const widget = document.querySelector<YadaWidget>("yada-chat");
+        if (!widget) throw new Error("Missing widget");
+        window.configureTestWidget(widget);
+        const input = widget.shadowRoot?.querySelector("textarea");
+        if (input) input.value = "New conversation";
+        widget.shadowRoot
+          ?.querySelector<HTMLButtonElement>('button[type="submit"]')
+          ?.click();
+      });
+      await widget.getByRole("button", { name: "Approve action" }).waitFor();
+      expect(await widget.getByRole("alert").textContent()).toBe("");
+      expect(await widget.getByRole("status").textContent()).toBe(
+        "awaiting approval",
+      );
+      expect(
+        await widget.getByRole("button", { name: "Cancel run" }).isDisabled(),
+      ).toBe(false);
+      operationResponse()?.end("{}");
+      await page.close();
+    }
+  });
+
+  it.each(
+    ["Cancel run", "Approve action"].flatMap((operation) =>
+      [200, 409].map((status) => ({ operation, status })),
+    ),
+  )(
+    "preserves terminal state when $operation settles with HTTP $status",
+    async ({ operation, status }) => {
+      operationMode = "terminal";
+      const page = await open();
+      const widget = await start(page);
+      await widget.getByRole("button", { name: "Approve action" }).waitFor();
+      await widget.getByRole("button", { name: operation }).click();
+      const terminal = operation === "Cancel run" ? "cancelled" : "completed";
+      await expect
+        .poll(async () => widget.getByRole("status").textContent())
+        .toBe(terminal);
+      const response = operationResponse();
+      if (!response) throw new Error("Missing held response");
+      const settled = page.waitForResponse((response) =>
+        response
+          .url()
+          .endsWith(operation === "Cancel run" ? "/cancel" : "/decision"),
+      );
+      response.writeHead(status);
+      response.end("{}");
+      expect((await settled).status()).toBe(status);
+      await page.waitForFunction(() => window.finishedOperations > 0);
+      expect(await widget.getByRole("status").textContent()).toBe(terminal);
+      expect(await widget.getByRole("alert").textContent()).toBe("");
+      expect(await widget.getByRole("textbox").isDisabled()).toBe(false);
+      await page.close();
+    },
+  );
+
+  it("rejects API redirects without following their target", async () => {
+    const page = await open();
+    expect(
+      await page.evaluate(() =>
+        window
+          .createTestClient(location.origin + "/redirect")
+          .getRun("chat", "run")
+          .then(
+            () => false,
+            () => true,
+          ),
+      ),
+    ).toBe(true);
+    expect(redirectTargetHits).toBe(0);
+    await page.close();
+  });
+
+  it("disables submission while a saved run loads and recovers on loading errors", async () => {
+    holdRun = true;
+    const page = await open();
+    const widget = page.locator("yada-chat").first();
+    await page.evaluate(() => {
+      const widget = document.querySelector<YadaWidget>("yada-chat");
+      void widget?.resume("saved-run").catch(() => undefined);
+    });
+    await expect.poll(() => heldRun !== undefined).toBe(true);
+    expect(await widget.getByRole("textbox").isDisabled()).toBe(true);
+    expect(
+      await widget
+        .getByRole("button", { name: "Send", exact: true })
+        .isDisabled(),
+    ).toBe(true);
+    expect(
+      await widget.getByRole("button", { name: "Cancel run" }).isVisible(),
+    ).toBe(false);
+    heldRun?.writeHead(503);
+    heldRun?.end("{}");
+    await expect
+      .poll(async () => widget.getByRole("textbox").isDisabled())
+      .toBe(false);
+    expect(await widget.getByRole("alert").textContent()).toBe(
+      "Could not load the saved run.",
+    );
+    expect(inputs).toHaveLength(0);
     await page.close();
   });
 });
