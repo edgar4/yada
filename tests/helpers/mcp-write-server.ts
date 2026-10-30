@@ -26,7 +26,7 @@ const completed = {
 export const writeMapping = {
   change: { version: "v1", prepareTool: "preview", receiptTool: "receipt" },
 };
-const tools: Tool[] = [
+export const mcpWriteTools: Tool[] = [
   {
     name: "change",
     description: "Change a value",
@@ -98,7 +98,7 @@ export function mcpWriteServer(identity: Identity) {
       servers.push(server);
       const [client, remote] = InMemoryTransport.createLinkedPair();
       server.server.setRequestHandler(ListToolsRequestSchema, () => ({
-        tools,
+        tools: mcpWriteTools,
       }));
       server.server.setRequestHandler(
         CallToolRequestSchema,
