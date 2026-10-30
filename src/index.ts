@@ -57,3 +57,9 @@ export type { Job, JobInput, RunEvent } from "./service/contracts.js";
 export type { JobStore } from "./storage/jobs.js";
 export { JobConflict } from "./storage/jobs.js";
 export type { Action, ActionStore } from "./storage/actions.js";
+export { createTalonProvider } from "./integrations/talon.js";
+export type {
+  TalonProviderRequest,
+  TalonProviderResult,
+  TalonProviderAdapter,
+} from "./integrations/talon.js";
