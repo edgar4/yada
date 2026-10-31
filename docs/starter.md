@@ -8,7 +8,22 @@ description: "Run a complete Yada assistant with a real model provider, optional
 
 The starter is a complete, project-independent assistant for one shared workspace. It combines Yada's provider adapters, durable worker, encrypted storage, typed tools and browser widget. It runs on Node 24.
 
-## Run it
+## Create a standalone app
+
+```sh
+npx @edgaralochi/yada init my-assistant
+cd my-assistant
+```
+
+The initializer installs dependencies and creates the starter source, `.env.starter` with a private encryption key, `.gitignore`, and a `skills/` folder. Set your provider credentials, then run `npm start`. The generated app uses the same starter implementation as this repository and pins the Yada version used to initialize it.
+
+Omitting the directory creates `yada-app`. The destination must not exist and its parent directory must exist; existing files and projects are never overwritten. To use it alongside an existing application, choose a new subdirectory.
+
+Use `--no-install` to generate files without installing dependencies, then run `npm install` yourself. If installation fails, the initializer retains the generated files and config so you can retry `npm install` in the new directory. It does not start the server or contact your model provider.
+
+If Yada is already installed in your project, run `npx yada init my-assistant`. To test an unpublished tarball, run `npm exec --package=/absolute/path/yada.tgz -- yada init my-assistant --no-install`, then install that same tarball inside `my-assistant` with `npm install /absolute/path/yada.tgz` before `npm start`.
+
+## Run from source
 
 ```sh
 npm ci
@@ -69,17 +84,7 @@ Configured MCP tools inherit the starter workspace identity. Add only servers yo
 
 Finish or cancel active runs before changing their provider, tools or execution limits. Recovery requires the configuration that created an unfinished run; restore that configuration if a change leaves a run waiting.
 
-To reuse the starter outside this repository, copy the contents of `examples/starter/` into a new project directory and run:
-
-```sh
-npm init -y
-npm pkg set type=module
-npm install @edgaralochi/yada zod
-npm install --save-dev tsx esbuild
-node init.mjs
-```
-
-Set your provider credentials in `.env.starter`, then run `node build.mjs` and `node --env-file=.env.starter --import tsx server.ts`. A [Yada tarball](deployment.md) can replace the registry package. Its imports use Yada's public exports; generated assets and SQLite data stay under the working directory's `work/starter/` folder.
+The packaged initializer copies these same files into your new project. Its imports use Yada's public exports; generated assets and SQLite data stay under the working directory's `work/starter/` folder. Add your own skill folders under the generated `skills/` directory; the repository's Anthropic example is not included automatically.
 
 ## Deploy it
 

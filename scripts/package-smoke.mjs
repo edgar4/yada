@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,8 +23,9 @@ try {
   for (const { path } of packed.files)
     assert.match(
       path,
-      /^(?:dist\/|docs\/|README\.md$|LICENSE$|package\.json$)/,
+      /^(?:dist\/|docs\/|examples\/starter\/|README\.md$|LICENSE$|package\.json$)/,
     );
+  assert(!packed.files.some(({ path }) => /(?:^|\/)\.env/.test(path)));
   assert(packed.files.some(({ path }) => path === "LICENSE"));
   for (const entry of ["index", "client/index", "widget/index"])
     for (const extension of ["js", "d.ts"])
@@ -101,7 +102,35 @@ void [runtime, client, widget];
     ],
     temporary,
   );
-  await verifyStarter(root, temporary, execute, npm);
+  const starter = join(temporary, "generated assistant");
+  execute(
+    npm,
+    ["exec", "--", "yada", "init", starter, "--no-install"],
+    temporary,
+  );
+  const generated = JSON.parse(
+    await readFile(join(starter, "package.json"), "utf8"),
+  );
+  assert.equal(generated.dependencies[packed.name], packed.version);
+  assert.match(
+    await readFile(join(starter, "skills/README.md"), "utf8"),
+    /SKILL.md/,
+  );
+  assert.match(
+    await readFile(join(starter, ".gitignore"), "utf8"),
+    /\.env\.starter/,
+  );
+  execute(
+    npm,
+    ["install", "--no-audit", "--no-fund", join(temporary, packed.filename)],
+    starter,
+  );
+  await cp(
+    join(temporary, "skills/installed"),
+    join(starter, "skills/installed"),
+    { recursive: true },
+  );
+  await verifyStarter(starter, execute, npm);
   console.log(
     `Installed and verified ${packed.name}@${packed.version} and its standalone starter`,
   );

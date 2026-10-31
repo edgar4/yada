@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { cp, readFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import { join } from "node:path";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 import { setTimeout, clearTimeout } from "node:timers";
@@ -27,47 +25,57 @@ async function waitFor(check) {
   throw new Error("Starter did not become ready");
 }
 
-export async function verifyStarter(root, directory, execute, npm) {
-  const manifest = JSON.parse(
-    await readFile(join(root, "package.json"), "utf8"),
-  );
-  execute(
-    npm,
-    [
-      "install",
-      "--no-audit",
-      "--no-fund",
-      `zod@${manifest.dependencies.zod}`,
-      `tsx@${manifest.devDependencies.tsx}`,
-      `esbuild@${manifest.devDependencies.esbuild}`,
-    ],
-    directory,
-  );
-  await cp(join(root, "examples/starter"), directory, { recursive: true });
-  execute(process.execPath, ["init.mjs"], directory);
-  execute(process.execPath, ["build.mjs"], directory);
+export async function verifyStarter(directory, execute, npm) {
+  execute(npm, ["run", "build"], directory);
   const password = randomBytes(24).toString("base64url");
   let calls = 0;
   const provider = createServer((request, response) => {
     assert.equal(request.headers.authorization, "Bearer local-test");
-    request.resume();
-    calls++;
-    response.writeHead(200, { "content-type": "application/json" });
-    response.end(
-      JSON.stringify({
-        id: "starter-smoke",
-        object: "chat.completion",
-        created: 1,
-        model: "fixture",
-        choices: [
-          {
-            index: 0,
-            message: { role: "assistant", content: "Installed starter works." },
-            finish_reason: "stop",
-          },
-        ],
-      }),
-    );
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      body += chunk;
+    });
+    request.on("end", () => {
+      const input = JSON.parse(body);
+      assert(
+        input.tools.some((tool) => tool.function.name === "yada_read_skill"),
+      );
+      const result = input.messages.find((message) => message.role === "tool");
+      if (result) assert.match(result.content, /Use the installed runtime/);
+      calls++;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: "starter-smoke",
+          object: "chat.completion",
+          created: 1,
+          model: "fixture",
+          choices: [
+            {
+              index: 0,
+              message: result
+                ? { role: "assistant", content: "Installed starter works." }
+                : {
+                    role: "assistant",
+                    content: null,
+                    tool_calls: [
+                      {
+                        id: "read-skill",
+                        type: "function",
+                        function: {
+                          name: "yada_read_skill",
+                          arguments: JSON.stringify({ name: "installed" }),
+                        },
+                      },
+                    ],
+                  },
+              finish_reason: result ? "stop" : "tool_calls",
+            },
+          ],
+        }),
+      );
+    });
   });
   const providerPort = await listen(provider);
   const reservation = createServer();
@@ -176,7 +184,7 @@ export async function verifyStarter(root, directory, execute, npm) {
           ).json()
         ).status === "completed",
     );
-    assert.equal(calls, 1);
+    assert.equal(calls, 2);
     await stop();
     await start();
     assert.equal(
@@ -204,7 +212,7 @@ export async function verifyStarter(root, directory, execute, npm) {
       ).text(),
       /Installed starter works/,
     );
-    assert.equal(calls, 1);
+    assert.equal(calls, 2);
     assert(!output.includes(password));
   } finally {
     try {

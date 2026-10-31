@@ -71,7 +71,21 @@
     "dist",
     "docs",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "examples/starter/README.md",
+    "examples/starter/app.ts",
+    "examples/starter/auth.ts",
+    "examples/starter/build.mjs",
+    "examples/starter/client.ts",
+    "examples/starter/config.ts",
+    "examples/starter/cookies.ts",
+    "examples/starter/gitignore",
+    "examples/starter/init.mjs",
+    "examples/starter/public/index.html",
+    "examples/starter/public/style.css",
+    "examples/starter/server.ts",
+    "examples/starter/skills/README.md",
+    "examples/starter/tools.ts"
   ],
   "description": "TypeScript runtime for in-app AI agents, with typed tools, configurable providers, approvals, and durable conversations.",
   "license": "MIT",
@@ -97,5 +111,8 @@
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
+  },
+  "bin": {
+    "yada": "./dist/cli/index.js"
   }
 }
