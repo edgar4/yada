@@ -177,7 +177,11 @@ it("finishes a denied call only after earlier parallel reads are committed", asy
     input: z.strictObject({}),
     authorize: () => Promise.resolve(true),
     execute: () =>
-      new Promise((resolve) => setTimeout(() => resolve("ok"), 20)),
+      new Promise((resolve) => {
+        setTimeout(() => {
+          resolve("ok");
+        }, 20);
+      }),
   });
   const revoked = readTool({
     name: "revoked",
