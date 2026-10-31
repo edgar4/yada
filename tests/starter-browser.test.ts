@@ -98,6 +98,7 @@ const server = createNodeServer(async (request) => {
         createdAt: 1,
         updatedAt: 1,
         availableAt: 0,
+        attempts: 0,
         status: "completed",
         cancelRequested: false,
         history: [],

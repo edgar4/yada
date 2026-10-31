@@ -27,6 +27,7 @@ export const jobSchema = jobInputSchema.extend({
   createdAt: z.number(),
   updatedAt: z.number(),
   availableAt: z.number().default(0),
+  attempts: z.number().int().nonnegative().default(0),
   status: eventSchema.shape.type,
   cancelRequested: z.boolean(),
   history: z.array(
