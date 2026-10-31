@@ -33,6 +33,15 @@ function toMessage(turn: Turn, provider: string): BaseMessage {
       });
   }
 }
+const refusalReasons = new Set([
+  "refusal",
+  "content_filter",
+  "safety",
+  "recitation",
+  "prohibited_content",
+  "blocklist",
+  "spii",
+]);
 export function chatModelAdapter(
   name: string,
   model: BaseChatModel,
@@ -83,11 +92,13 @@ export function chatModelAdapter(
       const finishReason =
         normalizedReason === "max_tokens" || normalizedReason === "length"
           ? "length"
-          : toolCalls.length
-            ? "tool_calls"
-            : normalizedReason === "end_turn" || normalizedReason === "stop"
-              ? "stop"
-              : "other";
+          : refusalReasons.has(normalizedReason)
+            ? "refusal"
+            : toolCalls.length
+              ? "tool_calls"
+              : normalizedReason === "end_turn" || normalizedReason === "stop"
+                ? "stop"
+                : "other";
       const usage = z
         .object({
           usage_metadata: z

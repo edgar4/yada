@@ -105,9 +105,11 @@ it("uses skill tools through the existing provider loop and enforces host author
     directories: [f.root],
     authorize: () => Promise.resolve(false),
   });
-  await expect(run({ ...options, ...denied })).resolves.toEqual({
-    status: "failed",
-    code: "tool_denied",
+  const hidden = await run({ ...options, ...denied });
+  expect(hidden.status).toBe("completed");
+  expect(provider.requests.at(-1)?.messages.at(-1)).toMatchObject({
+    role: "tool",
+    content: expect.stringContaining("unknown_tool") as string,
   });
 });
 
