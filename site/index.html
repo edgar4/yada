@@ -28,9 +28,7 @@ description: "Yada is a TypeScript runtime for building AI agents inside your pr
         </p>
         <div class="hero-actions">
           <a class="button button-primary" href="#get-started">Get started</a
-          ><a
-            class="text-link"
-            href="{{ '/configuration.html' | relative_url }}"
+          ><a class="text-link" href="{{ '/starter.html' | relative_url }}"
             >Read the docs <span aria-hidden="true">→</span></a
           >
         </div>
@@ -193,6 +191,18 @@ description: "Yada is a TypeScript runtime for building AI agents inside your pr
         >
       </div>
       <div class="block-row">
+        <h3>Extend your agent with skills</h3>
+        <p>
+          Add standard <code>SKILL.md</code> folders from Claude, Cursor or
+          Codex to your project's <code>skills/</code> directory. Yada loads
+          instructions and text references when needed. Scripts require host
+          tools.
+        </p>
+        <a href="{{ '/skills.html' | relative_url }}"
+          >Skills guide <span aria-hidden="true">→</span></a
+        >
+      </div>
+      <div class="block-row">
         <h3>A chat UI that fits your product</h3>
         <p>
           Stream responses with the browser SDK, or drop in the accessible,
@@ -212,36 +222,34 @@ description: "Yada is a TypeScript runtime for building AI agents inside your pr
   >
     <div class="wrap start-grid">
       <div class="start-copy">
-        <h2 id="start-title">Try it without an API key.</h2>
+        <h2 id="start-title">Your agent, one command away.</h2>
         <p>
-          On Node 24, the demo runs a catalog lookup against a scripted model,
-          so you can watch a full tool call before connecting a provider.
+          Start on Node 24. The initializer installs dependencies and creates
+          private config, SQLite storage, typed tools, a skills folder and the
+          chat widget, all wired together.
         </p>
         <p>
-          When you’re ready, add your provider settings to a private
-          <code>.env</code> and run the same example against a live model.
+          Enter your provider credentials in <code>.env.starter</code>, then run
+          <code>npm start</code> from your new project. Password protection is
+          optional.
         </p>
-        <a class="text-link" href="{{ '/configuration.html' | relative_url }}"
+        <a class="text-link" href="{{ '/starter.html' | relative_url }}"
           >Full setup guide <span aria-hidden="true">→</span></a
         >
       </div>
       <div class="setup-stack">
         <div class="code-panel">
           <div class="code-heading">
-            <span>Run the demo</span
+            <span>Create your agent</span
             ><button
               type="button"
-              data-copy="demo-code"
-              aria-label="Copy local demo commands"
+              data-copy="setup-code"
+              aria-label="Copy agent setup command"
             >
               Copy
             </button>
           </div>
-          <pre><code id="demo-code">git clone https://github.com/edgar4/yada.git
-cd yada
-nvm use
-npm ci
-npm run demo</code></pre>
+          <pre><code id="setup-code">npx @edgaralochi/yada init my-agent</code></pre>
         </div>
         <div class="code-panel env-panel">
           <div class="code-heading">
@@ -258,8 +266,8 @@ npm run demo</code></pre>
 YADA_LLM_MODEL=claude-sonnet-4-6
 YADA_LLM_API_KEY=your-provider-key</code></pre>
           <p>
-            Copy <code>.env.example</code> to <code>.env</code>, then run
-            <code>npm run demo:live</code>.
+            Set these in <code>my-agent/.env.starter</code>, then run
+            <code>cd my-agent</code> and <code>npm start</code>.
           </p>
         </div>
       </div>
@@ -269,9 +277,19 @@ YADA_LLM_API_KEY=your-provider-key</code></pre>
   <section class="section wrap" aria-labelledby="docs-title">
     <div class="docs-heading">
       <h2 id="docs-title">Guides for every part of the runtime</h2>
-      <p>Setup, tools, approvals, storage and deployment.</p>
+      <p>Setup, skills, tools, approvals, storage and deployment.</p>
     </div>
     <div class="guide-grid">
+      <a class="guide" href="{{ '/starter.html' | relative_url }}"
+        ><h3>One-command setup</h3>
+        <p>Create and run your own agent with the packaged starter.</p></a
+      >
+      <a class="guide" href="{{ '/skills.html' | relative_url }}"
+        ><h3>Reusable skills</h3>
+        <p>
+          Add workflows with standard SKILL.md instructions and references.
+        </p></a
+      >
       <a class="guide" href="{{ '/configuration.html' | relative_url }}"
         ><h3>Models and providers</h3>
         <p>Credentials, model selection and local servers.</p></a
