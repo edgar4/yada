@@ -71,3 +71,5 @@ export {
   rotateStorageKey,
 } from "./storage/maintenance.js";
 export type { StorageBackup } from "./storage/maintenance.js";
+
+export { loadSkills, type SkillCatalog } from "./skills/index.js";

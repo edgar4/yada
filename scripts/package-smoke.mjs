@@ -58,7 +58,8 @@ try {
     join(temporary, "smoke.mjs"),
     `
 import assert from "node:assert/strict";
-import { createFakeProvider, createStorage, run } from "@edgaralochi/yada";
+import { createFakeProvider, createStorage, loadSkills, run } from "@edgaralochi/yada";
+import { mkdir, writeFile } from "node:fs/promises";
 import * as client from "@edgaralochi/yada/client";
 import * as widget from "@edgaralochi/yada/widget";
 assert(Object.keys(client).length > 0);
@@ -66,6 +67,11 @@ assert(Object.keys(widget).length > 0);
 const provider = createFakeProvider(() => ({content: "installed", toolCalls: [], finishReason: "stop"}));
 const result = await run({provider, tools: [], identity: {actorId: "test", tenantId: "test"}, input: "test", system: "test", signal: AbortSignal.timeout(5000)});
 assert.deepEqual(result, {status: "completed", text: "installed"});
+await mkdir("skills/installed", {recursive: true});
+await writeFile("skills/installed/SKILL.md", ["---", "name: installed", "description: Verify packaged skills", "---", "Use the installed runtime."].join("\\n"));
+const skills = await loadSkills({directories: ["skills"], authorize: async () => true});
+assert.match(skills.system, /Verify packaged skills/);
+assert.match(await skills.tools[0].execute({name: "installed"}, {actorId: "test", tenantId: "test"}, AbortSignal.timeout(5000)), /Use the installed runtime/);
 const storage = await createStorage({driver: "sqlite", filename: ":memory:", encryptionKey: "11".repeat(32)});
 await storage.close();
 `,

@@ -10,6 +10,8 @@
       url: /browser.html
 - title: Connect and act
   pages:
+    - title: Skills
+      url: /skills.html
     - title: HTTP & database connectors
       url: /connectors.html
     - title: MCP connections

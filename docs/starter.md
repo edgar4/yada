@@ -49,6 +49,8 @@ Initialization generates the storage encryption key in a private file. It refuse
 
 Provider credentials, storage keys and MCP tokens remain on the server. There is no provider-secret field in the browser. The starter uses a real configured provider; tests inject deterministic responses separately.
 
+Skills are discovered automatically from project skill folders. See [skills](skills.md) to reuse `SKILL.md` packages from other agents or set the optional `YADA_SKILLS_DIR` directory override.
+
 ## Authentication and persistence
 
 By default, the starter opens without login. Leave `YADA_STARTER_PASSWORD` unset or empty for this mode. Anyone who can reach the starter can use its provider account, access the shared workspace and invoke its configured tools. Use password protection or your host’s authentication when access should be restricted.

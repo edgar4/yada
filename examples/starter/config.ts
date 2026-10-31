@@ -41,6 +41,15 @@ export function starterConfigFromEnv(
       YADA_STORAGE_FILE: env["YADA_STORAGE_FILE"] ?? "work/starter/yada.sqlite",
     }),
     servers: mcpServersFromEnv(env),
+    skillDirectories: env["YADA_SKILLS_DIR"]?.trim()
+      ? [env["YADA_SKILLS_DIR"].trim()]
+      : [
+          "skills",
+          ".agents/skills",
+          ".claude/skills",
+          ".cursor/skills",
+          ".codex/skills",
+        ],
   };
 }
 

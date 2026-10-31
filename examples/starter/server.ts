@@ -30,6 +30,7 @@ try {
       ),
     },
   });
+  for (const warning of app.warnings) console.warn(warning);
   const server = createNodeServer((request) => app.handle(request));
   let stopping: Promise<void> | undefined;
   const stop = () =>
