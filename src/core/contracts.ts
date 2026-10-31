@@ -34,7 +34,7 @@ export type ProviderResult = Readonly<{
   content: string;
   toolCalls: readonly ToolCall[];
   providerMetadata?: ProviderMetadata;
-  finishReason: "stop" | "tool_calls" | "length" | "other";
+  finishReason: "stop" | "tool_calls" | "length" | "refusal" | "other";
 }>;
 export interface ProviderAdapter {
   readonly name: string;
@@ -63,6 +63,9 @@ export type TerminalResult =
         | "unsupported"
         | "invalid_response"
         | "tool_denied"
-        | "dependency_failed";
+        | "dependency_failed"
+        | "refused"
+        | "timeout"
+        | "retry_exhausted";
     }>
   | Readonly<{ status: "cancelled" }>;
