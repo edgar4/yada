@@ -160,34 +160,108 @@ export async function run(options: RunOptions): Promise<RunResult> {
   }
 }
 async function executePending(loop: Loop): Promise<RunResult | undefined> {
-  const { state, signal, limits } = loop;
-  for (const call of [...state.pending]) {
-    signal.throwIfAborted();
-    loop.emit({ type: "tool_started", call });
-    const outcome = await executeCall(loop, call);
-    if ("stop" in outcome) return outcome.stop;
-    let { content } = outcome;
-    const { failed } = outcome;
-    const redacted = await loop.options.hooks?.afterTool?.(call, content);
-    if (typeof redacted === "string") content = redacted;
-    signal.throwIfAborted();
-    if (content.length > limits.maxToolOutput)
-      content = `${content.slice(0, limits.maxToolOutput)}…[truncated ${String(content.length - limits.maxToolOutput)} chars]`;
-    state.messages.push({
-      role: "tool",
-      toolCallId: call.id,
-      name: call.name,
-      content,
-    });
-    state.calls++;
-    state.failures = failed ? (state.failures ?? 0) + 1 : 0;
-    state.pending.shift();
-    await loop.save();
-    loop.emit({ type: "tool_finished", call, content, failed });
-    if (state.failures >= limits.maxFailures)
-      return await loop.finish({ status: "failed", code: "dependency_failed" });
+  const { state } = loop;
+  const isRead = (call: ToolCall) =>
+    loop.tools.get(call.name)?.effect !== "write";
+  while (state.pending.length) {
+    const first = state.pending[0];
+    if (!first) break;
+    const read = isRead(first);
+    const group = [first];
+    for (const call of state.pending.slice(1)) {
+      if (!read || !isRead(call)) break;
+      group.push(call);
+    }
+    const stopped = await executeGroup(
+      loop,
+      group,
+      read ? loop.limits.maxParallelTools : 1,
+    );
+    if (stopped) return stopped;
   }
   return undefined;
+}
+async function executeGroup(
+  loop: Loop,
+  group: readonly ToolCall[],
+  concurrency: number,
+): Promise<RunResult | undefined> {
+  const { state, limits } = loop;
+  const abort = new AbortController();
+  const forward = () => {
+    abort.abort(loop.signal.reason);
+  };
+  loop.signal.addEventListener("abort", forward);
+  const inner = group.length > 1 ? { ...loop, signal: abort.signal } : loop;
+  const slots = group.map(() => {
+    const slot = {} as {
+      promise: Promise<ToolOutcome>;
+      resolve: (outcome: ToolOutcome) => void;
+      reject: (error: unknown) => void;
+    };
+    slot.promise = new Promise((resolve, reject) => {
+      slot.resolve = resolve;
+      slot.reject = reject;
+    });
+    return slot;
+  });
+  for (const slot of slots) slot.promise.catch(() => undefined);
+  let next = 0;
+  const worker = async () => {
+    for (let index = next++; index < group.length; index = next++) {
+      const call = group[index];
+      const slot = slots[index];
+      if (!call || !slot) return;
+      try {
+        inner.signal.throwIfAborted();
+        loop.emit({ type: "tool_started", call });
+        const outcome = await executeCall(inner, call);
+        if ("stop" in outcome) {
+          slot.resolve(outcome);
+          continue;
+        }
+        let { content } = outcome;
+        const redacted = await loop.options.hooks?.afterTool?.(call, content);
+        if (typeof redacted === "string") content = redacted;
+        inner.signal.throwIfAborted();
+        if (content.length > limits.maxToolOutput)
+          content = `${content.slice(0, limits.maxToolOutput)}…[truncated ${String(content.length - limits.maxToolOutput)} chars]`;
+        slot.resolve({ content, failed: outcome.failed });
+      } catch (error) {
+        slot.reject(error);
+      }
+    }
+  };
+  try {
+    for (let n = Math.min(concurrency, group.length); n > 0; n--) void worker();
+    for (const [index, call] of group.entries()) {
+      const outcome = await slots[index]?.promise;
+      if (!outcome) break;
+      loop.signal.throwIfAborted();
+      if ("stop" in outcome) return outcome.stop;
+      const { content, failed } = outcome;
+      state.messages.push({
+        role: "tool",
+        toolCallId: call.id,
+        name: call.name,
+        content,
+      });
+      state.calls++;
+      state.failures = failed ? (state.failures ?? 0) + 1 : 0;
+      state.pending.shift();
+      await loop.save();
+      loop.emit({ type: "tool_finished", call, content, failed });
+      if (state.failures >= limits.maxFailures)
+        return await loop.finish({
+          status: "failed",
+          code: "dependency_failed",
+        });
+    }
+    return undefined;
+  } finally {
+    abort.abort();
+    loop.signal.removeEventListener("abort", forward);
+  }
 }
 async function executeCall(loop: Loop, call: ToolCall): Promise<ToolOutcome> {
   const { options, signal, identity } = loop;
