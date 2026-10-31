@@ -1,15 +1,20 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { chatModelAdapter } from "./langchain.js";
-import { modelOptions, type ModelOptions } from "./options.js";
+import { defined, modelOptions, type ModelOptions } from "./options.js";
 export function createGeminiProvider(config: ModelOptions) {
-  const { model, maxTokens, ...options } = modelOptions.parse(config);
+  const options = modelOptions.parse(config);
   return chatModelAdapter(
     "gemini",
     new ChatGoogleGenerativeAI({
-      ...options,
-      model: model ?? "gemini-3.8-flash",
-      maxOutputTokens: maxTokens,
-      maxRetries: 0,
+      apiKey: options.apiKey,
+      model: options.model ?? "gemini-3.8-flash",
+      maxOutputTokens: options.maxTokens,
+      maxRetries: options.maxRetries,
+      ...defined({
+        temperature: options.temperature,
+        baseUrl: options.baseUrl,
+        customHeaders: options.headers,
+      }),
     }),
   );
 }
