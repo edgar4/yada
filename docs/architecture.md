@@ -28,7 +28,7 @@ Termination: `stop` with text completes. `stop` with empty text after tool use c
 
 ## Limits and hooks
 
-`limits` holds every runtime number with its default: `maxContextChars` 64,000, `maxRounds` 8, `maxToolCalls` 16, `maxFailures` 3, `maxParallelTools` 4, `maxToolOutput` 32,000. The `maxRounds` and `maxToolCalls` run options override the limits. When the context exceeds `maxContextChars`, the runtime first replaces the content of the oldest tool results, excluding the latest round, with `[compacted: N chars]` (checkpointed, earlier turns otherwise unchanged); it fails with `limit` only if still over.
+`limits` holds every runtime number with its default: `maxContextChars` 256,000, `maxRounds` 8, `maxToolCalls` 16, `maxFailures` 3, `maxParallelTools` 4, `maxToolOutput` 32,000. The `maxRounds` and `maxToolCalls` run options override the limits. When the context exceeds `maxContextChars`, the runtime first replaces the content of the oldest tool results, excluding the latest round, with `[compacted: N chars]` (checkpointed, earlier turns otherwise unchanged); it fails with `limit` only if still over. Compaction edits earlier turns, so providers that bind reasoning blocks to an unchanged history (Anthropic Claude 5 preserved thinking) may drop or reject those blocks after a compaction; size the limits so compaction stays rare for those models.
 
 `run` accepts `hooks?: RunHooks`, honoured on checkpoint resume. Members are optional and may be async.
 

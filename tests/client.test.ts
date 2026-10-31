@@ -131,6 +131,23 @@ describe("browser client", () => {
     expect(transport.mock.calls[2]?.[1]?.body).toBe('{"approved":false}');
   });
 
+  it("sends a remembered approval scope", async () => {
+    const transport = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await setup(transport).decide(
+      "chat",
+      "run",
+      "a",
+      true,
+      undefined,
+      "conversation",
+    );
+    expect(transport.mock.calls[0]?.[1]?.body).toBe(
+      '{"approved":true,"remember":"conversation"}',
+    );
+  });
+
   it("reconnects from its last cursor and deduplicates replay", async () => {
     const transport = vi
       .fn<typeof fetch>()

@@ -99,7 +99,7 @@ export function createWorker(options: {
       await checkCancellation();
       const history = contextWindow(
         modelHistory(job.history),
-        profile.historyChars ?? 32_000,
+        profile.historyChars ?? 128_000,
         profile.historyToolChars,
       );
       const runs = options.storage.runs;

@@ -229,11 +229,12 @@ export class BrowserClient {
     approvalId: string,
     approved: boolean,
     signal?: AbortSignal,
+    remember?: "run" | "conversation",
   ): Promise<void> {
     await this.json(
       `${this.path(conversationId, runId)}/approvals/${encodeURIComponent(approvalId)}/decision`,
       "POST",
-      JSON.stringify({ approved }),
+      JSON.stringify(remember ? { approved, remember } : { approved }),
       signal,
     );
   }
