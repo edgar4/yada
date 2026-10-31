@@ -3,6 +3,10 @@ import type { Turn } from "./contracts.js";
 export const limitsSchema = z
   .strictObject({
     maxContextChars: z.number().int().positive().default(64_000),
+    maxRounds: z.number().int().positive().default(8),
+    maxToolCalls: z.number().int().positive().default(16),
+    maxFailures: z.number().int().positive().default(3),
+    maxToolOutput: z.number().int().positive().default(32_000),
     maxCostMicros: z.number().int().nonnegative().optional(),
     costPerCallMicros: z.number().int().positive().optional(),
   })
