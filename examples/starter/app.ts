@@ -3,6 +3,7 @@ import {
   createHandler,
   createProvider,
   createWorker,
+  loadSkills,
   reconnectingMcp,
   type McpConnection,
   type ProviderAdapter,
@@ -47,6 +48,10 @@ export async function createStarterApp(options: {
           ),
         ),
       );
+    const skills = await loadSkills({
+      directories: config.skillDirectories,
+      authorize: owns,
+    });
     const worker = createWorker({
       storage,
       profiles: {
@@ -54,10 +59,12 @@ export async function createStarterApp(options: {
           provider,
           tools: [
             ...starterTools(starterIdentity),
+            ...skills.tools,
             ...connections.flatMap((connection) => connection.tools),
           ],
           system:
-            "You are Yada, a helpful assistant for the signed-in user. Use the available tools when needed. Explain approval requests clearly. Never claim an action succeeded without its tool result.",
+            "You are Yada, a helpful assistant for the signed-in user. Use the available tools when needed. Explain approval requests clearly. Never claim an action succeeded without its tool result." +
+            (skills.system ? "\n" + skills.system : ""),
           maxRounds: 8,
           maxToolCalls: 16,
           timeoutMs: 60_000,
@@ -99,6 +106,7 @@ export async function createStarterApp(options: {
     };
     return {
       worker,
+      warnings: skills.warnings,
       async handle(request: Request): Promise<Response> {
         const response = await route(request);
         const headers = new Headers(response.headers);
