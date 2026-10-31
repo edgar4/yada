@@ -144,6 +144,7 @@ function follow(current: YadaWidget): void {
 }
 let widget: YadaWidget | undefined;
 let authenticated = false;
+let passwordRequired = true;
 let generation = 0;
 let pending = false;
 let retryAction = () => {
@@ -206,7 +207,8 @@ async function restore(): Promise<void> {
   status.textContent = "Restoring your conversation…";
   try {
     await current.resume(runId);
-    if (widget === current) status.textContent = "Signed in.";
+    if (widget === current)
+      status.textContent = passwordRequired ? "Signed in." : "Ready.";
   } catch (failure) {
     if (widget !== current) return;
     if (failure instanceof ClientError && failure.status === 404) {
@@ -260,10 +262,13 @@ async function checkSession(): Promise<void> {
     }
     const opening = !authenticated || !widget || container.inert;
     authenticated = true;
+    passwordRequired =
+      !("passwordRequired" in session) || session.passwordRequired !== false;
     login.hidden = retry.hidden = true;
-    chat.hidden = logout.hidden = false;
+    chat.hidden = false;
+    logout.hidden = !passwordRequired;
     container.inert = false;
-    status.textContent = "Signed in.";
+    status.textContent = passwordRequired ? "Signed in." : "Ready.";
     busy(false);
     if (opening) mood("smile");
     if (opening) await restore();

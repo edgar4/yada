@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { cp, readFile } from "node:fs/promises";
@@ -45,10 +46,7 @@ export async function verifyStarter(root, directory, execute, npm) {
   await cp(join(root, "examples/starter"), directory, { recursive: true });
   execute(process.execPath, ["init.mjs"], directory);
   execute(process.execPath, ["build.mjs"], directory);
-  const password = (
-    await readFile(join(directory, ".env.starter"), "utf8")
-  ).match(/^YADA_STARTER_PASSWORD=(.+)$/m)?.[1];
-  assert(password);
+  const password = randomBytes(24).toString("base64url");
   let calls = 0;
   const provider = createServer((request, response) => {
     assert.equal(request.headers.authorization, "Bearer local-test");
@@ -79,7 +77,7 @@ export async function verifyStarter(root, directory, execute, npm) {
   let child;
   let ended;
   let output = "";
-  const start = async () => {
+  const start = async (passwordEnabled = true) => {
     child = spawn(
       process.execPath,
       ["--env-file=.env.starter", "--import", "tsx", "server.ts"],
@@ -93,6 +91,7 @@ export async function verifyStarter(root, directory, execute, npm) {
           ),
           PORT: String(port),
           YADA_STARTER_ORIGIN: origin,
+          YADA_STARTER_PASSWORD: passwordEnabled ? password : "",
           YADA_LLM_PROVIDER: "ollama",
           YADA_LLM_MODEL: "fixture",
           YADA_LLM_API_KEY: "local-test",
@@ -139,6 +138,15 @@ export async function verifyStarter(root, directory, execute, npm) {
     return cookie;
   };
   try {
+    await start(false);
+    const openSession = await globalThis.fetch(`${origin}/auth/session`);
+    assert.deepEqual(await openSession.json(), {
+      authenticated: true,
+      identity: { actorId: "owner", tenantId: "starter" },
+      passwordRequired: false,
+    });
+    assert.equal(openSession.headers.get("set-cookie"), null);
+    await stop();
     await start();
     assert.equal(
       (await globalThis.fetch(`${origin}/assets/client.js`)).status,

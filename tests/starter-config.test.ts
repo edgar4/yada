@@ -9,6 +9,15 @@ const env = {
   YADA_LLM_API_KEY: "provider-secret",
 };
 
+it("accepts an omitted or empty password without a separate auth setting", () => {
+  expect(
+    starterConfigFromEnv({ ...env, YADA_STARTER_PASSWORD: undefined }).password,
+  ).toBe("");
+  expect(
+    starterConfigFromEnv({ ...env, YADA_STARTER_PASSWORD: "" }).password,
+  ).toBe("");
+});
+
 it("uses the shared provider and database settings with local defaults", () => {
   expect(starterConfigFromEnv({ ...env, PORT: "3001" }).origin).toBe(
     "http://localhost:3001",
