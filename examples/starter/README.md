@@ -1,4 +1,4 @@
-# Your Yada assistant
+# Your Yada agent
 
 Set your provider, model and provider API key in `.env.starter`, then run:
 

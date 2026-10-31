@@ -102,7 +102,7 @@ void [runtime, client, widget];
     ],
     temporary,
   );
-  const starter = join(temporary, "generated assistant");
+  const starter = join(temporary, "generated agent");
   execute(
     npm,
     ["exec", "--", "yada", "init", starter, "--no-install"],

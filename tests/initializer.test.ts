@@ -45,7 +45,7 @@ const cli = (cwd: string, args: readonly string[], env = process.env) =>
 
 it("creates the existing starter, private config, skills directory and pinned dependencies", async () => {
   const root = await fixture();
-  const target = join(root, "my assistant");
+  const target = join(root, "my agent");
   expect(await createStarter(target)).toBe(target);
   const env = await readFile(join(target, ".env.starter"), "utf8");
   expect(env).toContain("YADA_LLM_API_KEY=\n");
@@ -138,12 +138,12 @@ it.each([
 it("supports the default directory and skips installation without exposing generated secrets", async () => {
   const root = await fixture();
   const result = await cli(root, ["init", "--no-install"]);
-  const env = await readFile(join(root, "yada-app/.env.starter"), "utf8");
+  const env = await readFile(join(root, "yada-agent/.env.starter"), "utf8");
   const key = /YADA_STORAGE_KEY=(\w+)/.exec(env)?.[1];
   expect(key).toBeTruthy();
   expect(result.stdout + result.stderr).not.toContain(key);
   expect(result.stdout).toContain("npm install and npm start");
-  expect(await readdir(join(root, "yada-app"))).not.toContain("node_modules");
+  expect(await readdir(join(root, "yada-agent"))).not.toContain("node_modules");
 });
 
 it.skipIf(process.platform === "win32")(

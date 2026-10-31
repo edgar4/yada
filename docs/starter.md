@@ -1,27 +1,27 @@
 ---
 layout: doc
 title: "Starter app"
-description: "Run a complete Yada assistant with a real model provider, optional password protection, encrypted storage, scoped tools and the browser widget."
+description: "Run a complete Yada agent with a real model provider, optional password protection, encrypted storage, scoped tools and the browser widget."
 ---
 
 # Starter app
 
-The starter is a complete, project-independent assistant for one shared workspace. It combines Yada's provider adapters, durable worker, encrypted storage, typed tools and browser widget. It runs on Node 24.
+The starter is a complete, project-independent agent for one shared workspace. It combines Yada's provider adapters, durable worker, encrypted storage, typed tools and browser widget. It runs on Node 24.
 
 ## Create a standalone app
 
 ```sh
-npx @edgaralochi/yada init my-assistant
-cd my-assistant
+npx @edgaralochi/yada init my-agent
+cd my-agent
 ```
 
 The initializer installs dependencies and creates the starter source, `.env.starter` with a private encryption key, `.gitignore`, and a `skills/` folder. Set your provider credentials, then run `npm start`. The generated app uses the same starter implementation as this repository and pins the Yada version used to initialize it.
 
-Omitting the directory creates `yada-app`. The destination must not exist and its parent directory must exist; existing files and projects are never overwritten. To use it alongside an existing application, choose a new subdirectory.
+Omitting the directory creates `yada-agent`. The destination must not exist and its parent directory must exist; existing files and projects are never overwritten. To use it alongside an existing application, choose a new subdirectory.
 
 Use `--no-install` to generate files without installing dependencies, then run `npm install` yourself. If installation fails, the initializer retains the generated files and config so you can retry `npm install` in the new directory. It does not start the server or contact your model provider.
 
-If Yada is already installed in your project, run `npx yada init my-assistant`. To test an unpublished tarball, run `npm exec --package=/absolute/path/yada.tgz -- yada init my-assistant --no-install`, then install that same tarball inside `my-assistant` with `npm install /absolute/path/yada.tgz` before `npm start`.
+If Yada is already installed in your project, run `npx yada init my-agent`. To test an unpublished tarball, run `npm exec --package=/absolute/path/yada.tgz -- yada init my-agent --no-install`, then install that same tarball inside `my-agent` with `npm install /absolute/path/yada.tgz` before `npm start`.
 
 ## Run from source
 
@@ -56,7 +56,7 @@ Initialization generates the storage encryption key in a private file. It refuse
 | `YADA_STARTER_PASSWORD`                                   | Optional password (24–256 characters); unset or empty skips login. |
 | `YADA_STORAGE_KEY`                                        | Generated 64-character hexadecimal encryption key.                 |
 | `PORT`                                                    | `3000`; also sets the default localhost browser origin.            |
-| `YADA_STARTER_ORIGIN`                                     | Exact browser origin, such as `https://assistant.example.com`.     |
+| `YADA_STARTER_ORIGIN`                                     | Exact browser origin, such as `https://agent.example.com`.         |
 | `YADA_STORAGE_DRIVER`                                     | `sqlite`; also supports `postgres` and `mysql`.                    |
 | `YADA_STORAGE_FILE`                                       | SQLite filename; defaults to `work/starter/yada.sqlite`.           |
 | `YADA_STORAGE_URL`                                        | Connection URL when using PostgreSQL or MySQL.                     |

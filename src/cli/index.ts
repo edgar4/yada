@@ -2,7 +2,7 @@
 import { createStarter, runCommand } from "./init.js";
 
 const usage =
-  "Usage: yada init [directory] [--no-install]\nCreates a new standalone assistant (default directory: yada-app).";
+  "Usage: yada init [directory] [--no-install]\nCreates a new standalone agent (default directory: yada-agent).";
 try {
   const args = process.argv.slice(2);
   if (
@@ -22,7 +22,7 @@ try {
       rest.filter((arg) => arg === "--no-install").length > 1
     )
       throw new Error(usage);
-    const directory = await createStarter(positional[0] ?? "yada-app");
+    const directory = await createStarter(positional[0] ?? "yada-agent");
     if (!rest.includes("--no-install")) {
       try {
         await runCommand(
