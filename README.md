@@ -14,13 +14,13 @@ npm install @edgaralochi/yada
 
 Import the runtime from `@edgaralochi/yada`, the browser client from `@edgaralochi/yada/client`, and the widget from `@edgaralochi/yada/widget`. Released under the [MIT license](LICENSE).
 
-## Create an assistant
+## Create an agent
 
 With Node 24, generate a standalone app and install its dependencies:
 
 ```sh
-npx @edgaralochi/yada init my-assistant
-cd my-assistant
+npx @edgaralochi/yada init my-agent
+cd my-agent
 ```
 
 Set your provider credentials in `.env.starter`, then run `npm start`. The initializer provides SQLite storage, a skills folder, typed tools and the chat widget. See the [starter guide](docs/starter.md).
@@ -37,7 +37,7 @@ npm run demo
 
 The demo runs a catalog lookup without an API key.
 
-For a complete assistant with optional login, a real provider, durable storage, tools and a chat widget, run `npm run starter:init`, enter your provider credentials in `.env.starter`, then run `npm run starter`. See the [starter guide](docs/starter.md).
+For a complete agent with optional login, a real provider, durable storage, tools and a chat widget, run `npm run starter:init`, enter your provider credentials in `.env.starter`, then run `npm run starter`. See the [starter guide](docs/starter.md).
 
 ## Connect your model provider
 

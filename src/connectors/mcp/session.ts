@@ -36,7 +36,7 @@ export async function connectMcpTransport(
 ): Promise<McpConnection<Tool>> {
   const settings = mcpConfig.parse(config);
   const owner = Object.freeze({ ...access.identity });
-  const client = new Client({ name: "yada", version: "0.1.0" });
+  const client = new Client({ name: "yada", version: "0.2.0" });
   let closed = false;
   let connected = false;
   client.onclose = () => {

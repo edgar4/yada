@@ -65,7 +65,7 @@ export async function createStarter(directory: string) {
       join(destination, "package.json"),
       JSON.stringify(
         {
-          name: "yada-assistant",
+          name: "yada-agent",
           private: true,
           type: "module",
           engines: manifest.engines,
