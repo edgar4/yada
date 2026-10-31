@@ -289,10 +289,10 @@ describe("standalone runtime", () => {
     const s = setup([invocation, invocation, answer]);
     expect(await run(s.options)).toEqual({ status: "completed", text: "Done" });
     const last = s.provider.requests[2]?.messages;
-    expect(last?.at(-1)).toMatchObject({ role: "tool", toolCallId: "1~2" });
+    expect(last?.at(-1)).toMatchObject({ role: "tool", toolCallId: "1-r2" });
     expect(last?.at(-2)).toMatchObject({
       role: "assistant",
-      toolCalls: [{ id: "1~2" }],
+      toolCalls: [{ id: "1-r2" }],
     });
   });
   it("fails refusals", async () => {

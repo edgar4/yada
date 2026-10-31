@@ -127,18 +127,16 @@ export function readResult(result: CallToolResult): string {
       error: "tool_failed",
       message: result.content.map(renderBlock).join("\n").slice(0, 4000),
     });
-  const output = result.structuredContent
+  return result.structuredContent
     ? JSON.stringify(result.structuredContent)
     : result.content.map(renderBlock).join("\n");
-  if (Buffer.byteLength(output) > 32_000)
-    throw new Error("MCP result too large");
-  return output;
 }
 export function structuredResult(
   result: CallToolResult,
 ): Record<string, unknown> {
   if (!result.structuredContent)
     throw new Error("MCP structured result required");
-  readResult(result);
+  if (Buffer.byteLength(readResult(result)) > 32_000)
+    throw new Error("MCP result too large");
   return result.structuredContent;
 }

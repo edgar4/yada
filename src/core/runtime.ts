@@ -226,7 +226,7 @@ export async function run(options: {
           return await finish({ status: "failed", code: "invalid_response" });
         seen.add(call.id);
         const id = ids.has(call.id)
-          ? `${call.id}~${String(state.rounds)}`
+          ? `${call.id}-r${String(state.rounds)}`
           : call.id;
         if (ids.has(id))
           return await finish({ status: "failed", code: "invalid_response" });

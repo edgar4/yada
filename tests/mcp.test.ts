@@ -169,15 +169,15 @@ it("excludes tools not explicitly allowed", async () => {
   cleanups.push(c.close);
   expect(c.tools.map((t) => t.spec.name)).toEqual(["catalog__lookup"]);
 });
-it("rejects oversized results", async () => {
+it("leaves oversized read results to runtime truncation", async () => {
   const s = await setup({
     result: { content: [{ type: "text", text: "x".repeat(32001) }] },
   });
   const c = await s.connect();
   cleanups.push(c.close);
-  await expect(
-    c.tools[0]?.execute({ id: "a" }, owner, AbortSignal.timeout(1000)),
-  ).rejects.toThrow();
+  expect(
+    await c.tools[0]?.execute({ id: "a" }, owner, AbortSignal.timeout(1000)),
+  ).toHaveLength(32001);
 });
 it("preserves structured results", async () => {
   const s = await setup({
