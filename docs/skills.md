@@ -37,6 +37,14 @@ No configuration is required. The starter also discovers `.agents/skills/`, `.cl
 
 Ask for a task matching a skill's description, or mention its name in your message. Selection is performed by the model. The starter snapshots files on startup; restart to pick up changes. Finish active runs before changing their skills. A changed snapshot is rejected when recovering an existing run; restore the previous skill files to resume it.
 
+## Try the included skill
+
+The repository includes Anthropic's unmodified `internal-comms` skill in `skills/internal-comms/`, with its Apache-2.0 license. Its source revision is recorded in `skills/README.md`. It is discovered automatically when you run the starter from this repository.
+
+Try: “Write a weekly 3P update for the Atlas team, covering 26–30 October 2026. Progress: shipped search to 120 users and fixed 8 bugs. Plans: expand to 300 users next week. Problems: waiting for vendor credentials.”
+
+The model can discover the skill from the request, read `SKILL.md`, load `examples/3p-updates.md`, and draft the update. No external integrations are needed when you supply the facts. To reuse the example outside this repository, copy the complete folder, including its license, into your application's `skills/` directory.
+
 ## Reuse existing skills
 
 Copy a standard skill folder unchanged from another product, including its references. The name in its YAML frontmatter must match its folder name. Nested category folders are supported; duplicate skill names fail startup rather than silently choosing a copy.
