@@ -31,6 +31,7 @@ export default defineConfig({
       include: ["src/**/*.ts", "examples/starter/**/*.ts"],
       exclude: [
         "src/index.ts",
+        "src/cli/index.ts",
         "src/widget/**",
         "examples/starter/client.ts",
         "examples/starter/server.ts",
