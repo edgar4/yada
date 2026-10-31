@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { runResultSchema } from "../core/checkpoint.js";
+import { messageSchema } from "../storage/conversations.js";
 export const jobInputSchema = z.strictObject({
   id: z.string().min(1).max(128),
   profileId: z.string().min(1).max(128),
@@ -30,9 +31,7 @@ export const jobSchema = jobInputSchema.extend({
   attempts: z.number().int().nonnegative().default(0),
   status: eventSchema.shape.type,
   cancelRequested: z.boolean(),
-  history: z.array(
-    z.object({ role: z.enum(["user", "assistant"]), content: z.string() }),
-  ),
+  history: z.array(messageSchema),
   outcome: runResultSchema.optional(),
   events: z.array(eventSchema),
 });

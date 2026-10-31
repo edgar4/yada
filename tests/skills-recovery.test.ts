@@ -183,8 +183,8 @@ for (const driver of drivers)
         expect(
           (
             await fixture.storage.conversations.load(starterIdentity, "skills")
-          )?.messages.at(-1)?.content,
-        ).toBe("Your order number?");
+          )?.messages.at(-1),
+        ).toMatchObject({ content: "Your order number?" });
       } finally {
         await app.close();
       }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Identity, TerminalResult } from "../core/contracts.js";
+import type { Identity, TerminalResult, Turn } from "../core/contracts.js";
 import {
   isTerminal,
   jobInputSchema,
@@ -12,6 +12,7 @@ import {
   conversationKey,
   identitySchema,
   messageSchema,
+  type ConversationMessage,
 } from "./conversations.js";
 import { StorageConflict, type recordStore } from "./records.js";
 import { withRunLease, RunLeaseError, type RunOwnership } from "./runs.js";
@@ -54,6 +55,7 @@ export interface JobStore {
     event: Omit<RunEvent, "version" | "sequence" | "at">,
     outcome?: TerminalResult,
     lease?: RunOwnership,
+    turns?: readonly Turn[],
   ): Promise<Job>;
   retry(identity: Identity, conversationId: string, id: string): Promise<Job>;
   cancel(identity: Identity, conversationId: string, id: string): Promise<void>;
@@ -176,6 +178,7 @@ export function createJobStore(
     event,
     outcome,
     lease,
+    turns,
   ) => {
     const key = conversationKey(identity, conversationId);
     const change = (value: unknown) => {
@@ -188,11 +191,23 @@ export function createJobStore(
         if (outcome.status !== event.type)
           throw new Error("Outcome status mismatch");
         job.outcome = outcome;
-        if (outcome.status === "completed")
-          state.messages.push(
-            { role: "user", content: job.input },
-            { role: "assistant", content: outcome.text },
-          );
+        const added: ConversationMessage[] =
+          outcome.status === "completed"
+            ? turns
+              ? [...turns]
+              : [
+                  { role: "user", content: job.input },
+                  { role: "assistant", content: outcome.text, toolCalls: [] },
+                ]
+            : [
+                { role: "user", content: job.input },
+                {
+                  role: "failure",
+                  code:
+                    outcome.status === "failed" ? outcome.code : "cancelled",
+                },
+              ];
+        state.messages.push(...added);
       }
       return { value: state, result: job };
     };
@@ -254,7 +269,15 @@ export function createJobStore(
           )
         : undefined;
     },
-    update: async (identity, conversationId, id, event, outcome, lease) => {
+    update: async (
+      identity,
+      conversationId,
+      id,
+      event,
+      outcome,
+      lease,
+      turns,
+    ) => {
       const job = await apply(
         identity,
         conversationId,
@@ -262,6 +285,7 @@ export function createJobStore(
         event,
         outcome,
         lease,
+        turns,
       );
       if (isTerminal(job.status))
         await untrack(conversationKey(identity, conversationId)).catch(

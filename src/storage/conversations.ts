@@ -1,15 +1,30 @@
 import { z } from "zod";
-import type { Identity } from "../core/contracts.js";
+import { turnSchema } from "../core/checkpoint.js";
+import type { Identity, Turn } from "../core/contracts.js";
 import type { recordStore } from "./records.js";
 export const identitySchema = z.strictObject({
   actorId: z.string().min(1),
   tenantId: z.string().min(1),
 });
-export const messageSchema = z.strictObject({
-  role: z.enum(["user", "assistant"]),
-  content: z.string(),
+const failureSchema = z.strictObject({
+  role: z.literal("failure"),
+  code: z.string(),
 });
-export type ConversationMessage = z.infer<typeof messageSchema>;
+export const messageSchema: z.ZodType<ConversationMessage> = z.preprocess(
+  (value) =>
+    typeof value === "object" &&
+    value !== null &&
+    "role" in value &&
+    value.role === "assistant" &&
+    !("toolCalls" in value)
+      ? { ...value, toolCalls: [] }
+      : value,
+  z.union([turnSchema, failureSchema]),
+);
+export type ConversationMessage =
+  Turn | Readonly<{ role: "failure"; code: string }>;
+export const modelHistory = (messages: readonly ConversationMessage[]) =>
+  messages.filter((message): message is Turn => message.role !== "failure");
 export type Conversation = Readonly<{
   revision: number;
   messages: readonly ConversationMessage[];

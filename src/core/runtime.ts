@@ -1,4 +1,4 @@
-import { limitsSchema, type RunLimits } from "./limits.js";
+import { compactOldest, limitsSchema, type RunLimits } from "./limits.js";
 import type { ActionExecutor } from "./action.js";
 import type { AgentEvent, RunHooks } from "./hooks.js";
 import { abortable } from "./abort.js";
@@ -244,10 +244,15 @@ async function checkLimits(loop: Loop): Promise<RunResult | undefined> {
   const exceeded = () => loop.finish({ status: "failed", code: "limit" });
   if (state.rounds >= loop.rounds) return exceeded();
   loop.signal.throwIfAborted();
-  const contextSize =
+  let contextSize =
     options.system.length +
     JSON.stringify(state.messages).length +
     JSON.stringify(loop.visible.map((tool) => tool.spec)).length;
+  if (contextSize > limits.maxContextChars)
+    contextSize -= compactOldest(
+      state.messages,
+      contextSize - limits.maxContextChars,
+    );
   if (contextSize > limits.maxContextChars) return exceeded();
   if (
     limits.maxCostMicros !== undefined &&
@@ -308,6 +313,15 @@ async function classify(
           ? result.content
           : lastAssistantText(state.messages)
         : undefined;
+    if (text)
+      state.messages.push({
+        role: "assistant",
+        content: text,
+        toolCalls: [],
+        ...(result.providerMetadata
+          ? { providerMetadata: result.providerMetadata }
+          : {}),
+      });
     return loop.finish(
       text
         ? { status: "completed", text }
