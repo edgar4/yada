@@ -21,9 +21,10 @@ export const modelFields = {
   model: z.string().trim().min(1).optional(),
   ...tuning,
 };
-export const thinking = z
-  .strictObject({ budgetTokens: z.number().int().min(1024) })
+export const effort = z
+  .enum(["low", "medium", "high", "xhigh", "max"])
   .optional();
+export const thinkingDisplay = z.enum(["summarized", "omitted"]).optional();
 export const modelOptions = z.strictObject({
   ...modelFields,
   maxTokens: z.number().int().positive().default(8192),

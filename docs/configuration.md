@@ -12,7 +12,7 @@ For the live example, copy `.env.example` to `.env`:
 
 ```dotenv
 YADA_LLM_PROVIDER=anthropic
-YADA_LLM_MODEL=claude-haiku-5-5
+YADA_LLM_MODEL=claude-opus-5-5
 YADA_LLM_API_KEY=your-anthropic-api-key
 ```
 
@@ -29,7 +29,7 @@ The equivalent server-side configuration is:
 ```ts
 const provider = createProvider({
   provider: "anthropic",
-  model: "claude-haiku-5-5",
+  model: "claude-opus-5-5",
   apiKey: secretFromYourServer,
 });
 ```
@@ -42,7 +42,7 @@ When switching providers, replace all three values: provider, its model ID, and 
 
 | Provider            | Default model                 | API key                       |
 | ------------------- | ----------------------------- | ----------------------------- |
-| `anthropic`         | `claude-haiku-5-5`            | Your Anthropic API key        |
+| `anthropic`         | `claude-opus-5-5`             | Your Anthropic API key        |
 | `openai`            | `gpt-6-luna`                  | Your OpenAI API key           |
 | `gemini`            | `gemini-3.8-flash`            | Your Google AI Studio API key |
 | `deepseek`          | `deepseek-flash`              | Your DeepSeek API key         |
@@ -68,7 +68,7 @@ YADA_LLM_API_KEY=your-google-ai-studio-api-key
 
 Use the provider's exact API model ID when overriding the default. The selected model must support text and function calling for tool workflows. Provider access and model availability depend on your account. Hosted adapters require API-key authentication. Azure OpenAI and Vertex AI are not configured by this interface.
 
-The OpenAI adapter uses Chat Completions. Gemini tool-call signatures are retained across turns within a run. Provider metadata cannot be reused with another provider. Transient failures are retried by the provider SDK with backoff (`maxRetries`, default 2). Aborted runs are never retried; remaining failures return through the runtime's error contract.
+The OpenAI adapter uses Chat Completions. The default `gpt-6-luna` supports function calling there only with reasoning disabled, so Yada sends `reasoning_effort: none` when you use the default model; set your own `model` to avoid this. Gemini tool-call signatures are retained across turns within a run. Provider metadata cannot be reused with another provider. Transient failures are retried by the provider SDK with backoff (`maxRetries`, default 2). Aborted runs are never retried; remaining failures return through the runtime's error contract.
 
 Model references: [OpenAI GPT-4.1 mini](https://developers.openai.com/api/docs/models/gpt-6-luna) and [Google Gemini 3.8 Flash](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash).
 
@@ -94,17 +94,20 @@ All providers accept these optional settings. `baseUrl` must be an `http(s)` URL
 | `baseUrl` / `YADA_LLM_BASE_URL`        | provider default                  | Override the API endpoint (proxy, gateway, region). |
 | `headers` (code only)                  | none                              | Extra HTTP headers as a record of strings.          |
 
-## Anthropic extended thinking
+## Anthropic effort and thinking
+
+Claude 5 models think adaptively by default. Control depth with `effort` (`YADA_LLM_EFFORT`), sent as `output_config.effort`, and optionally choose how thinking is returned with `thinkingDisplay`, sent as `thinking: { type: "adaptive", display }`.
 
 ```ts
 createProvider({
   provider: "anthropic",
   apiKey: secretFromYourServer,
-  thinking: { budgetTokens: 2048 },
+  effort: "high", // low | medium | high | xhigh | max
+  thinkingDisplay: "summarized", // or "omitted"
 });
 ```
 
-`budgetTokens` must be at least 1024 and below `maxTokens`. Thinking and redacted thinking blocks are kept in provider metadata and sent back unchanged on later tool rounds, as Anthropic requires. Newer Claude models that only support adaptive thinking reject this setting. `thinking` is accepted only for `anthropic`.
+Thinking and redacted thinking blocks are kept in provider metadata and sent back unchanged on later tool rounds, as Anthropic requires. `effort` and `thinkingDisplay` are accepted only for `anthropic`. `temperature` is rejected for `anthropic` because the Messages API no longer accepts it.
 
 ## OpenAI-compatible endpoints
 

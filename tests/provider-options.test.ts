@@ -26,6 +26,15 @@ it("reads tuning and endpoint settings for hosted providers", () => {
     maxRetries: 0,
   });
 });
+it("reads effort for anthropic", () => {
+  expect(
+    providerConfigFromEnv({
+      YADA_LLM_PROVIDER: "anthropic",
+      YADA_LLM_API_KEY: "key",
+      YADA_LLM_EFFORT: "xhigh",
+    }),
+  ).toEqual({ provider: "anthropic", apiKey: "key", effort: "xhigh" });
+});
 it("reads openai-compatible settings without an api key", () => {
   expect(
     providerConfigFromEnv({
@@ -48,6 +57,9 @@ it.each([
   { YADA_LLM_TEMPERATURE: "3" },
   { YADA_LLM_MAX_RETRIES: "11" },
   { YADA_LLM_MAX_RETRIES: "-1" },
+  { YADA_LLM_EFFORT: "high" },
+  { YADA_LLM_PROVIDER: "anthropic", YADA_LLM_TEMPERATURE: "0.5" },
+  { YADA_LLM_PROVIDER: "anthropic", YADA_LLM_EFFORT: "nope" },
   { YADA_LLM_BASE_URL: "ftp://example.com" },
   { YADA_LLM_BASE_URL: "https://user:pass@example.com/v1" },
   { YADA_LLM_BASE_URL: "https://example.com/v1?key=1" },
@@ -60,8 +72,11 @@ it.each([
   { provider: "openai-compatible", model: "m" },
   { provider: "openai-compatible", baseUrl: "http://localhost:1/v1" },
   { provider: "openai", apiKey: "k", headers: { a: 1 } },
-  { provider: "openai", apiKey: "k", thinking: { budgetTokens: 2048 } },
-  { provider: "anthropic", apiKey: "k", thinking: { budgetTokens: 10 } },
+  { provider: "openai", apiKey: "k", effort: "high" },
+  { provider: "openai", apiKey: "k", thinkingDisplay: "omitted" },
+  { provider: "anthropic", apiKey: "k", effort: "extreme" },
+  { provider: "anthropic", apiKey: "k", thinkingDisplay: "full" },
+  { provider: "anthropic", apiKey: "k", temperature: 0.5 },
   { provider: "ollama", model: "m", maxRetries: 99 },
 ])("rejects invalid config %o", (config) => {
   expect(() => createProvider(config as never)).toThrow(
@@ -214,10 +229,10 @@ it("retries transient failures and stops when aborted", async () => {
   ).rejects.toThrow();
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
-it("round trips Anthropic thinking blocks through a tool loop", async () => {
+it("round trips Claude 5 thinking blocks and sends effort through a tool loop", async () => {
   const bodies: Record<string, unknown>[] = [];
   const urls: string[] = [];
-  const thinking = { type: "thinking", thinking: "plan", signature: "sig" };
+  const thinking = { type: "thinking", thinking: "", signature: "sig" };
   const redacted = { type: "redacted_thinking", data: "opaque" };
   vi.stubGlobal(
     "fetch",
@@ -255,15 +270,18 @@ it("round trips Anthropic thinking blocks through a tool loop", async () => {
       apiKey: "k",
       model: "claude-test",
       baseUrl: "https://claude.example.com",
-      thinking: { budgetTokens: 2048 },
+      effort: "high",
+      thinkingDisplay: "summarized",
     }),
   );
   expect(result).toEqual({ status: "completed", text: "Available" });
   expect(urls[0]).toBe("https://claude.example.com/v1/messages");
   expect(bodies[0]).toMatchObject({
     max_tokens: 8192,
-    thinking: { type: "enabled", budget_tokens: 2048 },
+    output_config: { effort: "high" },
+    thinking: { type: "adaptive", display: "summarized" },
   });
+  expect(bodies[0]).not.toHaveProperty("temperature");
   const assistant = (
     bodies[1]?.["messages"] as { role: string; content: { type: string }[] }[]
   ).find((message) => message.role === "assistant");
@@ -273,5 +291,47 @@ it("round trips Anthropic thinking blocks through a tool loop", async () => {
     "text",
     "tool_use",
   ]);
-  expect(assistant?.content[0]).toMatchObject({ signature: "sig" });
+  expect(assistant?.content[0]).toMatchObject({
+    thinking: "",
+    signature: "sig",
+  });
+});
+it("uses the documented OpenAI default with reasoning disabled", async () => {
+  const bodies: Record<string, unknown>[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(init.body as string) as Record<string, unknown>);
+      return json({
+        id: "c",
+        object: "chat.completion",
+        created: 1,
+        model: "m",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "stop",
+            message: { role: "assistant", content: "Hello" },
+          },
+        ],
+      });
+    }),
+  );
+  const request = {
+    system: "s",
+    messages: [],
+    tools: [],
+    signal: AbortSignal.timeout(5000),
+  };
+  await createProvider({ provider: "openai", apiKey: "k" }).complete(request);
+  await createProvider({
+    provider: "openai",
+    apiKey: "k",
+    model: "x",
+  }).complete(request);
+  expect(bodies[0]).toMatchObject({
+    model: "gpt-6-luna",
+    reasoning_effort: "none",
+  });
+  expect(bodies[1]).not.toHaveProperty("reasoning_effort");
 });

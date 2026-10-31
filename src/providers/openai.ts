@@ -35,8 +35,9 @@ export function openAIChat(
 }
 export function createOpenAIProvider(config: ModelOptions) {
   const options = modelOptions.parse(config);
-  return openAIChat("openai", {
-    ...options,
-    model: options.model ?? "gpt-6-luna",
-  });
+  return openAIChat(
+    "openai",
+    { ...options, model: options.model ?? "gpt-6-luna" },
+    options.model ? {} : { modelKwargs: { reasoning_effort: "none" } },
+  );
 }
