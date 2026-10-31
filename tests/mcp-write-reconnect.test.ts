@@ -49,7 +49,9 @@ it("reconnects all write phases and preserves their approved policy version", as
       },
     ),
   ).toBe("receipt-1");
-  expect(await tool.reconcile("operation-1", owner, signal())).toBeUndefined();
+  expect(
+    await tool.reconcile?.("operation-1", owner, signal()),
+  ).toBeUndefined();
   expect(tool.effect).toBe("write");
   expect(tool.version).toBe(version);
   expect(factory).toHaveBeenCalledTimes(2);
@@ -59,9 +61,9 @@ it("reconnects all write phases and preserves their approved policy version", as
     "receipt",
   ]);
   second.authorize.mockResolvedValue(false);
-  await expect(tool.reconcile("operation-1", owner, signal())).rejects.toThrow(
-    "denied",
-  );
+  await expect(
+    tool.reconcile?.("operation-1", owner, signal()),
+  ).rejects.toThrow("denied");
   expect(second.calls).toHaveBeenCalledTimes(3);
 });
 it.each(["effect", "version", "schema"])(
@@ -98,7 +100,7 @@ it.each(["effect", "version", "schema"])(
     cleanups.push(() => connection.close());
     await original.close();
     await expect(
-      mutation(connection).reconcile("operation-1", owner, signal()),
+      mutation(connection).reconcile?.("operation-1", owner, signal()),
     ).rejects.toThrow("discovery changed");
     expect(next.isConnected?.()).toBe(false);
     expect(second.calls).not.toHaveBeenCalled();
@@ -131,7 +133,9 @@ it("never retries an uncertain execute packet and reconnects only to look up the
       },
     ),
   ).rejects.toThrow("MCP request failed");
-  expect(await tool.reconcile("operation-1", owner, signal())).toBeUndefined();
+  expect(
+    await tool.reconcile?.("operation-1", owner, signal()),
+  ).toBeUndefined();
   expect(first.calls.mock.calls.map(([request]) => request.name)).toEqual([
     "change",
   ]);

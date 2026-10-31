@@ -47,7 +47,9 @@ it("hides helpers and forwards only owned operation metadata outside model argum
     version: "state-1",
   });
   expect(await tool.execute({ value: "Ada" }, context())).toBe("receipt-1");
-  expect(await tool.reconcile("operation-1", owner, signal())).toBeUndefined();
+  expect(
+    await tool.reconcile?.("operation-1", owner, signal()),
+  ).toBeUndefined();
   expect(s.calls.mock.calls.map(([request]) => request)).toEqual([
     {
       name: "preview",
@@ -134,7 +136,7 @@ it.each(["preview", "receipt"])(
     await expect(
       helper === "preview"
         ? tool.prepare({ value: "Ada" }, owner, signal())
-        : tool.reconcile("operation-1", owner, signal()),
+        : tool.reconcile?.("operation-1", owner, signal()),
     ).rejects.toThrow("denied");
     expect(s.calls).not.toHaveBeenCalled();
   },
@@ -168,7 +170,7 @@ it.each(["prepare", "execute", "reconcile"] as const)(
               { value: "Ada" },
               { ...context(), identity, signal: abort },
             )
-          : tool.reconcile("operation-1", identity, abort);
+          : tool.reconcile?.("operation-1", identity, abort);
     await expect(invoke({ ...owner, actorId: "other" })).rejects.toThrow(
       "denied",
     );
@@ -220,7 +222,7 @@ it.each([
         ? tool.prepare({ value: "Ada" }, owner, signal())
         : phase === "execute"
           ? tool.execute({ value: "Ada" }, context())
-          : tool.reconcile("operation-1", owner, signal()),
+          : tool.reconcile?.("operation-1", owner, signal()),
     ).rejects.toThrow();
   },
 );
@@ -267,7 +269,7 @@ it("validates helper schemas and trusted operation identifiers before any remote
   await expect(
     tool.execute({ value: "Ada" }, { ...context(), version: "" }),
   ).rejects.toThrow();
-  await expect(tool.reconcile("", owner, signal())).rejects.toThrow();
+  await expect(tool.reconcile?.("", owner, signal())).rejects.toThrow();
   expect(s.calls).not.toHaveBeenCalled();
   const tools = withoutOutputSchemas();
   const prepare = tools.find((item) => item.name === "preview");

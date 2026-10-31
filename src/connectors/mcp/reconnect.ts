@@ -93,10 +93,14 @@ export async function reconnectingMcp(
           invoke(context.identity, context.signal, () =>
             write().execute(args, context),
           ),
-        reconcile: (id, identity, callSignal) =>
-          invoke(identity, callSignal, () =>
-            write().reconcile(id, identity, callSignal),
-          ),
+        ...(original.reconcile
+          ? {
+              reconcile: (id, identity, callSignal) =>
+                invoke(identity, callSignal, async () =>
+                  write().reconcile?.(id, identity, callSignal),
+                ),
+            }
+          : {}),
       };
     }
     return {
