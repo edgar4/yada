@@ -92,13 +92,22 @@ export function createHandler(options: {
         if (request.method !== "POST" || !match[3].endsWith("/decision"))
           return json({ error: "Method not allowed" }, 405);
         const decision = z
-          .strictObject({ approved: z.boolean() })
+          .strictObject({
+            approved: z.boolean(),
+            remember: z.enum(["run", "conversation"]).optional(),
+          })
           .parse(await readJson(request));
-        await options.storage.actions.decide(
+        const decided = await options.storage.actions.decide(
           identity,
           approvalId,
           decision.approved,
         );
+        if (decision.remember && decided.status === "approved")
+          await options.storage.actions.remember(
+            identity,
+            decided,
+            decision.remember,
+          );
         await options.storage.jobs.update(identity, conversationId, id, {
           type: "queued",
         });

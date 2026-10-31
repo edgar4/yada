@@ -19,6 +19,7 @@ export type AgentProfile = Readonly<{
   system: string;
   limits?: RunLimits;
   historyChars?: number;
+  approvalTtlMs?: number;
   maxRounds?: number;
   maxToolCalls?: number;
   timeoutMs?: number;
@@ -115,7 +116,12 @@ export function createWorker(options: {
       };
       const result = await runDurable({
         ...profile,
-        executeWrite: actionExecutor(options.storage.actions, identity, runId),
+        executeWrite: actionExecutor(
+          options.storage.actions,
+          identity,
+          runId,
+          profile.approvalTtlMs,
+        ),
         history: contextWindow(history, profile.historyChars ?? 32_000),
         input: job.input,
         identity,

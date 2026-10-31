@@ -59,6 +59,8 @@ export type {
   Preparation,
   Suspension,
 } from "./core/action.js";
+export { confirmTool, applyToolPolicy } from "./core/policy.js";
+export type { ToolPolicy } from "./core/policy.js";
 export { actionExecutor } from "./service/actions.js";
 export type { Job, JobInput, RunEvent } from "./service/contracts.js";
 export type { JobStore } from "./storage/jobs.js";

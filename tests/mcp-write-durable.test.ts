@@ -183,7 +183,7 @@ for (const driver of drivers)
         { ...s.fixture.identity, tenantId: "another" },
       ])
         await expect(
-          write(connection).reconcile(
+          write(connection).reconcile?.(
             "operation",
             other,
             AbortSignal.timeout(5000),
