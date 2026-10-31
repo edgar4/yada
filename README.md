@@ -14,7 +14,18 @@ npm install @edgaralochi/yada
 
 Import the runtime from `@edgaralochi/yada`, the browser client from `@edgaralochi/yada/client`, and the widget from `@edgaralochi/yada/widget`. Released under the [MIT license](LICENSE).
 
-## Quick start
+## Create an assistant
+
+With Node 24, generate a standalone app and install its dependencies:
+
+```sh
+npx @edgaralochi/yada init my-assistant
+cd my-assistant
+```
+
+Set your provider credentials in `.env.starter`, then run `npm start`. The initializer provides SQLite storage, a skills folder, typed tools and the chat widget. See the [starter guide](docs/starter.md).
+
+## Develop from source
 
 Use Node 24:
 
