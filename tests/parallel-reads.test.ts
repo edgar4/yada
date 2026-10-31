@@ -169,3 +169,42 @@ describe("parallel reads", () => {
     expect(s.log).not.toContain("end a");
   });
 });
+it("finishes a denied call only after earlier parallel reads are committed", async () => {
+  let allowed = true;
+  const slow = readTool({
+    name: "slow",
+    description: "slow",
+    input: z.strictObject({}),
+    authorize: () => Promise.resolve(true),
+    execute: () =>
+      new Promise((resolve) => setTimeout(() => resolve("ok"), 20)),
+  });
+  const revoked = readTool({
+    name: "revoked",
+    description: "revoked",
+    input: z.strictObject({}),
+    authorize: () => Promise.resolve(allowed),
+    execute: () => Promise.resolve("never"),
+  });
+  const saves: RunCheckpoint[] = [];
+  const result = await run({
+    provider: createFakeProvider(() => {
+      allowed = false;
+      return batch(["1", "slow"], ["2", "revoked"]);
+    }),
+    tools: [slow, revoked],
+    identity: { actorId: "a", tenantId: "t" },
+    input: "go",
+    system: "s",
+    signal: AbortSignal.timeout(1000),
+    persist: (checkpoint) => {
+      saves.push(checkpoint);
+      return Promise.resolve();
+    },
+  });
+  expect(result).toEqual({ status: "failed", code: "tool_denied" });
+  const last = saves.at(-1);
+  expect(last?.outcome).toEqual(result);
+  expect(last?.messages.at(-1)).toMatchObject({ role: "tool", content: "ok" });
+  expect(saves.filter((save) => save.outcome)).toHaveLength(1);
+});

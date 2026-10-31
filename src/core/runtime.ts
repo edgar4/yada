@@ -53,7 +53,10 @@ type Loop = {
   finish: (result: TerminalResult) => Promise<RunResult>;
   emit: (event: AgentEvent) => void;
 };
-type ToolOutcome = { content: string; failed: boolean } | { stop: RunResult };
+type ToolOutcome =
+  | { content: string; failed: boolean }
+  | { stop: RunResult }
+  | { terminal: TerminalResult };
 export async function run(options: RunOptions): Promise<RunResult> {
   const { provider, signal, hooks } = options;
   const limits = limitsSchema.parse(options.limits ?? {});
@@ -216,7 +219,7 @@ async function executeGroup(
         inner.signal.throwIfAborted();
         loop.emit({ type: "tool_started", call });
         const outcome = await executeCall(inner, call);
-        if ("stop" in outcome) {
+        if (!("content" in outcome)) {
           slot.resolve(outcome);
           continue;
         }
@@ -239,6 +242,7 @@ async function executeGroup(
       if (!outcome) break;
       loop.signal.throwIfAborted();
       if ("stop" in outcome) return outcome.stop;
+      if ("terminal" in outcome) return await loop.finish(outcome.terminal);
       const { content, failed } = outcome;
       state.messages.push({
         role: "tool",
@@ -265,9 +269,7 @@ async function executeGroup(
 }
 async function executeCall(loop: Loop, call: ToolCall): Promise<ToolOutcome> {
   const { options, signal, identity } = loop;
-  const stop = async (result: TerminalResult) => ({
-    stop: await loop.finish(result),
-  });
+  const stop = (result: TerminalResult) => ({ terminal: result });
   const tool = loop.visible.find((item) => item.spec.name === call.name);
   if (!tool && loop.tools.has(call.name) && !loop.fresh.has(call.id))
     return stop({ status: "failed", code: "tool_denied" });
