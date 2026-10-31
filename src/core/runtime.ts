@@ -1,19 +1,26 @@
 import { limitsSchema, type RunLimits } from "./limits.js";
 import type { ActionExecutor } from "./action.js";
 import { abortable } from "./abort.js";
+import { InvalidArguments } from "./tool.js";
 import {
   checkpointSchema,
   CheckpointError,
   type RunCheckpoint,
 } from "./checkpoint.js";
+import type { Suspension } from "./action.js";
 import type {
   Identity,
   ProviderAdapter,
   Tool,
+  ToolCall,
   TerminalResult,
   RunResult,
   Turn,
 } from "./contracts.js";
+const maxFailures = 3;
+const maxToolOutput = 32_000;
+const toolError = (error: string, message: string) =>
+  JSON.stringify({ error, message });
 export async function run(options: {
   provider: ProviderAdapter;
   tools: readonly Tool[];
@@ -84,6 +91,7 @@ export async function run(options: {
         : [],
     ),
   );
+  const fresh = new Set<string>();
   try {
     signal.throwIfAborted();
     const visible: Tool[] = [];
@@ -93,28 +101,51 @@ export async function run(options: {
     if (visible.length && !provider.capabilities.toolCalling)
       return await finish({ status: "failed", code: "unsupported" });
     for (;;) {
+      if ((state.failures ?? 0) >= maxFailures)
+        return await finish({ status: "failed", code: "dependency_failed" });
       for (const call of [...state.pending]) {
         signal.throwIfAborted();
         const tool = visible.find((item) => item.spec.name === call.name);
-        if (!tool || !(await abortable(() => tool.authorize(identity), signal)))
+        let content: string | Suspension;
+        let failed = false;
+        if (!tool && tools.has(call.name) && !fresh.has(call.id))
           return await finish({ status: "failed", code: "tool_denied" });
-        signal.throwIfAborted();
-        if (tool.effect === "write" && !options.executeWrite)
-          return await finish({ status: "failed", code: "unsupported" });
-        const executeWrite = options.executeWrite;
-        const content =
-          tool.effect === "read"
-            ? await abortable(
+        if (!tool) {
+          failed = true;
+          content = toolError(
+            "unknown_tool",
+            `Tool "${call.name}" is not available`,
+          );
+        } else {
+          if (!(await abortable(() => tool.authorize(identity), signal)))
+            return await finish({ status: "failed", code: "tool_denied" });
+          signal.throwIfAborted();
+          if (tool.effect === "write" && !options.executeWrite)
+            return await finish({ status: "failed", code: "unsupported" });
+          const executeWrite = options.executeWrite;
+          if (tool.effect === "read") {
+            try {
+              content = await abortable(
                 () => tool.execute(call.args, identity, signal),
                 signal,
-              )
-            : executeWrite
+              );
+            } catch (error) {
+              signal.throwIfAborted();
+              failed = true;
+              content =
+                error instanceof InvalidArguments
+                  ? toolError("invalid_arguments", error.message)
+                  : toolError("tool_failed", "The tool failed");
+            }
+          } else
+            content = executeWrite
               ? await executeWrite(tool, call, signal)
               : "";
+        }
         if (typeof content !== "string") return content;
         signal.throwIfAborted();
-        if (content.length > 32_000)
-          return await finish({ status: "failed", code: "invalid_response" });
+        if (content.length > maxToolOutput)
+          content = `${content.slice(0, maxToolOutput)}…[truncated ${String(content.length - maxToolOutput)} chars]`;
         state.messages.push({
           role: "tool",
           toolCallId: call.id,
@@ -122,8 +153,11 @@ export async function run(options: {
           content,
         });
         state.calls++;
+        state.failures = failed ? (state.failures ?? 0) + 1 : 0;
         state.pending.shift();
         await save();
+        if (state.failures >= maxFailures)
+          return await finish({ status: "failed", code: "dependency_failed" });
       }
       if (state.rounds >= rounds)
         return await finish({ status: "failed", code: "limit" });
@@ -164,32 +198,51 @@ export async function run(options: {
           outputTokens:
             (state.usage?.outputTokens ?? 0) + result.usage.outputTokens,
         };
+      if (result.finishReason === "refusal")
+        return await finish({ status: "failed", code: "refused" });
       if (result.finishReason === "length" || result.finishReason === "other")
         return await finish({ status: "failed", code: "invalid_response" });
-      if (!result.toolCalls.length)
+      if (!result.toolCalls.length) {
+        const text =
+          result.finishReason === "stop"
+            ? result.content.trim()
+              ? result.content
+              : lastAssistantText(state.messages)
+            : undefined;
         return await finish(
-          result.finishReason === "stop" && result.content.trim()
-            ? { status: "completed", text: result.content }
+          text
+            ? { status: "completed", text }
             : { status: "failed", code: "invalid_response" },
         );
+      }
       if (result.finishReason !== "tool_calls")
         return await finish({ status: "failed", code: "invalid_response" });
       if (state.calls + result.toolCalls.length > callLimit)
         return await finish({ status: "failed", code: "limit" });
+      const seen = new Set<string>();
+      const calls: ToolCall[] = [];
       for (const call of result.toolCalls) {
-        if (!call.id || ids.has(call.id))
+        if (!call.id || seen.has(call.id))
           return await finish({ status: "failed", code: "invalid_response" });
-        ids.add(call.id);
+        seen.add(call.id);
+        const id = ids.has(call.id)
+          ? `${call.id}~${String(state.rounds)}`
+          : call.id;
+        if (ids.has(id))
+          return await finish({ status: "failed", code: "invalid_response" });
+        ids.add(id);
+        fresh.add(id);
+        calls.push({ ...call, id });
       }
       state.messages.push({
         role: "assistant",
         content: result.content,
-        toolCalls: [...result.toolCalls],
+        toolCalls: calls,
         ...(result.providerMetadata
           ? { providerMetadata: result.providerMetadata }
           : {}),
       });
-      state.pending = [...result.toolCalls];
+      state.pending = [...calls];
       await save();
     }
   } catch (error) {
@@ -200,4 +253,15 @@ export async function run(options: {
         : { status: "failed", code: "dependency_failed" },
     );
   }
+}
+function lastAssistantText(messages: readonly Turn[]): string | undefined {
+  let used = false;
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const turn = messages[index];
+    if (turn?.role === "user") break;
+    if (turn?.role === "tool") used = true;
+    else if (turn?.role === "assistant" && turn.content.trim() && used)
+      return turn.content;
+  }
+  return undefined;
 }

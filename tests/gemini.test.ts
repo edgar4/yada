@@ -111,7 +111,7 @@ it.each(["MAX_TOKENS", "SAFETY", "RECITATION"])(
       signal: new AbortController().signal,
     });
     expect(result.finishReason).toBe(
-      finishReason === "MAX_TOKENS" ? "length" : "other",
+      finishReason === "MAX_TOKENS" ? "length" : "refusal",
     );
   },
 );
