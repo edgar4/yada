@@ -38,7 +38,9 @@ Backups and external backend operation receipts have independent retention polic
 
 ## Telemetry and recovery
 
-Worker `trace` callbacks report lifecycle outcomes and elapsed milliseconds without prompts, tokens, actor IDs, or arguments. Send these to your metrics system; use host-owned request correlation if needed. Protect detailed checkpoint inspection as privileged access.
+Worker `trace` callbacks report lifecycle outcomes, attempt number, failure code and elapsed milliseconds without prompts, tokens, actor IDs, or arguments. Send these to your metrics system; use host-owned request correlation if needed. Protect detailed checkpoint inspection as privileged access.
+
+Workers discover jobs through a small `job_queue` index of conversations with unfinished jobs, so polling cost scales with active conversations, not total history. A missing index (for example in a database from an earlier version) is rebuilt automatically from a single full scan, and stale entries are dropped on read. Backups include the index.
 
 Trace callback failures do not interrupt workers. Job status updates are fenced by the current run lease in the same database transaction, so an expired worker cannot overwrite a newer worker's approval state. Repetitive progress events are capped; approval and terminal events remain deliverable.
 

@@ -13,7 +13,7 @@ import {
   identitySchema,
   messageSchema,
 } from "./conversations.js";
-import type { recordStore } from "./records.js";
+import { StorageConflict, type recordStore } from "./records.js";
 import { withRunLease, RunLeaseError, type RunOwnership } from "./runs.js";
 const stateSchema = z.object({
   identity: identitySchema,
@@ -23,6 +23,11 @@ const stateSchema = z.object({
   retiredRuns: z.array(z.string()).default([]),
   purgeRuns: z.array(z.string()).default([]),
   jobs: z.array(jobSchema),
+});
+const queueKey = JSON.stringify(["job_queue"]);
+const queueSchema = z.object({
+  complete: z.boolean(),
+  keys: z.array(z.string()),
 });
 export class JobConflict extends Error {
   constructor() {
@@ -50,6 +55,7 @@ export interface JobStore {
     outcome?: TerminalResult,
     lease?: RunOwnership,
   ): Promise<Job>;
+  retry(identity: Identity, conversationId: string, id: string): Promise<Job>;
   cancel(identity: Identity, conversationId: string, id: string): Promise<void>;
   pending(after?: string): Promise<{
     cursor: string;
@@ -68,6 +74,63 @@ export function createJobStore(
     value === undefined || Array.isArray(value)
       ? stateSchema.parse({ identity, id, messages: value ?? [], jobs: [] })
       : stateSchema.parse(value);
+  const hasActive = (value: unknown) =>
+    !Array.isArray(value) &&
+    value !== undefined &&
+    stateSchema.parse(value).jobs.some((job) => !isTerminal(job.status));
+  const track = (key: string) =>
+    records.mutate(queueKey, (value) => {
+      const queue = value
+        ? queueSchema.parse(value)
+        : { complete: false, keys: [] };
+      return {
+        value: queue.keys.includes(key)
+          ? queue
+          : { ...queue, keys: [...queue.keys, key] },
+        result: undefined,
+      };
+    });
+  async function untrack(key: string) {
+    for (let attempt = 0; attempt < 20; attempt++) {
+      try {
+        await records.transaction(async (tx) => {
+          const row = await tx.read(queueKey);
+          if (!row) return;
+          const queue = queueSchema.parse(row.value);
+          if (!queue.keys.includes(key)) return;
+          if (hasActive((await tx.read(key))?.value)) return;
+          await tx.write(
+            queueKey,
+            { ...queue, keys: queue.keys.filter((item) => item !== key) },
+            row.revision,
+          );
+        });
+        return;
+      } catch (error) {
+        if (!(error instanceof StorageConflict)) throw error;
+      }
+    }
+  }
+  async function backfill() {
+    const keys: string[] = [];
+    for (let after = ""; ;) {
+      const rows = await records.scan("conversation", after);
+      if (!rows.length) break;
+      after = rows[rows.length - 1]?.id ?? "";
+      for (const row of rows)
+        if (hasActive(row.value)) {
+          const state = stateSchema.parse(row.value);
+          keys.push(conversationKey(state.identity, state.id));
+        }
+    }
+    await records.mutate(queueKey, (value) => {
+      const queue = value ? queueSchema.parse(value) : { keys: [] };
+      return {
+        value: { complete: true, keys: [...new Set([...queue.keys, ...keys])] },
+        result: undefined,
+      };
+    });
+  }
   const append = (
     job: Job,
     event: Omit<RunEvent, "version" | "sequence" | "at">,
@@ -106,41 +169,80 @@ export function createJobStore(
       at: job.updatedAt,
     });
   };
+  const apply: JobStore["update"] = (
+    identity,
+    conversationId,
+    id,
+    event,
+    outcome,
+    lease,
+  ) => {
+    const key = conversationKey(identity, conversationId);
+    const change = (value: unknown) => {
+      const state = stateFrom(value, identity, conversationId);
+      const job = state.jobs.find((item) => item.id === id);
+      if (!job) throw new Error("Run not found");
+      if (isTerminal(job.status)) return { value: state, result: job };
+      append(job, event);
+      if (outcome) {
+        if (outcome.status !== event.type)
+          throw new Error("Outcome status mismatch");
+        job.outcome = outcome;
+        if (outcome.status === "completed")
+          state.messages.push(
+            { role: "user", content: job.input },
+            { role: "assistant", content: outcome.text },
+          );
+      }
+      return { value: state, result: job };
+    };
+    if (!lease) return records.mutate(key, change);
+    if (lease.runId !== JSON.stringify([conversationId, id]))
+      return Promise.reject(new RunLeaseError());
+    return withRunLease(records, identity, lease, async (tx, assertOwned) => {
+      const conversation = await tx.read(key);
+      const next = change(conversation?.value);
+      assertOwned();
+      await tx.write(key, next.value, conversation?.revision ?? 0);
+      return next.result;
+    });
+  };
   return {
-    submit: (identity, conversationId, input) => {
+    submit: async (identity, conversationId, input) => {
       const parsed = jobInputSchema.parse(input);
-      return records.mutate(
-        conversationKey(identity, conversationId),
-        (value) => {
-          const state = stateFrom(value, identity, conversationId);
-          if (state.deleted) throw new Error("Conversation erased");
-          if (state.retiredRuns.includes(parsed.id)) throw new JobConflict();
-          const existing = state.jobs.find((job) => job.id === parsed.id);
-          if (existing) {
-            if (
-              existing.input !== parsed.input ||
-              existing.profileId !== parsed.profileId
-            )
-              throw new JobConflict();
-            return { value: state, result: existing };
-          }
-          if (state.jobs.some((job) => !isTerminal(job.status)))
+      const key = conversationKey(identity, conversationId);
+      const job = await records.mutate(key, (value) => {
+        const state = stateFrom(value, identity, conversationId);
+        if (state.deleted) throw new Error("Conversation erased");
+        if (state.retiredRuns.includes(parsed.id)) throw new JobConflict();
+        const existing = state.jobs.find((job) => job.id === parsed.id);
+        if (existing) {
+          if (
+            existing.input !== parsed.input ||
+            existing.profileId !== parsed.profileId
+          )
             throw new JobConflict();
-          const job: Job = {
-            ...parsed,
-            availableAt: 0,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            status: "queued",
-            cancelRequested: false,
-            history: state.messages,
-            events: [],
-          };
-          append(job, { type: "queued" });
-          state.jobs.push(job);
-          return { value: state, result: job };
-        },
-      );
+          return { value: state, result: existing };
+        }
+        if (state.jobs.some((job) => !isTerminal(job.status)))
+          throw new JobConflict();
+        const job: Job = {
+          ...parsed,
+          availableAt: 0,
+          attempts: 0,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          status: "queued",
+          cancelRequested: false,
+          history: state.messages,
+          events: [],
+        };
+        append(job, { type: "queued" });
+        state.jobs.push(job);
+        return { value: state, result: job };
+      });
+      if (!isTerminal(job.status)) await track(key);
+      return job;
     },
     async load(identity, conversationId, id) {
       const record = await records.read(
@@ -152,37 +254,35 @@ export function createJobStore(
           )
         : undefined;
     },
-    update: (identity, conversationId, id, event, outcome, lease) => {
-      const key = conversationKey(identity, conversationId);
-      const change = (value: unknown) => {
+    update: async (identity, conversationId, id, event, outcome, lease) => {
+      const job = await apply(
+        identity,
+        conversationId,
+        id,
+        event,
+        outcome,
+        lease,
+      );
+      if (isTerminal(job.status))
+        await untrack(conversationKey(identity, conversationId)).catch(
+          () => undefined,
+        );
+      return job;
+    },
+    retry: (identity, conversationId, id) =>
+      records.mutate(conversationKey(identity, conversationId), (value) => {
         const state = stateFrom(value, identity, conversationId);
         const job = state.jobs.find((item) => item.id === id);
         if (!job) throw new Error("Run not found");
-        if (isTerminal(job.status)) return { value: state, result: job };
-        append(job, event);
-        if (outcome) {
-          if (outcome.status !== event.type)
-            throw new Error("Outcome status mismatch");
-          job.outcome = outcome;
-          if (outcome.status === "completed")
-            state.messages.push(
-              { role: "user", content: job.input },
-              { role: "assistant", content: outcome.text },
-            );
+        if (!isTerminal(job.status)) {
+          job.attempts += 1;
+          job.availableAt =
+            Date.now() +
+            Math.min(2 ** job.attempts * 1000, 60_000) *
+              (0.5 + Math.random() / 2);
         }
         return { value: state, result: job };
-      };
-      if (!lease) return records.mutate(key, change);
-      if (lease.runId !== JSON.stringify([conversationId, id]))
-        return Promise.reject(new RunLeaseError());
-      return withRunLease(records, identity, lease, async (tx, assertOwned) => {
-        const conversation = await tx.read(key);
-        const next = change(conversation?.value);
-        assertOwned();
-        await tx.write(key, next.value, conversation?.revision ?? 0);
-        return next.result;
-      });
-    },
+      }),
     async cancel(identity, conversationId, id) {
       await records.mutate(
         conversationKey(identity, conversationId),
@@ -196,24 +296,42 @@ export function createJobStore(
       );
     },
     async pending(after = "") {
-      const rows = await records.scan("conversation", after);
-      return {
-        cursor: rows.at(-1)?.id ?? "",
-        jobs: rows.flatMap((row) => {
-          if (Array.isArray(row.value)) return [];
-          const state = stateSchema.parse(row.value);
-          return state.jobs
-            .filter(
-              (job) =>
-                !isTerminal(job.status) &&
-                (job.availableAt <= Date.now() || job.cancelRequested),
-            )
-            .map((job) => ({
+      let row = await records.read(queueKey);
+      if (!row || !queueSchema.parse(row.value).complete) {
+        await backfill();
+        row = await records.read(queueKey);
+      }
+      const keys = queueSchema
+        .parse(row?.value)
+        .keys.filter((key) => key > after)
+        .sort()
+        .slice(0, 100);
+      const jobs: {
+        identity: Identity;
+        conversationId: string;
+        job: Job;
+      }[] = [];
+      for (const key of keys) {
+        const record = await records.read(key);
+        if (!hasActive(record?.value)) {
+          await untrack(key);
+          continue;
+        }
+        const state = stateSchema.parse(record?.value);
+        for (const job of state.jobs)
+          if (
+            !isTerminal(job.status) &&
+            (job.availableAt <= Date.now() || job.cancelRequested)
+          )
+            jobs.push({
               identity: state.identity,
               conversationId: state.id,
               job,
-            }));
-        }),
+            });
+      }
+      return {
+        cursor: keys.at(-1) ?? "",
+        jobs,
       };
     },
     prune: (identity, conversationId, before) =>
