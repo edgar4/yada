@@ -183,4 +183,38 @@ for (const driver of drivers)
         await app.close();
       }
     });
+    it("runs in the shared workspace without a password or cookie", async () => {
+      const fixture = await storageFixture(driver);
+      const app = await createStarterApp({
+        config: { ...config, password: "", storage: fixture.config },
+        storage: fixture.storage,
+        assets,
+        provider: createFakeProvider(() => ({
+          content: "Ready",
+          toolCalls: [],
+          finishReason: "stop",
+        })),
+      });
+      try {
+        const response = await app.handle(
+          new Request(origin + "/v1/conversations/open/runs", {
+            method: "POST",
+            headers: { origin, "content-type": "application/json" },
+            body: JSON.stringify({
+              id: "open",
+              profileId: "starter",
+              input: "Hello",
+            }),
+          }),
+        );
+        expect(response.status).toBe(202);
+        await app.worker.tick();
+        expect(
+          (await fixture.storage.jobs.load(starterIdentity, "open", "open"))
+            ?.status,
+        ).toBe("completed");
+      } finally {
+        await app.close();
+      }
+    });
   });

@@ -1,12 +1,12 @@
 ---
 layout: doc
 title: "Starter app"
-description: "Run a complete Yada assistant with a real model provider, password authentication, encrypted storage, scoped tools and the browser widget."
+description: "Run a complete Yada assistant with a real model provider, optional password protection, encrypted storage, scoped tools and the browser widget."
 ---
 
 # Starter app
 
-The starter is a complete, project-independent assistant for one authenticated workspace. It combines Yada's provider adapters, durable worker, encrypted storage, typed tools and browser widget. It runs on Node 24.
+The starter is a complete, project-independent assistant for one shared workspace. It combines Yada's provider adapters, durable worker, encrypted storage, typed tools and browser widget. It runs on Node 24.
 
 ## Run it
 
@@ -29,29 +29,31 @@ Then run:
 npm run starter
 ```
 
-Open `http://localhost:3000` and sign in with `YADA_STARTER_PASSWORD` from `.env.starter`. Ask “What time is it?” or “How do I configure this starter?” to exercise its tools. Provider calls use your provider account. See [provider configuration](configuration.md) for OpenAI, Gemini, DeepSeek, Ollama and llama.cpp settings.
+Open `http://localhost:3000` to open the chat directly. Ask “What time is it?” or “How do I configure this starter?” to exercise its tools. Provider calls use your provider account. See [provider configuration](configuration.md) for OpenAI, Gemini, DeepSeek, Ollama and llama.cpp settings.
 
-Initialization generates the login password and storage encryption key in a private file. It refuses to overwrite existing configuration. Retain that file securely: changing the storage key prevents access to existing records. SQLite data lives in `work/starter/yada.sqlite`; no database server is needed.
+Initialization generates the storage encryption key in a private file. It refuses to overwrite existing configuration. Retain that file securely: changing the storage key prevents access to existing records. SQLite data lives in `work/starter/yada.sqlite`; no database server is needed.
 
 ## Configuration
 
-| Setting                                                   | Default or purpose                                             |
-| --------------------------------------------------------- | -------------------------------------------------------------- |
-| `YADA_LLM_PROVIDER`, `YADA_LLM_MODEL`, `YADA_LLM_API_KEY` | Your model provider and its credentials.                       |
-| `YADA_STARTER_PASSWORD`                                   | Generated login password, at least 24 characters.              |
-| `YADA_STORAGE_KEY`                                        | Generated 64-character hexadecimal encryption key.             |
-| `PORT`                                                    | `3000`; also sets the default localhost browser origin.        |
-| `YADA_STARTER_ORIGIN`                                     | Exact browser origin, such as `https://assistant.example.com`. |
-| `YADA_STORAGE_DRIVER`                                     | `sqlite`; also supports `postgres` and `mysql`.                |
-| `YADA_STORAGE_FILE`                                       | SQLite filename; defaults to `work/starter/yada.sqlite`.       |
-| `YADA_STORAGE_URL`                                        | Connection URL when using PostgreSQL or MySQL.                 |
-| `YADA_MCP_SERVERS`                                        | Optional existing [MCP server configuration](mcp.md).          |
+| Setting                                                   | Default or purpose                                                 |
+| --------------------------------------------------------- | ------------------------------------------------------------------ |
+| `YADA_LLM_PROVIDER`, `YADA_LLM_MODEL`, `YADA_LLM_API_KEY` | Your model provider and its credentials.                           |
+| `YADA_STARTER_PASSWORD`                                   | Optional password (24–256 characters); unset or empty skips login. |
+| `YADA_STORAGE_KEY`                                        | Generated 64-character hexadecimal encryption key.                 |
+| `PORT`                                                    | `3000`; also sets the default localhost browser origin.            |
+| `YADA_STARTER_ORIGIN`                                     | Exact browser origin, such as `https://assistant.example.com`.     |
+| `YADA_STORAGE_DRIVER`                                     | `sqlite`; also supports `postgres` and `mysql`.                    |
+| `YADA_STORAGE_FILE`                                       | SQLite filename; defaults to `work/starter/yada.sqlite`.           |
+| `YADA_STORAGE_URL`                                        | Connection URL when using PostgreSQL or MySQL.                     |
+| `YADA_MCP_SERVERS`                                        | Optional existing [MCP server configuration](mcp.md).              |
 
 Provider credentials, storage keys and MCP tokens remain on the server. There is no provider-secret field in the browser. The starter uses a real configured provider; tests inject deterministic responses separately.
 
 ## Authentication and persistence
 
-The generated password protects a single workspace. Signed session cookies expire after eight hours, are HttpOnly and SameSite=Strict, and use Secure on HTTPS. Login attempts are bounded. Mutations require the configured browser origin. Logout revokes that session; restarting the server invalidates all sessions and requires login again.
+By default, the starter opens without login. Leave `YADA_STARTER_PASSWORD` unset or empty for this mode. Anyone who can reach the starter can use its provider account, access the shared workspace and invoke its configured tools. Use password protection or your host’s authentication when access should be restricted.
+
+To enable login, add `YADA_STARTER_PASSWORD` with a 24–256 character password to `.env.starter` and restart. Remove it or set it empty to disable login. Signed session cookies expire after eight hours, are HttpOnly and SameSite=Strict, and use Secure on HTTPS. Login attempts are bounded. Mutations require the configured browser origin. In password-protected mode, logout revokes that session; restarting the server invalidates sessions and requires login again. Without a password, the chat opens directly and has no sign-out button.
 
 Conversations and unfinished runs remain durable across restarts. Reloading the browser resumes its saved run instead of submitting it again. Logging out disconnects the interface; use **Cancel run** to cancel work already submitted.
 

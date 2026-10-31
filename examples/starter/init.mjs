@@ -11,14 +11,13 @@ try {
       "YADA_LLM_PROVIDER=anthropic",
       "YADA_LLM_MODEL=claude-sonnet-4-6",
       "YADA_LLM_API_KEY=",
-      `YADA_STARTER_PASSWORD=${randomBytes(24).toString("base64url")}`,
       `YADA_STORAGE_KEY=${randomBytes(32).toString("hex")}`,
       "",
     ].join("\n"),
     { flag: "wx", mode: 0o600 },
   );
   console.log(
-    "Created .env.starter. Set your provider credentials and use its YADA_STARTER_PASSWORD to sign in.",
+    "Created .env.starter. Set your provider credentials. Add YADA_STARTER_PASSWORD if you want password protection.",
   );
 } catch (error) {
   console.error(

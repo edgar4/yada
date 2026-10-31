@@ -9,7 +9,7 @@ export const starterIdentity: Identity = Object.freeze({
 });
 const passwordBody = z.strictObject({ password: z.string().max(256) });
 const optionsSchema = z.strictObject({
-  password: z.string().min(24).max(256),
+  password: z.union([z.literal(""), z.string().min(24).max(256)]).default(""),
   sessionKey: z.string().regex(/^[a-fA-F0-9]{64}$/),
   origin: z.url().refine((value) => {
     if (!URL.canParse(value)) return false;
@@ -59,7 +59,7 @@ async function readPassword(request: Request): Promise<string> {
 }
 
 export function createStarterAuth(options: {
-  password: string;
+  password?: string;
   sessionKey: string;
   origin: string;
 }) {
@@ -67,11 +67,15 @@ export function createStarterAuth(options: {
   if (!parsed.success)
     throw new Error("Invalid starter authentication configuration");
   const { password, sessionKey, origin } = parsed.data;
-  const passwordHash = createHash("sha256").update(password).digest();
-  const cookies = createStarterCookies(
-    Buffer.concat([Buffer.from(sessionKey, "hex"), passwordHash]),
-    origin.startsWith("https:"),
-  );
+  const passwordHash = password
+    ? createHash("sha256").update(password).digest()
+    : undefined;
+  const cookies = passwordHash
+    ? createStarterCookies(
+        Buffer.concat([Buffer.from(sessionKey, "hex"), passwordHash]),
+        origin.startsWith("https:"),
+      )
+    : undefined;
   let attempts = 0;
   let windowEnds = 0;
   const json = (
@@ -88,7 +92,7 @@ export function createStarterAuth(options: {
     request.headers.get("origin") === origin;
   const authenticate = (request: Request): Promise<Identity | undefined> =>
     Promise.resolve(
-      isAllowedMutation(request) && cookies.has(request)
+      isAllowedMutation(request) && (!cookies || cookies.has(request))
         ? starterIdentity
         : undefined,
     );
@@ -104,13 +108,19 @@ export function createStarterAuth(options: {
           return json({ error: "Method not allowed" }, 405);
         const identity = await authenticate(request);
         return identity
-          ? json({ authenticated: true, identity })
-          : json({ authenticated: false }, 401);
+          ? json({ authenticated: true, identity, passwordRequired: !!cookies })
+          : json({ authenticated: false, passwordRequired: true }, 401);
       }
       if (request.method !== "POST")
         return json({ error: "Method not allowed" }, 405);
       if (!isAllowedMutation(request))
         return json({ error: "Origin denied" }, 403);
+      if (!cookies || !passwordHash)
+        return json({
+          authenticated: true,
+          identity: starterIdentity,
+          passwordRequired: false,
+        });
       if (path === "/auth/logout")
         return json({ authenticated: false }, 200, {
           "set-cookie": cookies.logout(request),

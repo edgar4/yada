@@ -8,6 +8,47 @@ const password = "starter-password-long-enough-for-login";
 const origin = "http://localhost:3000";
 const options = { password, origin, sessionKey: "ab".repeat(32) };
 type Auth = ReturnType<typeof createStarterAuth>;
+
+it.each([{}, { password: "" }])(
+  "allows cookie-free access with an optional password: %j",
+  async (setting) => {
+    const auth = createStarterAuth({
+      origin,
+      sessionKey: options.sessionKey,
+      ...setting,
+    });
+    expect(
+      await auth.authenticate(
+        new Request(origin + "/v1/conversations/chat/runs"),
+      ),
+    ).toEqual(starterIdentity);
+    const session = await auth.handle(new Request(origin + "/auth/session"));
+    expect(await session?.json()).toEqual({
+      authenticated: true,
+      identity: starterIdentity,
+      passwordRequired: false,
+    });
+    expect(session?.headers.get("set-cookie")).toBeNull();
+    for (const path of ["/auth/login", "/auth/logout"]) {
+      const result = await auth.handle(
+        new Request(origin + path, { method: "POST", headers: { origin } }),
+      );
+      expect(result?.status).toBe(200);
+      expect(result?.headers.get("set-cookie")).toBeNull();
+      expect(
+        (await auth.handle(new Request(origin + path, { method: "POST" })))
+          ?.status,
+      ).toBe(403);
+    }
+    for (const supplied of [undefined, "https://other.test"])
+      expect(
+        await auth.authenticate(authenticated("", "POST", supplied)),
+      ).toBeUndefined();
+    expect(await auth.authenticate(authenticated("", "POST", origin))).toEqual(
+      starterIdentity,
+    );
+  },
+);
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -64,7 +105,10 @@ it("issues a host-only signed session and returns only the server-owned identity
   const auth = createStarterAuth(options);
   const empty = await handle(auth, new Request(`${origin}/auth/session`));
   expect(empty.status).toBe(401);
-  expect(await empty.json()).toEqual({ authenticated: false });
+  expect(await empty.json()).toEqual({
+    authenticated: false,
+    passwordRequired: true,
+  });
   const response = await login(auth);
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ authenticated: true });
@@ -92,6 +136,7 @@ it("issues a host-only signed session and returns only the server-owned identity
   expect(await session.json()).toEqual({
     authenticated: true,
     identity: { actorId: "owner", tenantId: "starter" },
+    passwordRequired: true,
   });
   const forged = await handle(
     auth,

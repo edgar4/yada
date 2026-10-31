@@ -6,7 +6,7 @@ import {
 } from "@edgaralochi/yada";
 
 const settings = z.object({
-  password: z.string().min(24).max(256),
+  password: z.union([z.literal(""), z.string().min(24).max(256)]).default(""),
   origin: z.url().refine((value) => {
     if (!URL.canParse(value)) return false;
     const url = new URL(value);
@@ -31,7 +31,7 @@ export function starterConfigFromEnv(
   });
   if (!result.success)
     throw new Error(
-      "Check YADA_STARTER_PASSWORD (24–256 characters), YADA_STARTER_ORIGIN, and PORT",
+      "Check YADA_STARTER_PASSWORD (empty or 24–256 characters), YADA_STARTER_ORIGIN, and PORT",
     );
   return {
     ...result.data,

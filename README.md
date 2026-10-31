@@ -26,7 +26,7 @@ npm run demo
 
 The demo runs a catalog lookup without an API key.
 
-For a complete assistant with login, a real provider, durable storage, tools and a chat widget, run `npm run starter:init`, enter your provider credentials in `.env.starter`, then run `npm run starter`. See the [starter guide](docs/starter.md).
+For a complete assistant with optional login, a real provider, durable storage, tools and a chat widget, run `npm run starter:init`, enter your provider credentials in `.env.starter`, then run `npm run starter`. See the [starter guide](docs/starter.md).
 
 ## Connect your model provider
 
