@@ -1,6 +1,7 @@
 import { z } from "zod";
 const common = {
-  name: z.string().regex(/^[a-z][a-z0-9_]{0,19}$/),
+  name: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/),
+  timeoutMs: z.number().int().min(1000).max(600_000).default(30_000),
   readTools: z
     .array(z.string().min(1))
     .min(1)
@@ -36,14 +37,29 @@ export const mcpConfig = z
         );
       }),
       token: z.string().min(1).optional(),
+      headers: z.record(z.string(), z.string()).optional(),
     }),
     z.strictObject({
       ...common,
       command: z.string().min(1),
       args: z.array(z.string()).default([]),
+      env: z.record(z.string(), z.string()).optional(),
+      cwd: z.string().min(1).optional(),
+      stderr: z.enum(["ignore", "inherit"]).default("ignore"),
     }),
   ])
   .superRefine((settings, context) => {
+    if (
+      "headers" in settings &&
+      settings.token &&
+      Object.keys(settings.headers ?? {}).some(
+        (name) => name.toLowerCase() === "authorization",
+      )
+    )
+      context.addIssue({
+        code: "custom",
+        message: "Authorization header conflicts with token",
+      });
     const reads = new Set(settings.readTools);
     const writes = new Set(Object.keys(settings.writeTools ?? {}));
     const helpers = new Set<string>();

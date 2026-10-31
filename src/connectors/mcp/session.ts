@@ -54,7 +54,7 @@ export async function connectMcpTransport(
   try {
     await abortable(() => client.connect(transport), signal);
     connected = true;
-    const catalog = await discoverMcpTools(client, signal);
+    const catalog = await discoverMcpTools(client, signal, settings.timeoutMs);
     const required = (name: string) => {
       const tool = catalog.get(name);
       if (!tool) throw new Error("Configured MCP tool not found");
@@ -93,10 +93,14 @@ export async function connectMcpTransport(
       ...reads,
       ...[...writes.keys(), ...helpers].map(required),
     ];
-    const rpc = mcpInvoker(client, selected, authorize);
+    const rpc = mcpInvoker(client, selected, authorize, settings.timeoutMs);
     const spec = (remote: RemoteTool) => {
       const name = `${settings.name}__${remote.name}`;
-      if (!/^[a-zA-Z0-9_-]{1,64}$/.test(name))
+      if (name.length > 64)
+        throw new Error(
+          "MCP tool name exceeds the 64-character limit for server name plus tool name",
+        );
+      if (!/^[a-zA-Z0-9_-]+$/.test(name))
         throw new Error("Unsupported MCP tool name");
       return {
         name,
@@ -110,7 +114,7 @@ export async function connectMcpTransport(
       authorize: (identity) => authorize(identity, remote.name),
       async execute(args, identity, callSignal) {
         return readResult(
-          await rpc.call(remote.name, args, identity, callSignal),
+          await rpc.read(remote.name, args, identity, callSignal),
         );
       },
     }));
