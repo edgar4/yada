@@ -63,11 +63,8 @@ for (const driver of drivers)
               s.fixture.identity,
               "chat",
             )
-          )?.messages,
-        ).toEqual([
-          { role: "user", content: "Change the value" },
-          { role: "assistant", content: "Done" },
-        ]);
+          )?.messages.map((message) => message.role),
+        ).toEqual(["user", "assistant", "tool", "assistant"]);
         expect(
           s.remote.calls.filter((entry) => entry.name === "change"),
         ).toHaveLength(1);

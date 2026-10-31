@@ -1,4 +1,5 @@
 import { contextWindow, type RunLimits } from "../core/limits.js";
+import { modelHistory } from "../storage/conversations.js";
 import { operationId } from "../storage/actions.js";
 import { actionExecutor } from "./actions.js";
 import { setTimeout as delay } from "node:timers/promises";
@@ -6,7 +7,6 @@ import type {
   ProviderAdapter,
   TerminalResult,
   Tool,
-  Turn,
 } from "../core/contracts.js";
 import { CheckpointError } from "../core/checkpoint.js";
 import { runDurable } from "../storage/durable-run.js";
@@ -19,6 +19,7 @@ export type AgentProfile = Readonly<{
   system: string;
   limits?: RunLimits;
   historyChars?: number;
+  historyToolChars?: number;
   maxRounds?: number;
   maxToolCalls?: number;
   timeoutMs?: number;
@@ -95,10 +96,10 @@ export function createWorker(options: {
     };
     try {
       await checkCancellation();
-      const history: Turn[] = job.history.map((turn) =>
-        turn.role === "assistant"
-          ? { role: "assistant", content: turn.content, toolCalls: [] }
-          : { role: "user", content: turn.content },
+      const history = contextWindow(
+        modelHistory(job.history),
+        profile.historyChars ?? 32_000,
+        profile.historyToolChars,
       );
       const runs = options.storage.runs;
       const eligible = async () => {
@@ -116,7 +117,7 @@ export function createWorker(options: {
       const result = await runDurable({
         ...profile,
         executeWrite: actionExecutor(options.storage.actions, identity, runId),
-        history: contextWindow(history, profile.historyChars ?? 32_000),
+        history,
         input: job.input,
         identity,
         runId,
@@ -192,6 +193,12 @@ export function createWorker(options: {
           !shutdown.signal.aborted
             ? { status: "failed", code: "timeout" }
             : result;
+        const turns =
+          final.status === "completed"
+            ? (await runs.load(identity, runId))?.checkpoint?.messages.slice(
+                history.length,
+              )
+            : undefined;
         await options.storage.jobs.update(
           identity,
           conversationId,
@@ -205,6 +212,8 @@ export function createWorker(options: {
                 : {}),
           },
           final,
+          undefined,
+          turns,
         );
         trace({
           event: "run_finished",

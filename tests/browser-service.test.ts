@@ -290,11 +290,16 @@ it(
           ?.status,
       ).toBe("completed");
       expect(
-        (await fixture.storage.conversations.load(fixture.identity, "orders"))
-          ?.messages,
+        (
+          await fixture.storage.conversations.load(fixture.identity, "orders")
+        )?.messages.filter(
+          (message) =>
+            message.role === "user" ||
+            (message.role === "assistant" && !message.toolCalls.length),
+        ),
       ).toEqual([
         { role: "user", content: input },
-        { role: "assistant", content: output },
+        { role: "assistant", content: output, toolCalls: [] },
       ]);
       expect(errors).toEqual([]);
       await page.reload();

@@ -110,7 +110,17 @@ export function createHandler(options: {
       }
       if (request.method !== "GET")
         return json({ error: "Method not allowed" }, 405);
-      if (!match[3]) return json(job);
+      if (!match[3])
+        return json({
+          ...job,
+          history: job.history.flatMap((turn) =>
+            (turn.role === "user" ||
+              (turn.role === "assistant" && !turn.toolCalls.length)) &&
+            turn.content
+              ? [{ role: turn.role, content: turn.content }]
+              : [],
+          ),
+        });
       if (match[3] !== "events") return json({ error: "Not found" }, 404);
       let cursor = z.coerce
         .number()

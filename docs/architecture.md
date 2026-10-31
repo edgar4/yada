@@ -28,7 +28,7 @@ Termination: `stop` with text completes. `stop` with empty text after tool use c
 
 ## Limits and hooks
 
-`limits` holds every runtime number with its default: `maxContextChars` 64,000, `maxRounds` 8, `maxToolCalls` 16, `maxFailures` 3, `maxParallelTools` 4, `maxToolOutput` 32,000. The `maxRounds` and `maxToolCalls` run options override the limits.
+`limits` holds every runtime number with its default: `maxContextChars` 64,000, `maxRounds` 8, `maxToolCalls` 16, `maxFailures` 3, `maxParallelTools` 4, `maxToolOutput` 32,000. The `maxRounds` and `maxToolCalls` run options override the limits. When the context exceeds `maxContextChars`, the runtime first replaces the content of the oldest tool results, excluding the latest round, with `[compacted: N chars]` (checkpointed, earlier turns otherwise unchanged); it fails with `limit` only if still over.
 
 `run` accepts `hooks?: RunHooks`, honoured on checkpoint resume. Members are optional and may be async.
 
@@ -44,7 +44,7 @@ Cancellation returns promptly even when a dependency ignores its signal. It cann
 
 The runtime supports read tools, a scripted testing provider, and Anthropic, OpenAI, Gemini, DeepSeek, Ollama, and llama.cpp through LangChain. Tool input schemas use Zod and infer handler argument types. Provider tests cover SDK mappings and real SDK execution for hosted and local providers with mocked HTTP responses.
 
-`run` defaults to in-memory execution and accepts typed checkpoint hooks. `runDurable` adds encrypted checkpoints and renewable execution leases through the storage boundary. See [run recovery](recovery.md). `runConversation` adds durable completed conversation history through the storage interface. OAuth sessions can use the same encrypted storage. See [durable storage](storage.md).
+`run` defaults to in-memory execution and accepts typed checkpoint hooks. `runDurable` adds encrypted checkpoints and renewable execution leases through the storage boundary. See [run recovery](recovery.md). `runConversation` adds durable full-turn conversation history (tool calls, results, provider metadata, failure markers) through the storage interface. OAuth sessions can use the same encrypted storage. See [durable storage](storage.md).
 
 ## Development checks
 

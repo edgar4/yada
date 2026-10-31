@@ -296,7 +296,8 @@ export function defineYadaWidget(name = "yada-chat"): void {
         controller.signal.throwIfAborted();
         this.input = { id: job.id, profileId: job.profileId, input: job.input };
         for (const turn of job.history)
-          this.appendMessage(turn.content, turn.role);
+          if (turn.role === "user" || turn.role === "assistant")
+            this.appendMessage(turn.content, turn.role);
         this.appendMessage(job.input, "user");
         this.active = true;
         this.update();

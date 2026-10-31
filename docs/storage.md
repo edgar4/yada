@@ -66,9 +66,9 @@ try {
 
 Import these functions from Yada's public entry point. Identity must be authenticated by your application. Conversation IDs are scoped to both tenant and actor.
 
-`runConversation` loads committed text messages and saves the user input and completed answer together. Failed or cancelled runs do not change history. Storage failures propagate; a response is not returned as successful before its history is committed. Concurrent saves raise `StorageConflict` instead of overwriting another turn. Serialize runs per conversation in your host application; conflicts do not trigger automatic model or tool retries.
+`runConversation` loads the stored history and saves the full turns of a completed run: the user input, assistant turns with their tool calls and provider metadata (such as thinking blocks), tool results and the final answer. Older text-only messages still load. A failed or cancelled run stores the user input plus a `{ role: "failure", code }` marker so the transcript is complete; markers are never sent to the model. Storage failures propagate; a response is not returned as successful before its history is committed. If the save hits a `StorageConflict`, `runConversation` reloads the conversation and retries the save once, appending the turns to the latest messages; a second conflict propagates. Serialize runs per conversation in your host application; conflicts do not trigger automatic model or tool retries.
 
-For direct access, use `storage.conversations.load(identity, id)` and `save(identity, id, messages, expectedRevision)`. Use revision `0` to create a new conversation. Each save returns the next revision. `runConversation` persists completed text exchanges. Use [durable runs](recovery.md) to checkpoint individual executions and resume them after a crash. Callers should manage history length for the selected model's context limit.
+For direct access, use `storage.conversations.load(identity, id)` and `save(identity, id, messages, expectedRevision)`. Use revision `0` to create a new conversation. Each save returns the next revision. `runConversation` persists complete turns including tool calls and results. Use [durable runs](recovery.md) to checkpoint individual executions and resume them after a crash. Callers should manage history length for the selected model's context limit.
 
 ## OAuth sessions
 
