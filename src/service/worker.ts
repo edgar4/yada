@@ -74,23 +74,24 @@ export function createWorker(options: {
     const started = Date.now();
     const cancellation = new AbortController();
     const runId = JSON.stringify([conversationId, job.id]);
+    const executing = async () => {
+      const saved = await options.storage.runs.load(identity, runId);
+      for (const call of saved?.checkpoint?.pending ?? []) {
+        const action = await options.storage.actions.load(
+          identity,
+          operationId(identity, runId, call.id),
+        );
+        if (action?.status === "executing") return true;
+      }
+      return false;
+    };
     const checkCancellation = async () => {
       const latest = await options.storage.jobs.load(
         identity,
         conversationId,
         job.id,
       );
-      if (latest?.cancelRequested) {
-        const saved = await options.storage.runs.load(identity, runId);
-        for (const call of saved?.checkpoint?.pending ?? []) {
-          const action = await options.storage.actions.load(
-            identity,
-            operationId(identity, runId, call.id),
-          );
-          if (action?.status === "executing") return;
-        }
-        cancellation.abort();
-      }
+      if (latest?.cancelRequested && !(await executing())) cancellation.abort();
     };
     try {
       await checkCancellation();
@@ -223,7 +224,10 @@ export function createWorker(options: {
     } catch (error) {
       if (error instanceof RunLeaseError || shutdown.signal.aborted) return;
       const attempt = job.attempts + 1;
-      const exhausted = attempt >= (options.maxAttempts ?? 5);
+      const exhausted =
+        attempt >= (options.maxAttempts ?? 5) &&
+        job.status !== "reconciling" &&
+        !(await executing().catch(() => true));
       if (exhausted)
         await options.storage.jobs.update(
           identity,

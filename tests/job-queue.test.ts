@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { setTimeout as delay } from "node:timers/promises";
 import { drivers, storageFixture } from "./helpers/storage.js";
 import { createWorker } from "../src/service/worker.js";
+import { z } from "zod";
+import { writeTool } from "../src/core/action.js";
+import { operationId } from "../src/storage/actions.js";
 import { createFakeProvider } from "../src/providers/fake.js";
 import { RunLeaseError } from "../src/storage/runs.js";
 import { openDatabase } from "../src/storage/database.js";
@@ -153,6 +156,71 @@ for (const driver of drivers)
       expect(resumable?.status).not.toBe("failed");
       expect(resumable?.outcome).toBeUndefined();
       expect(resumable?.attempts).toBe(0);
+    });
+
+    it("never finalizes a job whose write action is executing", async () => {
+      const s = await storageFixture(driver);
+      const call = { id: "call", name: "change", args: {} };
+      const tool = writeTool({
+        name: "change",
+        description: "Change",
+        version: "1",
+        input: z.strictObject({}),
+        authorize: () => Promise.resolve(true),
+        prepare: () => Promise.resolve({ preview: "Change", version: "1" }),
+        execute: () => new Promise<never>(() => {}),
+        reconcile: () => Promise.resolve(undefined),
+      });
+      const profiles = {
+        v1: {
+          provider: createFakeProvider(() => ({
+            content: "",
+            toolCalls: [call],
+            finishReason: "tool_calls",
+          })),
+          tools: [tool],
+          system: "Help",
+          timeoutMs: 200,
+        },
+      };
+      await s.storage.jobs.submit(s.identity, "chat", input("one"));
+      const suspend = createWorker({ storage: s.storage, profiles });
+      await suspend.tick();
+      await s.storage.actions.decide(
+        s.identity,
+        operationId(s.identity, JSON.stringify(["chat", "one"]), call.id),
+        true,
+      );
+      await s.storage.jobs.update(s.identity, "chat", "one", {
+        type: "queued",
+      });
+      const clock = vi.spyOn(Date, "now");
+      try {
+        await suspend.tick();
+        await suspend.tick();
+        const timedOut = await s.storage.jobs.load(s.identity, "chat", "one");
+        expect(timedOut?.status).toBe("reconciling");
+        expect(timedOut?.outcome).toBeUndefined();
+        await s.storage.jobs.update(s.identity, "chat", "one", {
+          type: "queued",
+        });
+        clock.mockReturnValue(Date.now() + 120_000);
+        const broken = createWorker({
+          storage: failing(s.storage, new Error("db down")),
+          profiles,
+          maxAttempts: 1,
+        });
+        await broken.tick();
+        await broken.tick();
+        await broken.stop();
+        const held = await s.storage.jobs.load(s.identity, "chat", "one");
+        expect(held?.outcome).toBeUndefined();
+        expect(held?.status).toBe("queued");
+        expect(held?.attempts).toBeGreaterThan(0);
+      } finally {
+        vi.restoreAllMocks();
+        await suspend.stop();
+      }
     });
 
     it("runs jobs concurrently up to the limit", async () => {
