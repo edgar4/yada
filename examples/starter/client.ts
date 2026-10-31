@@ -41,6 +41,107 @@ function remember(key: string, value: string | null): void {
       "Browser storage is unavailable. Your conversation cannot resume after a reload.";
   }
 }
+type Face = Record<"l" | "r" | "s" | "d", number[]>;
+type Mood = "neutral" | "smile" | "wink" | "shock" | "anger" | "thinking";
+const faces: Record<Mood, Face> = {
+  neutral: {
+    l: [30, 32, 45, 46, 60, 60],
+    r: [90, 32, 75, 46, 60, 60],
+    s: [60, 60, 60, 75, 60, 90],
+    d: [60, 60, 9],
+  },
+  smile: {
+    l: [44, 42, 44, 48, 44, 54],
+    r: [76, 42, 76, 48, 76, 54],
+    s: [40, 72, 60, 92, 80, 72],
+    d: [60, 80, 0],
+  },
+  wink: {
+    l: [44, 42, 44, 48, 44, 54],
+    r: [67, 52, 76, 38, 85, 52],
+    s: [42, 74, 62, 90, 80, 70],
+    d: [60, 80, 0],
+  },
+  shock: {
+    l: [44, 44, 44, 46, 44, 48],
+    r: [76, 44, 76, 46, 76, 48],
+    s: [60, 80, 60, 80, 60, 80.5],
+    d: [60, 80, 11],
+  },
+  anger: {
+    l: [32, 38, 41, 45, 50, 52],
+    r: [88, 38, 79, 45, 70, 52],
+    s: [44, 84, 60, 72, 76, 84],
+    d: [60, 78, 0],
+  },
+  thinking: {
+    l: [50, 40, 50, 41, 50, 42],
+    r: [74, 40, 74, 41, 74, 42],
+    s: [52, 80, 64, 76, 76, 80],
+    d: [60, 78, 0],
+  },
+};
+const moods: Partial<Record<string, Mood>> = {
+  Connecting: "thinking",
+  "Loading conversation": "thinking",
+  Reconnecting: "thinking",
+  queued: "thinking",
+  running: "thinking",
+  progress: "thinking",
+  reconciling: "thinking",
+  "Cancellation requested": "thinking",
+  "awaiting approval": "shock",
+  "Action approved": "smile",
+  completed: "wink",
+  failed: "anger",
+  Disconnected: "anger",
+  cancelled: "neutral",
+};
+const face = element("face");
+const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let shown: Face = structuredClone(faces.neutral);
+let frame = 0;
+function draw(f: Face): void {
+  for (const key of ["l", "r", "s"] as const) {
+    const p = f[key];
+    face
+      .querySelector(`[data-part="${key}"]`)
+      ?.setAttribute(
+        "d",
+        `M${p.slice(0, 2).join(" ")} Q${p.slice(2, 4).join(" ")} ${p.slice(4).join(" ")}`,
+      );
+  }
+  const dot = face.querySelector('[data-part="d"]');
+  for (const [i, attr] of ["cx", "cy", "r"].entries())
+    dot?.setAttribute(attr, String(f.d[i]));
+}
+function mood(name: Mood): void {
+  const target = faces[name];
+  cancelAnimationFrame(frame);
+  if (still) {
+    shown = structuredClone(target);
+    draw(shown);
+    return;
+  }
+  const from = structuredClone(shown);
+  const start = performance.now();
+  const step = (now: number) => {
+    const t = Math.min((now - start) / 320, 1);
+    const e = 1 - (1 - t) ** 3;
+    for (const key of ["l", "r", "s", "d"] as const)
+      shown[key] = from[key].map((v, i) => v + ((target[key][i] ?? v) - v) * e);
+    draw(shown);
+    if (t < 1) frame = requestAnimationFrame(step);
+  };
+  frame = requestAnimationFrame(step);
+}
+function follow(current: YadaWidget): void {
+  const line = current.shadowRoot?.querySelector('[role="status"]');
+  if (!line) return;
+  new MutationObserver(() => {
+    if (widget === current) mood(moods[line.textContent] ?? "smile");
+  }).observe(line, { childList: true, characterData: true, subtree: true });
+}
 let widget: YadaWidget | undefined;
 let authenticated = false;
 let generation = 0;
@@ -68,6 +169,7 @@ function signedOut(message = ""): void {
   busy(false);
   status.textContent = "Sign in to continue.";
   error.textContent = message;
+  mood(message ? "shock" : "neutral");
   password.focus();
 }
 const client = new BrowserClient({
@@ -98,6 +200,7 @@ async function restore(): Promise<void> {
     remember(runKey, (event as CustomEvent<WidgetRunDetail>).detail.runId);
   });
   container.append(current);
+  follow(current);
   const runId = stored(runKey);
   if (!runId) return;
   status.textContent = "Restoring your conversation…";
@@ -114,6 +217,7 @@ async function restore(): Promise<void> {
       return;
     }
     container.inert = true;
+    mood("anger");
     error.textContent =
       "Could not restore your conversation. Try reconnecting.";
     retry.textContent = "Reconnect";
@@ -161,12 +265,14 @@ async function checkSession(): Promise<void> {
     container.inert = false;
     status.textContent = "Signed in.";
     busy(false);
+    if (opening) mood("smile");
     if (opening) await restore();
   } catch {
     if (operation !== generation) return;
     busy(false);
     container.inert = true;
     status.textContent = "Connection unavailable.";
+    mood("anger");
     error.textContent = "Could not check your session. Try again.";
     retry.textContent = "Try again";
     retryAction = () => {
@@ -182,6 +288,7 @@ form.addEventListener("submit", (event) => {
   busy(true);
   error.textContent = "";
   status.textContent = "Signing in…";
+  mood("thinking");
   const body = JSON.stringify({ password: password.value });
   password.value = "";
   void (async () => {
@@ -201,6 +308,7 @@ form.addEventListener("submit", (event) => {
           response.status === 401
             ? "That password was not accepted."
             : "Could not sign in. Try again.";
+        mood("shock");
         password.focus();
         return;
       }
@@ -210,6 +318,7 @@ form.addEventListener("submit", (event) => {
       busy(false);
       status.textContent = "Sign in to continue.";
       error.textContent = "Could not sign in. Try again.";
+      mood("anger");
       password.focus();
     }
   })();
@@ -237,6 +346,7 @@ logout.addEventListener("click", () => {
       if (operation !== generation) return;
       busy(false);
       status.textContent = "Sign out not confirmed.";
+      mood("anger");
       error.textContent = "Could not sign out. Try again.";
     }
   })();
@@ -245,6 +355,6 @@ retry.addEventListener("click", () => {
   if (!pending) retryAction();
 });
 window.addEventListener("focus", () => {
-  if (!pending) void checkSession();
+  if (!pending && authenticated) void checkSession();
 });
 void checkSession();

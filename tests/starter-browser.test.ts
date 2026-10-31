@@ -134,11 +134,11 @@ const open = async () => {
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto(origin);
-  await page.getByLabel("Workspace password", { exact: true }).waitFor();
+  await page.getByLabel("Password", { exact: true }).waitFor();
   return page;
 };
 const signIn = async (page: Awaited<ReturnType<typeof open>>) => {
-  await page.getByLabel("Workspace password", { exact: true }).fill(password);
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.keyboard.press("Enter");
   await page
     .locator("yada-chat")
@@ -242,7 +242,7 @@ it(
       fullPage: true,
     });
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
-    await page.getByLabel("Workspace password", { exact: true }).waitFor();
+    await page.getByLabel("Password", { exact: true }).waitFor();
     expect(await page.locator("yada-chat").count()).toBe(0);
     expect(await page.locator("body").textContent()).not.toContain(malicious);
     expect(
@@ -265,7 +265,7 @@ it(
 
 it("announces rejected credentials and disables duplicate pending logins", async () => {
   const page = await open();
-  await page.getByLabel("Workspace password", { exact: true }).fill("wrong");
+  await page.getByLabel("Password", { exact: true }).fill("wrong");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect
     .poll(async () => page.locator("#error").textContent())
@@ -275,7 +275,7 @@ it("announces rejected credentials and disables duplicate pending logins", async
     release = resolve;
   });
   loginRequested = false;
-  await page.getByLabel("Workspace password", { exact: true }).fill(password);
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect.poll(() => loginRequested).toBe(true);
   expect(
@@ -283,9 +283,9 @@ it("announces rejected credentials and disables duplicate pending logins", async
       .getByRole("button", { name: "Sign in", exact: true })
       .isDisabled(),
   ).toBe(true);
-  expect(
-    await page.getByLabel("Workspace password", { exact: true }).inputValue(),
-  ).toBe("");
+  expect(await page.getByLabel("Password", { exact: true }).inputValue()).toBe(
+    "",
+  );
   expect(await page.locator("#status").textContent()).toBe("Signing in…");
   release();
   await page.locator("yada-chat").waitFor();
@@ -308,7 +308,7 @@ it("preserves recovery IDs without rendering history after an API session expire
   }));
   expireEvents = true;
   await page.reload();
-  await page.getByLabel("Workspace password", { exact: true }).waitFor();
+  await page.getByLabel("Password", { exact: true }).waitFor();
   expect(await page.locator("#error").textContent()).toBe(
     "Your session has expired. Sign in again.",
   );
@@ -354,7 +354,7 @@ it("offers retry when session checking fails and keeps failed logout explicit", 
   );
   logoutFailure = false;
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
-  await page.getByLabel("Workspace password", { exact: true }).waitFor();
+  await page.getByLabel("Password", { exact: true }).waitFor();
 });
 
 it("drops a missing saved run and signs out when the session expires across reload", async () => {
@@ -387,7 +387,7 @@ it("drops a missing saved run and signs out when the session expires across relo
   });
   authenticated = false;
   await page.reload();
-  await page.getByLabel("Workspace password", { exact: true }).waitFor();
+  await page.getByLabel("Password", { exact: true }).waitFor();
   expect(
     await page.evaluate(() => localStorage.getItem("yada-starter:run")),
   ).toBe("stale-run");

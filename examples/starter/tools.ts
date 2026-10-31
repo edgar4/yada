@@ -22,7 +22,7 @@ export function starterTools(owner: Identity) {
       authorize,
       execute: () =>
         Promise.resolve(
-          "This is a single-workspace Yada starter. Select your model with YADA_LLM_PROVIDER, YADA_LLM_MODEL and YADA_LLM_API_KEY on the server. SQLite is the default; PostgreSQL and MySQL are supported. Add typed tools in tools.ts or reviewed MCP servers through YADA_MCP_SERVERS. The host owns permissions. Provider keys and storage keys are never browser configuration.",
+          "This is a single-user Yada starter. Select your model with YADA_LLM_PROVIDER, YADA_LLM_MODEL and YADA_LLM_API_KEY on the server. SQLite is the default; PostgreSQL and MySQL are supported. Add typed tools in tools.ts or reviewed MCP servers through YADA_MCP_SERVERS. The host owns permissions. Provider keys and storage keys are never browser configuration.",
         ),
     }),
   ];

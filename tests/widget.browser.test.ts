@@ -29,6 +29,7 @@ declare global {
 }
 
 const malicious = '<img src=x onerror="globalThis.compromised=true">';
+const reply = `**Done** with \`code\`\n\n- ${malicious}`;
 const queued = { version: 1, sequence: 1, type: "queued", at: 1 };
 const waiting = {
   version: 1,
@@ -58,7 +59,7 @@ const streams = new Set<ServerResponse>();
 const finish = (type: string) => {
   for (const response of streams)
     response.end(
-      `${JSON.stringify({ version: 1, sequence: 3, type, at: 1, text: malicious })}\n`,
+      `${JSON.stringify({ version: 1, sequence: 3, type, at: 1, text: reply })}\n`,
     );
   streams.clear();
 };
@@ -347,6 +348,17 @@ describe("browser widget", () => {
           ?.shadowRoot?.querySelector("textarea")?.disabled,
     );
     expect(decision).toBe(true);
+    const log = widget.getByRole("log");
+    expect(await log.locator(".assistant strong").last().textContent()).toBe(
+      "Done",
+    );
+    expect(await log.locator(".assistant code").last().textContent()).toBe(
+      "code",
+    );
+    expect(await log.locator(".assistant li").last().textContent()).toBe(
+      malicious,
+    );
+    expect(await widget.locator("img").count()).toBe(0);
     expect(
       await page.evaluate(
         () => Reflect.get(globalThis, "compromised") as unknown,

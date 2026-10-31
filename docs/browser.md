@@ -55,7 +55,7 @@ Call `cancel(conversationId, runId)` to request server cancellation. Cancellatio
 
 ## Widget behavior and themes
 
-The widget includes a labeled message field, keyboard-operable controls, a polite conversation log, status announcements, alerts and visible focus indicators. While a run is active, message submission is disabled. Approval controls show the server preview as text and require an explicit approve or decline. Expired or nonpending approval snapshots disable decision buttons. Server events and previews use text nodes, never HTML.
+The widget shows the conversation as chat bubbles: the user's messages on the right in the accent color, assistant replies on the left. Enter sends a message and Shift+Enter adds a new line. It includes a labeled message field, keyboard-operable controls, a polite conversation log, status announcements, alerts and visible focus indicators. While a run is active, message submission is disabled. Approval controls show the server preview as text and require an explicit approve or decline. Expired or nonpending approval snapshots disable decision buttons. Server events and previews use text nodes, never HTML.
 
 Reconnect preserves the submitted input ID and event cursor. Removing an element aborts its browser requests; reattaching the same element resumes its active run. `configure` aborts the prior subscription and resets local display state. Explicit **Cancel run** requests server cancellation. Approval and cancellation failures appear in the alert region. Hosts should call `configure` when account or conversation identity changes.
 
@@ -75,10 +75,11 @@ yada-chat {
   --yada-font: 17px/1.6 Georgia, serif;
   --yada-spacing: 24px;
   --yada-log-height: 320px;
+  --yada-bubble-background: #eef3ec;
 }
 ```
 
-Choose colors with sufficient contrast. Host selectors cannot reach internal controls; theme variables inherit through Shadow DOM. The source examples in `examples/browser/retail.html` and `examples/browser/operations.html` show unrelated host styles with the same component and shared setup. Serve them through a TypeScript-aware host bundler, proxy `/v1` to the service on the same origin, and provision the named conversation/profile IDs for the authenticated host identity.
+`--yada-log-height` sets the conversation's height and `--yada-bubble-background` colors assistant replies. Choose colors with sufficient contrast. Host selectors cannot reach internal controls; theme variables inherit through Shadow DOM. The source examples in `examples/browser/retail.html` and `examples/browser/operations.html` show unrelated host styles with the same component and shared setup. Serve them through a TypeScript-aware host bundler, proxy `/v1` to the service on the same origin, and provision the named conversation/profile IDs for the authenticated host identity.
 
 ## Verification
 
