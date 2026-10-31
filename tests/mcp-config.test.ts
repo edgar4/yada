@@ -9,7 +9,9 @@ it("loads servers with automatic discovery", () => {
     mcpServersFromEnv({
       YADA_MCP_SERVERS: '[{"name":"catalog","url":"https://example.test/mcp"}]',
     }),
-  ).toEqual([{ name: "catalog", url: "https://example.test/mcp" }]);
+  ).toEqual([
+    { name: "catalog", url: "https://example.test/mcp", timeoutMs: 30_000 },
+  ]);
 });
 it.each([
   "invalid",

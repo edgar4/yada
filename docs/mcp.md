@@ -40,12 +40,16 @@ Import `connectMcp` and `run` from Yada's public entry point. `identity` must co
 
 | Field             | Purpose                                                                                                                            |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `name`            | Unique server namespace, such as `catalog`. Lowercase letters, digits, and underscores; starts with a letter, up to 20 characters. |
+| `name`            | Unique server namespace, such as `catalog`. Lowercase letters, digits, and underscores; starts with a letter, up to 32 characters. |
 | `url`             | Remote MCP endpoint.                                                                                                               |
 | `token`           | Optional bearer token issued for the MCP server, separate from your model API key.                                                 |
 | `readTools`       | Optional filter of tools your application has reviewed as read-only.                                                               |
 | `writeTools`      | Explicit mapping of reviewed mutations to a version, preparation helper and receipt helper.                                        |
+| `headers`         | Optional extra HTTP headers. `authorization` is rejected when `token` or OAuth is used.                                            |
 | `command`, `args` | Local server executable and arguments, instead of `url` and `token`.                                                               |
+| `env`, `cwd`      | Optional stdio environment variables (merged over the SDK default environment) and working directory.                              |
+| `stderr`          | Stdio only: `"ignore"` (default) or `"inherit"`.                                                                                   |
+| `timeoutMs`       | Optional per-server deadline for connection, discovery and calls, 1,000 to 600,000 ms; default 30,000.                             |
 
 For a local server:
 
@@ -58,7 +62,26 @@ const server = {
 };
 ```
 
-Use trusted server configuration for URLs and commands. The stdio transport launches and owns the process; closing the connection terminates it. Server stderr is suppressed. HTTP redirects are refused so credentials are not forwarded to another destination. For OAuth login and token refresh, see [MCP OAuth](mcp-oauth.md). Hosts can also supply a valid bearer token.
+A stdio server that needs credentials, such as GitHub's MCP server:
+
+```ts
+const github = {
+  name: "github",
+  command: "docker",
+  args: [
+    "run",
+    "-i",
+    "--rm",
+    "-e",
+    "GITHUB_PERSONAL_ACCESS_TOKEN",
+    "ghcr.io/github/github-mcp-server",
+  ],
+  env: { GITHUB_PERSONAL_ACCESS_TOKEN: process.env.GITHUB_TOKEN ?? "" },
+  timeoutMs: 60_000,
+};
+```
+
+Use trusted server configuration for URLs and commands. The stdio transport launches and owns the process; closing the connection terminates it. Server stderr is suppressed unless `stderr: "inherit"`. HTTP redirects are refused so credentials are not forwarded to another destination. For OAuth login and token refresh, see [MCP OAuth](mcp-oauth.md). Hosts can also supply a valid bearer token.
 
 ## Tool behavior
 
@@ -66,11 +89,11 @@ Remote tool names are prefixed: `lookup` becomes `catalog__lookup`. Use distinct
 
 Tool catalogs are discovered automatically. Without `readTools`, only tools advertising `readOnlyHint: true` are exposed as reads. With `readTools`, the host explicitly selects reviewed read tools, including tools without annotations. Tools explicitly marked as mutating are rejected from reads. Every tool still requires host authorization; annotations alone do not grant access. This does not sandbox or prevent side effects inside a remote server.
 
-Discovery follows pagination with bounded page/tool counts and rejects duplicate tools, repeated cursors, or missing configured tools. Names must fit the provider-compatible 64-character limit after prefixing. Reconnect to refresh a changed tool catalog.
+Discovery follows pagination with bounded page/tool counts and rejects duplicate tools, repeated cursors, or missing configured tools. The combined `server__tool` name must fit the provider-compatible 64-character limit; longer names fail with an error stating that limit. Reconnect to refresh a changed tool catalog.
 
-Inputs are validated against the advertised JSON Schema before transmission. Draft 7 and draft 2020-12 schemas are supported; external references are not fetched and asynchronous schema extensions are rejected. Tool arguments and rendered results are bounded to 32,000 UTF-8 bytes. Structured read results become JSON text; text blocks are joined in order. Tool errors and unsupported media fail execution. Declared output schemas are validated against the discovered schema, including tools from earlier discovery pages.
+Inputs are validated against the advertised JSON Schema before transmission. Draft 7 and draft 2020-12 schemas are supported; external references are not fetched and asynchronous schema extensions are rejected. Tool arguments and rendered results are bounded to 32,000 UTF-8 bytes. Structured read results become JSON text; text blocks are joined in order. A read tool that returns `isError: true` yields `{"error":"tool_failed","message":...}` (message bounded to 4,000 characters) so the model can react; write-path errors still fail. Non-text blocks render as placeholders: `[image: mime]`, `[audio: mime]`, `[resource: uri]`, `[resource_link: uri name]`. Declared output schemas are validated against the discovered schema, including tools from earlier discovery pages.
 
-Connection setup defaults to a ten-second deadline, which can be overridden with the third `connectMcp` argument. Discovery and calls have ten-second request timeouts and honor cancellation signals. Always close connections after use. External tool content remains untrusted data.
+Connection setup defaults to the server's `timeoutMs`, which can be overridden with the third `connectMcp` argument. Discovery and calls use `timeoutMs` as the request timeout and honor cancellation signals. Always close connections after use. External tool content remains untrusted data.
 
 ## Approved writes
 
@@ -131,7 +154,7 @@ Read-only literals retain `McpConnection<ReadTool>` through overloads. Configura
 Leave `YADA_MCP_SERVERS` unset to use no MCP servers, or supply a JSON array:
 
 ```dotenv
-YADA_MCP_SERVERS=[{"name":"catalog","url":"https://your-server.example/mcp"}]
+YADA_MCP_SERVERS=[{"name":"catalog","url":"https://your-server.example/mcp","headers":{"x-api-key":"..."},"timeoutMs":60000}]
 ```
 
 `mcpServersFromEnv(process.env)` validates this array and returns server configurations for `connectMcp`. Each server has a unique name. Connect them with the appropriate identity and authorization callback, combine their `tools` arrays for `run`, and close all connections after use. OAuth stores and callback handlers are host code, not JSON settings. The environment loader does not launch processes or connect by itself.

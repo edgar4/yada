@@ -41,6 +41,7 @@ export function mcpInvoker(
   client: Client,
   tools: readonly Tool[],
   authorize: (identity: Identity, name: string) => Promise<boolean>,
+  timeout: number,
 ) {
   const schemas = new Map(
     tools.map((tool) => [
@@ -62,7 +63,14 @@ export function mcpInvoker(
       throw new Error("Invalid MCP arguments");
     return input;
   };
-  const call: McpInvoke = async (name, args, identity, signal, meta) => {
+  const invoke = async (
+    name: string,
+    args: unknown,
+    identity: Identity,
+    signal: AbortSignal,
+    meta: Record<string, unknown> | undefined,
+    tolerateError: boolean,
+  ): Promise<CallToolResult> => {
     if (!(await abortable(() => authorize(identity, name), signal)))
       throw new Error("MCP access denied");
     const input = validate(name, args);
@@ -73,13 +81,16 @@ export function mcpInvoker(
         await client.callTool(
           { name, arguments: input, ...(meta ? { _meta: meta } : {}) },
           undefined,
-          { signal, timeout: 10_000 },
+          { signal, timeout },
         ),
       );
     } catch (error) {
       throw requestFailure(error);
     }
-    if (result.isError) throw new Error("MCP tool failed");
+    if (result.isError) {
+      if (tolerateError) return result;
+      throw new Error("MCP tool failed");
+    }
     if (
       schema?.output &&
       (!result.structuredContent || !schema.output(result.structuredContent))
@@ -87,17 +98,38 @@ export function mcpInvoker(
       throw new Error("Invalid MCP output");
     return result;
   };
-  return { call, validate };
+  const call: McpInvoke = (name, args, identity, signal, meta) =>
+    invoke(name, args, identity, signal, meta, false);
+  const read = (
+    name: string,
+    args: unknown,
+    identity: Identity,
+    signal: AbortSignal,
+  ) => invoke(name, args, identity, signal, undefined, true);
+  return { call, read, validate };
+}
+function renderBlock(block: CallToolResult["content"][number]): string {
+  switch (block.type) {
+    case "text":
+      return block.text;
+    case "image":
+    case "audio":
+      return `[${block.type}: ${block.mimeType}]`;
+    case "resource":
+      return `[resource: ${block.resource.uri}]`;
+    case "resource_link":
+      return `[resource_link: ${block.uri} ${block.name}]`;
+  }
 }
 export function readResult(result: CallToolResult): string {
+  if (result.isError)
+    return JSON.stringify({
+      error: "tool_failed",
+      message: result.content.map(renderBlock).join("\n").slice(0, 4000),
+    });
   const output = result.structuredContent
     ? JSON.stringify(result.structuredContent)
-    : result.content
-        .map((block) => {
-          if (block.type !== "text") throw new Error("Unsupported MCP content");
-          return block.text;
-        })
-        .join("\n");
+    : result.content.map(renderBlock).join("\n");
   if (Buffer.byteLength(output) > 32_000)
     throw new Error("MCP result too large");
   return output;
