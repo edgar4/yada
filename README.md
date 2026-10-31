@@ -48,6 +48,8 @@ The key belongs to your selected provider. Live requests use your provider accou
 
 See [provider configuration](docs/configuration.md) for supported providers, model selection, and server-side configuration. See [MCP connections](docs/mcp.md) to connect external tool servers and [runtime architecture](docs/architecture.md) for execution behavior.
 
+Extend workflows with reusable [skills](docs/skills.md), including standard `SKILL.md` folders from Claude, Cursor and Codex.
+
 Use [durable storage](docs/storage.md) to retain conversations and OAuth sessions across restarts, and [durable runs](docs/recovery.md) to resume interrupted execution. SQLite is the default; PostgreSQL and MySQL are also supported.
 
 Connect [HTTP APIs and business databases](docs/connectors.md), or build [approved write tools](docs/actions.md) with durable operation receipts. Use the [service API](docs/service.md) for scheduled runs and streaming events, and the [browser SDK and widget](docs/browser.md) for an accessible, themeable chat interface.
