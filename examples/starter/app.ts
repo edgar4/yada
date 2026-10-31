@@ -57,7 +57,7 @@ export async function createStarterApp(options: {
             ...connections.flatMap((connection) => connection.tools),
           ],
           system:
-            "You are Yada, a helpful assistant in a single authenticated workspace. Use the available tools when needed. Explain approval requests clearly. Never claim an action succeeded without its tool result.",
+            "You are Yada, a helpful assistant for the signed-in user. Use the available tools when needed. Explain approval requests clearly. Never claim an action succeeded without its tool result.",
           maxRounds: 8,
           maxToolCalls: 16,
           timeoutMs: 60_000,

@@ -74,7 +74,7 @@ it("runs the bundled widget against real starter auth and durable storage, then 
         violations.push(event.text());
     });
     await page.goto(origin);
-    await page.getByLabel("Workspace password").fill(password);
+    await page.getByLabel("Password").fill(password);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await page.getByLabel("Message", { exact: true }).fill("Hello");
     await page.getByRole("button", { name: "Send", exact: true }).click();
@@ -90,7 +90,7 @@ it("runs the bundled widget against real starter auth and durable storage, then 
     await fixture.reopen();
     await start();
     await page.reload();
-    await page.getByLabel("Workspace password").waitFor();
+    await page.getByLabel("Password").waitFor();
     expect(
       await page
         .getByText("Your private workspace answer.", { exact: true })
@@ -99,7 +99,7 @@ it("runs the bundled widget against real starter auth and durable storage, then 
     expect(
       await page.evaluate(() => localStorage.getItem("yada-starter:run")),
     ).toBe(saved);
-    await page.getByLabel("Workspace password").fill(password);
+    await page.getByLabel("Password").fill(password);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await page
       .getByText("Your private workspace answer.", { exact: true })

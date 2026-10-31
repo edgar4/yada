@@ -4,62 +4,78 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
-    <title>Yada workspace</title>
+    <title>Yada</title>
     <link rel="stylesheet" href="/assets/style.css" />
     <script type="module" src="/assets/client.js"></script>
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
     <header>
-      <a class="brand" href="/" aria-label="Yada workspace home">
-        <svg viewBox="0 0 120 120" width="44" height="44" aria-hidden="true">
+      <div class="bar">
+        <a class="brand" href="/" aria-label="Yada home">
+          <svg viewBox="0 0 120 120" width="36" height="36" aria-hidden="true">
+            <rect width="120" height="120" rx="28" fill="#1F1A3D" />
+            <g
+              stroke="#FFB547"
+              stroke-width="12"
+              fill="none"
+              stroke-linecap="round"
+            >
+              <path d="M30 32 Q45 46 60 60" />
+              <path d="M90 32 Q75 46 60 60" />
+              <path d="M60 60 Q60 75 60 90" />
+            </g>
+            <circle cx="60" cy="60" r="9" fill="#FFFFFF" />
+          </svg>
+          yada
+        </a>
+        <button id="logout" type="button" hidden>Sign out</button>
+      </div>
+    </header>
+    <main id="main" tabindex="-1">
+      <aside class="hello">
+        <svg id="face" viewBox="0 0 120 120" aria-hidden="true">
+          <circle cx="60" cy="60" r="60" fill="#1F1A3D" />
           <g
-            stroke="currentColor"
+            stroke="#FFB547"
             stroke-width="12"
             fill="none"
             stroke-linecap="round"
           >
-            <path d="M30 32 Q45 46 60 60" />
-            <path d="M90 32 Q75 46 60 60" />
-            <path d="M60 60 Q60 75 60 90" />
+            <path data-part="l" d="M30 32 Q45 46 60 60" />
+            <path data-part="r" d="M90 32 Q75 46 60 60" />
+            <path data-part="s" d="M60 60 Q60 75 60 90" />
           </g>
-          <circle cx="60" cy="60" r="9" fill="#E07A00" />
+          <circle data-part="d" cx="60" cy="60" r="9" fill="#FFFFFF" />
         </svg>
-        <span>yada<span class="dot">.</span></span>
-      </a>
-      <button id="logout" type="button" hidden>Sign out</button>
-    </header>
-    <main id="main" tabindex="-1">
-      <div class="intro">
-        <p class="eyebrow">YOUR WORKSPACE</p>
-        <h1>A little help, right here.</h1>
+        <h1>Hi, I’m Yada.</h1>
         <p>Ask a question, explore an idea, or find your next step.</p>
+        <p id="status" role="status">Checking your session…</p>
+        <p id="error" role="alert"></p>
+        <button id="retry" type="button" hidden>Try again</button>
+      </aside>
+      <div class="stage">
+        <section id="login" class="card" aria-labelledby="login-title" hidden>
+          <h2 id="login-title">Sign in to chat with Yada</h2>
+          <form id="login-form">
+            <label for="password">Password</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
+            <button id="login-button" type="submit">Sign in</button>
+          </form>
+        </section>
+        <section id="chat" class="card" aria-label="Chat with Yada" hidden>
+          <div id="widget"></div>
+        </section>
+        <noscript
+          ><p>Enable JavaScript to sign in and use your assistant.</p></noscript
+        >
       </div>
-      <p id="status" role="status">Checking your session…</p>
-      <p id="error" role="alert"></p>
-      <button id="retry" type="button" hidden>Try again</button>
-      <section id="login" class="panel" aria-labelledby="login-title" hidden>
-        <h2 id="login-title">Welcome to Yada</h2>
-        <p>Enter the workspace password to open your assistant.</p>
-        <form id="login-form">
-          <label for="password">Workspace password</label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            autocomplete="current-password"
-            required
-          />
-          <button id="login-button" type="submit">Sign in</button>
-        </form>
-      </section>
-      <section id="chat" aria-label="Workspace assistant" hidden>
-        <div id="widget"></div>
-      </section>
-      <noscript
-        ><p>Enable JavaScript to sign in and use your assistant.</p></noscript
-      >
     </main>
-    <footer>Your workspace. Your conversation.</footer>
   </body>
 </html>
