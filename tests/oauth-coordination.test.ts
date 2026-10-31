@@ -60,7 +60,10 @@ for (const driver of ["sqlite", "postgres", "mysql"] as const) {
         return { first, second, id: randomUUID(), config, records };
       }
       it("serializes independent owners, renews long operations, and cancels waiters", async () => {
-        const { first, second, id } = await setup(600);
+        const { first, second, id, records } = await setup(600);
+        let now = Date.now();
+        const originalExpiry = now + 600;
+        vi.spyOn(Date, "now").mockImplementation(() => now);
         const started = gate();
         const release = gate();
         let escaped: McpOAuthStore | undefined;
@@ -72,18 +75,33 @@ for (const driver of ["sqlite", "postgres", "mysql"] as const) {
           started.resolve();
           await release.promise;
         });
-        await started.promise;
-        await delay(850);
-        const visitor = vi.fn(() => Promise.resolve());
-        await expect(
-          coordinated(second)(id, visitor, AbortSignal.timeout(100)),
-        ).rejects.toThrow();
-        expect(visitor).not.toHaveBeenCalled();
-        await expect(second.update(id, { pending: undefined })).rejects.toThrow(
-          "coordination lost",
-        );
-        release.resolve();
-        await owner;
+        const ownerResult = Promise.allSettled([owner]);
+        try {
+          await started.promise;
+          for (let renewal = 0; renewal < 2; renewal++) {
+            now += 400;
+            await expect
+              .poll(
+                async () =>
+                  (await records.read(JSON.stringify(["oauth", id])))?.value,
+              )
+              .toMatchObject({ lease: { expiresAt: now + 600 } });
+          }
+          expect(now).toBeGreaterThan(originalExpiry);
+          const visitor = vi.fn(() => Promise.resolve());
+          await expect(
+            coordinated(second)(id, visitor, AbortSignal.timeout(100)),
+          ).rejects.toThrow();
+          expect(visitor).not.toHaveBeenCalled();
+          await expect(
+            second.update(id, { pending: undefined }),
+          ).rejects.toThrow("coordination lost");
+        } finally {
+          release.resolve();
+          expect(await ownerResult).toEqual([
+            { status: "fulfilled", value: undefined },
+          ]);
+        }
         await expect(
           escaped?.update(id, { pending: undefined }),
         ).rejects.toThrow("coordination lost");
