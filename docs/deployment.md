@@ -20,7 +20,7 @@ npx playwright install chromium
 npm run check
 npm run test:package
 npm pack
-npm install /absolute/path/edgaralochi-yada-0.1.0.tgz
+npm install /absolute/path/edgaralochi-yada-0.2.0.tgz
 ```
 
 Import the runtime from `@edgaralochi/yada`, the browser client from `@edgaralochi/yada/client`, and the widget from `@edgaralochi/yada/widget`. Browser modules are ESM intended for your application's bundler, with dependencies resolved from the installed package. All three exports include TypeScript declarations. The archive includes compiled code, documentation, the README, license, package metadata and an explicit list of starter template files. The `yada init` executable generates the standalone app described in the [starter guide](starter.md). Generated configs and database files are excluded. `npm run test:package` installs the archive in a fresh directory, imports all exports, runs a deterministic provider and SQLite, and checks consumer declaration resolution.
@@ -32,14 +32,14 @@ Publish a new version with `npm publish --access public` after the release check
 The Docker image runs `deploy/server.mjs`: a single fixed demo identity, a deterministic provider, no tools, and a shared bearer token. It is a local integration example. Applications must supply their own verified session authentication, profile authorization, providers and tools before using real accounts or data.
 
 ```sh
-docker build -t yada:0.1.0 .
+docker build -t yada:0.2.0 .
 docker volume create yada-data
 export YADA_DEMO_TOKEN=$(openssl rand -hex 32)
 export YADA_STORAGE_KEY=$(openssl rand -hex 32)
 docker run --rm --init --name yada -p 127.0.0.1:3000:3000 \
   -e YADA_DEMO_TOKEN -e YADA_STORAGE_KEY \
   -e YADA_STORAGE_FILE=/data/yada.sqlite \
-  -v yada-data:/data yada:0.1.0
+  -v yada-data:/data yada:0.2.0
 ```
 
 Retain the encryption key securely across restarts. A new key cannot read existing encrypted records. The image runs as the unprivileged `node` user and handles SIGTERM by stopping HTTP admission, disconnecting active event streams, stopping its worker and closing storage. Disconnected clients can reconnect and replay persisted events after restart. Allow enough termination grace for worker shutdown.
