@@ -35,7 +35,7 @@ it.each([undefined, "custom-model"])(
     ).toEqual({ content: "Hello", toolCalls: [], finishReason: "stop" });
     expect(invoke.mock.instances[0]).toHaveProperty(
       "model",
-      model ?? "gpt-4.1-mini",
+      model ?? "gpt-6-luna",
     );
   },
 );

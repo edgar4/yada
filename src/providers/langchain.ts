@@ -4,6 +4,7 @@ import {
   SystemMessage,
   ToolMessage,
   type BaseMessage,
+  type ContentBlock,
 } from "@langchain/core/messages";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { z } from "zod";
@@ -12,12 +13,18 @@ function toMessage(turn: Turn, provider: string): BaseMessage {
   switch (turn.role) {
     case "user":
       return new HumanMessage(turn.content);
-    case "assistant":
+    case "assistant": {
       if (turn.providerMetadata && turn.providerMetadata.provider !== provider)
         throw new Error("Provider metadata mismatch");
+      const { thinkingBlocks, ...kwargs } = turn.providerMetadata?.data ?? {};
       return new AIMessage({
-        content: turn.content,
-        additional_kwargs: turn.providerMetadata?.data ?? {},
+        content: Array.isArray(thinkingBlocks)
+          ? [
+              ...(thinkingBlocks as ContentBlock[]),
+              ...(turn.content ? [{ type: "text", text: turn.content }] : []),
+            ]
+          : turn.content,
+        additional_kwargs: kwargs,
         tool_calls: turn.toolCalls.map((call) => ({
           id: call.id,
           name: call.name,
@@ -25,6 +32,7 @@ function toMessage(turn: Turn, provider: string): BaseMessage {
           type: "tool_call",
         })),
       });
+    }
     case "tool":
       return new ToolMessage({
         content: turn.content,
@@ -80,6 +88,16 @@ export function chatModelAdapter(
               .filter((block) => block.type === "text")
               .map((block) => z.object({ text: z.string() }).parse(block).text)
               .join("");
+      const thinkingBlocks = Array.isArray(message.content)
+        ? message.content.filter(
+            (block) =>
+              block.type === "thinking" || block.type === "redacted_thinking",
+          )
+        : [];
+      const metadata = {
+        ...message.additional_kwargs,
+        ...(thinkingBlocks.length ? { thinkingBlocks } : {}),
+      };
       const finishReason =
         normalizedReason === "max_tokens" || normalizedReason === "length"
           ? "length"
@@ -111,13 +129,8 @@ export function chatModelAdapter(
         content,
         toolCalls,
         finishReason,
-        ...(Object.keys(message.additional_kwargs).length
-          ? {
-              providerMetadata: {
-                provider: name,
-                data: message.additional_kwargs,
-              },
-            }
+        ...(Object.keys(metadata).length
+          ? { providerMetadata: { provider: name, data: metadata } }
           : {}),
       };
     },

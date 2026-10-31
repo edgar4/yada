@@ -27,7 +27,7 @@ it.each([undefined, "custom-model"])(
     });
     expect(invoke.mock.instances[0]).toHaveProperty(
       "model",
-      model ?? "claude-sonnet-4-6",
+      model ?? "claude-haiku-5-5",
     );
   },
 );
