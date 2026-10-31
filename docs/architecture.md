@@ -18,11 +18,23 @@ Yada is a server-side TypeScript runtime. Applications compose a model adapter a
 
 Each run discovers authorized tools, invokes the provider, validates tool arguments, rechecks authorization, and returns tool results to the provider. Round and call limits bound execution.
 
-Read-tool failures are returned to the model as a JSON tool result, `{"error": "<category>", "message": "..."}`, so it can self-correct. Categories: `unknown_tool` (unknown or unauthorized name), `invalid_arguments` (Zod issue paths and messages, never raw values) and `tool_failed` (generic text; dependency errors are not exposed). Three consecutive failed tool results fail the run with `dependency_failed`; the count is stored in the checkpoint. Write-tool errors, authorization revoked after a tool was offered or before a recovered call runs (`tool_denied`), and checkpoint errors remain terminal. Cancellation always yields `cancelled`.
+Read-tool failures are returned to the model as a JSON tool result, `{"error": "<category>", "message": "..."}`, so it can self-correct. Categories: `unknown_tool` (unknown or unauthorized name), `invalid_arguments` (Zod issue paths and messages, never raw values) and `tool_failed` (generic text; dependency errors are not exposed). `maxFailures` (3) consecutive failed tool results fail the run with `dependency_failed`; the count is stored in the checkpoint. Write-tool errors, authorization revoked after a tool was offered or before a recovered call runs (`tool_denied`), and checkpoint errors remain terminal. Cancellation always yields `cancelled`.
 
-Tool output over 32,000 characters is truncated and ends with `…[truncated N chars]`. A call ID the provider reuses from an earlier round is rewritten to `<id>-r<round>`; duplicate IDs within one response fail with `invalid_response`.
+Tool output over `maxToolOutput` (32,000) characters is truncated and ends with `…[truncated N chars]`. A call ID the provider reuses from an earlier round is rewritten to `<id>-r<round>`; duplicate IDs within one response fail with `invalid_response`.
 
 Termination: `stop` with text completes. `stop` with empty text after tool use completes with the latest non-empty assistant text of the run, otherwise fails with `invalid_response`. `length` and `other` fail with `invalid_response`. `refusal` (including content-filter and safety stops) fails with `refused`. Limits fail with `limit`.
+
+## Limits and hooks
+
+`limits` holds every runtime number with its default: `maxContextChars` 64,000, `maxRounds` 8, `maxToolCalls` 16, `maxFailures` 3, `maxToolOutput` 32,000. The `maxRounds` and `maxToolCalls` run options override the limits.
+
+`run` accepts `hooks?: RunHooks`, honoured on checkpoint resume. Members are optional and may be async.
+
+- `beforeModel(request)` may return an edited `{ system, messages, tools }` for that call only; the checkpoint is unchanged.
+- `afterModel(result)` observes the provider result.
+- `beforeTool(call, tool)` may return `{ deny: reason }`; the call becomes a `denied` error tool result and counts as a failure.
+- `afterTool(call, content)` may return replacement content (redaction) before truncation.
+- `onEvent(event)` receives `AgentEvent`: `round_started`, `tool_started`, `tool_finished`, `model_finished` (with usage) and `run_finished`. It is fire-and-forget and its errors are ignored. Errors from other hooks fail the run with `dependency_failed`.
 
 Cancellation returns promptly even when a dependency ignores its signal. It cannot stop underlying work in that dependency; handlers must honor `AbortSignal`. Callers supply a deadline signal.
 

@@ -10,7 +10,7 @@ import type { Identity } from "../core/contracts.js";
 import type { recordStore } from "./records.js";
 const requestSchema = z.object({
   input: z.string(),
-  limits: limitsSchema.default({ maxContextChars: 64000 }),
+  limits: limitsSchema.prefault({}),
   history: z.array(turnSchema).default([]),
   system: z.string(),
   profileId: z.string().min(1),
