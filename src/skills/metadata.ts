@@ -1,13 +1,13 @@
 import { parseDocument } from "yaml";
 import { z } from "zod";
 
+const skillName = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 const metadata = z.looseObject({
-  name: z
-    .string()
-    .min(1)
-    .max(64)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
-    .optional(),
+  name: skillName.optional(),
   description: z.string().trim().min(1).max(1024),
   license: z.string().optional(),
   compatibility: z.string().min(1).max(500).optional(),
@@ -25,7 +25,11 @@ export function parseSkill(source: string, directoryName: string) {
   if (document.errors.length || document.warnings.length)
     throw new Error(`Skill ${directoryName}: invalid YAML metadata`);
   const parsed = metadata.safeParse(document.toJS({ maxAliasCount: 0 }));
-  if (!parsed.success || (parsed.data.name ?? directoryName) !== directoryName)
+  if (
+    !parsed.success ||
+    !skillName.safeParse(directoryName).success ||
+    (parsed.data.name ?? directoryName) !== directoryName
+  )
     throw new Error(`Skill ${directoryName}: invalid name or metadata`);
   if (!match[2]?.trim())
     throw new Error(`Skill ${directoryName}: empty instructions`);
