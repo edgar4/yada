@@ -326,3 +326,13 @@ it("makes progress when the read limit lands inside a surrogate pair", async () 
   expect(out.content).toBe("😀");
   expect(out.nextOffset).toBe(2);
 });
+it("accepts non-string metadata values and warns on unknown keys", () => {
+  const parsed = parseSkill(
+    "---\ndescription: D\nmetadata:\n  version: 1.0\n  tags: [a, b]\nextra: 1\n---\nBody",
+    "docs",
+  );
+  expect(parsed.name).toBe("docs");
+  expect(parsed.warnings).toEqual([
+    "Skill docs: extra is not enforced by Yada; host tool permissions still apply",
+  ]);
+});
