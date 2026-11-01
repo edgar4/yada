@@ -278,6 +278,30 @@ it("rejects script paths that become symlinks after loading", async () => {
   expect(ran).toBe(0);
 });
 
+it("rejects script content that changed after loading", async () => {
+  const base = await root();
+  const dir = await skill(base, "s", { "scripts/go.py": "print(1)" });
+  let ran = 0;
+  const catalog = await loadSkills({
+    directories: [base],
+    authorize,
+    runner: () => {
+      ran++;
+      return Promise.resolve({ stdout: "", stderr: "", exitCode: 0 });
+    },
+  });
+  const tool = catalog.tools[1];
+  if (!tool || tool.effect !== "write") throw new Error("expected write tool");
+  await writeFile(join(dir, "scripts/go.py"), "print(2)");
+  await expect(
+    tool.execute({ name: "s", path: "scripts/go.py" }, {
+      identity,
+      signal: signal(),
+    } as never),
+  ).rejects.toThrow("Skill script changed; reload skills");
+  expect(ran).toBe(0);
+});
+
 it("loads Codex/ChatGPT layouts with agents/openai.yaml and assets", async () => {
   const base = await root();
   await skill(base, "codex", {

@@ -50,12 +50,16 @@ export async function connectMcp(
           ...(oauth ? { authProvider: oauth.provider } : {}),
           fetch: (input, init) => {
             const headers = new Headers(init?.headers);
-            for (const [name, value] of Object.entries(settings.headers ?? {}))
-              headers.set(name, value);
-            if (settings.token)
-              headers.set("authorization", `Bearer ${settings.token}`);
             const endpoint =
               input instanceof Request ? input.url : String(input);
+            if (new URL(endpoint).origin === new URL(settings.url).origin) {
+              for (const [name, value] of Object.entries(
+                settings.headers ?? {},
+              ))
+                headers.set(name, value);
+              if (settings.token)
+                headers.set("authorization", `Bearer ${settings.token}`);
+            }
             const signals = [
               init?.signal,
               endpoint === new URL(settings.url).href

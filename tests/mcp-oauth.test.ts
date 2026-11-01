@@ -277,3 +277,86 @@ it("rejects discovery issuer mismatch", async () => {
     ),
   ).rejects.toThrow("issuer mismatch");
 });
+it("sends configured headers only to the MCP origin", async () => {
+  const s = setup();
+  await s.seed();
+  const seen: [string, string | null][] = [];
+  let token = "";
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      seen.push([url, new Headers(init?.headers).get("x-api-key")]);
+      if (url === "https://auth.example/token") {
+        token = "access";
+        return Promise.resolve(
+          Response.json({
+            access_token: token,
+            refresh_token: "refresh",
+            token_type: "Bearer",
+            expires_in: 3600,
+          }),
+        );
+      }
+      if (init?.method === "GET")
+        return Promise.resolve(new Response(null, { status: 405 }));
+      if (new Headers(init?.headers).get("authorization") !== `Bearer ${token}`)
+        return Promise.resolve(
+          new Response(null, {
+            status: 401,
+            headers: {
+              "www-authenticate":
+                'Bearer resource_metadata="https://meta.example/prm"',
+            },
+          }),
+        );
+      const request = JSON.parse(
+        typeof init?.body === "string" ? init.body : "{}",
+      ) as { id?: number; method?: string };
+      if (request.id === undefined)
+        return Promise.resolve(new Response(null, { status: 202 }));
+      return Promise.resolve(
+        Response.json({
+          jsonrpc: "2.0",
+          id: request.id,
+          result:
+            request.method === "initialize"
+              ? {
+                  protocolVersion: "2025-03-26",
+                  capabilities: { tools: {} },
+                  serverInfo: { name: "test", version: "1" },
+                }
+              : {
+                  tools: [{ name: "lookup", inputSchema: { type: "object" } }],
+                },
+        }),
+      );
+    }),
+  );
+  const config = {
+    name: "remote",
+    url: s.options.serverUrl,
+    readTools: ["lookup"],
+    headers: { "x-api-key": "secret" },
+  };
+  const access = { identity, authorize: () => Promise.resolve(true) };
+  await expect(
+    connectMcp(config, access, AbortSignal.timeout(2000), s.oauth),
+  ).rejects.toThrow();
+  const state = [...s.records.values()][0]?.pending?.state;
+  await s.oauth.complete(
+    new URLSearchParams({
+      state: String(state),
+      code: "code",
+      iss: "https://auth.example",
+    }),
+  );
+  await (
+    await connectMcp(config, access, AbortSignal.timeout(2000), s.oauth)
+  ).close();
+  const auth = seen.filter(([url]) => url.startsWith("https://meta.example"));
+  const mcp = seen.filter(([url]) => url === "https://mcp.example/mcp");
+  expect(auth.length).toBeGreaterThan(0);
+  expect(auth.every(([, key]) => key === null)).toBe(true);
+  expect(mcp.every(([, key]) => key === "secret")).toBe(true);
+});
