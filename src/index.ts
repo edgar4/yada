@@ -79,4 +79,9 @@ export {
 } from "./storage/maintenance.js";
 export type { StorageBackup } from "./storage/maintenance.js";
 
-export { loadSkills, type SkillCatalog } from "./skills/index.js";
+export {
+  loadSkills,
+  type SkillCatalog,
+  type SkillInfo,
+  type SkillScriptRunner,
+} from "./skills/index.js";
