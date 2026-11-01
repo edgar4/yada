@@ -197,9 +197,9 @@ export function nativeAnthropicAdapter(
     name: "anthropic",
     capabilities: { toolCalling: true, vision: true },
     async complete(request) {
-      const message = await client.messages.create(params(request), {
-        signal: request.signal,
-      });
+      const message = await client.messages
+        .stream(params(request), { signal: request.signal })
+        .finalMessage();
       request.signal.throwIfAborted();
       return toResult(message);
     },

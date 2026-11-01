@@ -23,16 +23,6 @@ const anthropicMessage = {
   stop_sequence: null,
 };
 const anthropic = {
-  complete: json({
-    ...anthropicMessage,
-    content: [
-      { type: "thinking", thinking: "hmm", signature: "sig" },
-      { type: "text", text: "Hello world" },
-      { type: "tool_use", id: "toolu_1", name: "lookup", input: { id: "a" } },
-    ],
-    stop_reason: "tool_use",
-    usage: { input_tokens: 10, output_tokens: 5 },
-  }),
   stream: () =>
     sse([
       [
@@ -294,7 +284,9 @@ it.each([
             (JSON.parse(init.body) as { stream?: boolean }).stream === true);
         requests.push(streaming);
         return Promise.resolve(
-          streaming ? fixture.stream() : fixture.complete.clone(),
+          streaming || !("complete" in fixture)
+            ? fixture.stream()
+            : fixture.complete.clone(),
         );
       }),
     );
@@ -332,7 +324,9 @@ it.each([
       }
       deltas.push(next.value.delta);
     }
-    expect(requests).toEqual([false, true]);
+    expect(requests).toEqual(
+      name === "anthropic" ? [true, true] : [false, true],
+    );
     expect(deltas.join("")).toBe("Hello world");
     const fixed = (value: ProviderResult) =>
       JSON.parse(
