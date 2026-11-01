@@ -63,7 +63,7 @@ function toMessages(system: string, turns: readonly Turn[], name: string) {
           throw new Error("Provider metadata mismatch");
         messages.push({
           role: "assistant",
-          content: turn.content || null,
+          content: turn.content || (turn.toolCalls.length ? null : ""),
           ...(turn.toolCalls.length && {
             tool_calls: turn.toolCalls.map((call) => ({
               id: call.id,
@@ -94,6 +94,7 @@ type Completion = Readonly<{
   content: string;
   calls: readonly { id: string; name: string; arguments: string }[];
   finish: string | null | undefined;
+  refused?: boolean;
   usage?:
     { prompt_tokens: number; completion_tokens: number } | null | undefined;
 }>;
@@ -109,7 +110,8 @@ const finishReasons: Record<string, ProviderResult["finishReason"]> = {
 const toolArgs = z.record(z.string(), z.unknown());
 
 function toResult(completion: Completion): ProviderResult {
-  const toolCalls = completion.calls.map((call) => {
+  const length = completion.finish === "length";
+  const toolCalls = (length ? [] : completion.calls).map((call) => {
     const args = toolArgs.safeParse(
       call.arguments.trim() ? safeJson(call.arguments) : {},
     );
@@ -126,9 +128,10 @@ function toResult(completion: Completion): ProviderResult {
     }),
     content: completion.content,
     toolCalls,
-    finishReason:
-      finishReasons[completion.finish ?? ""] ??
-      (toolCalls.length ? "tool_calls" : "other"),
+    finishReason: completion.refused
+      ? "refusal"
+      : (finishReasons[completion.finish ?? ""] ??
+        (toolCalls.length ? "tool_calls" : "other")),
   };
 }
 
@@ -197,6 +200,7 @@ export function nativeOpenAIAdapter(settings: OpenAISettings): ProviderAdapter {
             : [],
         ),
         finish: choice.finish_reason,
+        refused: Boolean(choice.message.refusal),
         usage: response.usage,
       });
     },
@@ -205,6 +209,7 @@ export function nativeOpenAIAdapter(settings: OpenAISettings): ProviderAdapter {
       let finish: string | null | undefined;
       let usage: Completion["usage"];
       let seen = false;
+      let refused = false;
       const calls: { id: string; name: string; arguments: string }[] = [];
       const chunks = await client.chat.completions.create(
         {
@@ -220,6 +225,7 @@ export function nativeOpenAIAdapter(settings: OpenAISettings): ProviderAdapter {
         const choice = chunk.choices[0];
         if (!choice) continue;
         finish = choice.finish_reason ?? finish;
+        refused ||= Boolean(choice.delta.refusal);
         if (choice.delta.content) {
           content += choice.delta.content;
           yield { type: "text", delta: choice.delta.content };
@@ -237,7 +243,13 @@ export function nativeOpenAIAdapter(settings: OpenAISettings): ProviderAdapter {
       }
       request.signal.throwIfAborted();
       if (!seen) throw new Error("Empty model stream");
-      return toResult({ content, calls: calls.filter(Boolean), finish, usage });
+      return toResult({
+        content,
+        calls: calls.filter(Boolean),
+        finish,
+        refused,
+        usage,
+      });
     },
   };
 }

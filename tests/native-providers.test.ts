@@ -312,6 +312,45 @@ describe("openai-compatible", () => {
     expect((await openai().complete(request())).finishReason).toBe(expected);
   });
 
+  it("maps a refusal and ignores truncated tool calls on length", async () => {
+    stubFetch(() => chatReply({ content: null, refusal: "No" }, "stop"));
+    expect((await openai().complete(request())).finishReason).toBe("refusal");
+    stubFetch(() =>
+      chatReply(
+        {
+          content: "x",
+          tool_calls: [
+            {
+              id: "c",
+              type: "function",
+              function: { name: "lookup", arguments: '{"id":' },
+            },
+          ],
+        },
+        "length",
+      ),
+    );
+    expect(await openai().complete(request())).toMatchObject({
+      finishReason: "length",
+      toolCalls: [],
+    });
+  });
+
+  it("replays an empty assistant turn as empty text", async () => {
+    const calls = stubFetch(() => chatReply());
+    await openai().complete(
+      request([
+        { role: "user", content: "Hi" },
+        { role: "assistant", content: "", toolCalls: [] },
+        { role: "user", content: "Again" },
+      ]),
+    );
+    expect(calls[0]?.body["messages"]).toContainEqual({
+      role: "assistant",
+      content: "",
+    });
+  });
+
   it("throws on invalid tool call arguments", async () => {
     stubFetch(() =>
       chatReply(
