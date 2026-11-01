@@ -125,7 +125,13 @@ describe("anthropic", () => {
     const first = await anthropic().complete(request());
     expect(first.providerMetadata).toEqual({
       provider: "anthropic",
-      data: { thinkingBlocks: blocks },
+      data: {
+        contentBlocks: [
+          ...blocks,
+          { type: "text", text: "Checking" },
+          { type: "tool_use", id: "t1", name: "lookup", input: {} },
+        ],
+      },
     });
     await anthropic().complete(
       request([
@@ -133,7 +139,7 @@ describe("anthropic", () => {
         {
           role: "assistant",
           content: first.content,
-          toolCalls: first.toolCalls,
+          toolCalls: [{ id: "t1-r2", name: "lookup", args: {} }],
           ...(first.providerMetadata && {
             providerMetadata: first.providerMetadata,
           }),
@@ -147,7 +153,47 @@ describe("anthropic", () => {
     expect(assistant?.content).toEqual([
       ...blocks,
       { type: "text", text: "Checking" },
+      { type: "tool_use", id: "t1-r2", name: "lookup", input: {} },
+    ]);
+  });
+
+  it("replays interleaved blocks in order and legacy thinkingBlocks", async () => {
+    const interleaved = [
+      { type: "thinking", thinking: "a", signature: "s1" },
+      { type: "text", text: "Looking" },
+      { type: "thinking", thinking: "b", signature: "s2" },
       { type: "tool_use", id: "t1", name: "lookup", input: {} },
+    ];
+    const calls = stubFetch((n) =>
+      n === 1 ? claudeReply(interleaved, "tool_use") : claudeReply(),
+    );
+    const first = await anthropic().complete(request());
+    const turns = (providerMetadata: unknown): Turn[] => [
+      { role: "user", content: "Hi" },
+      {
+        role: "assistant",
+        content: first.content,
+        toolCalls: first.toolCalls,
+        providerMetadata: providerMetadata as never,
+      },
+    ];
+    await anthropic().complete(request(turns(first.providerMetadata)));
+    await anthropic().complete(
+      request(
+        turns({
+          provider: "anthropic",
+          data: { thinkingBlocks: [interleaved[0], interleaved[2]] },
+        }),
+      ),
+    );
+    const sent = (n: number) =>
+      (calls[n]?.body["messages"] as { content: unknown[] }[])[1]?.content;
+    expect(sent(1)).toEqual(interleaved);
+    expect(sent(2)).toEqual([
+      interleaved[0],
+      interleaved[2],
+      interleaved[1],
+      interleaved[3],
     ]);
   });
 

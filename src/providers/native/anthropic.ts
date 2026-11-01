@@ -77,20 +77,34 @@ function toMessages(turns: readonly Turn[]) {
           turn.providerMetadata.provider !== "anthropic"
         )
           throw new Error("Provider metadata mismatch");
-        add("assistant", [
-          ...(thinkingBlocks.parse(
-            turn.providerMetadata?.data["thinkingBlocks"] ?? [],
-          ) as unknown as ContentBlockParam[]),
-          ...(turn.content
-            ? [{ type: "text" as const, text: turn.content }]
-            : []),
-          ...turn.toolCalls.map((call) => ({
-            type: "tool_use" as const,
-            id: call.id,
-            name: call.name,
-            input: z.record(z.string(), z.unknown()).parse(call.args),
-          })),
-        ]);
+        const stored = z
+          .array(z.looseObject({ type: z.string() }))
+          .optional()
+          .parse(turn.providerMetadata?.data["contentBlocks"]);
+        let calls = 0;
+        add(
+          "assistant",
+          stored
+            ? (stored.map((block) =>
+                block.type === "tool_use"
+                  ? { ...block, id: turn.toolCalls[calls++]?.id ?? block["id"] }
+                  : block,
+              ) as unknown as ContentBlockParam[])
+            : [
+                ...(thinkingBlocks.parse(
+                  turn.providerMetadata?.data["thinkingBlocks"] ?? [],
+                ) as unknown as ContentBlockParam[]),
+                ...(turn.content
+                  ? [{ type: "text" as const, text: turn.content }]
+                  : []),
+                ...turn.toolCalls.map((call) => ({
+                  type: "tool_use" as const,
+                  id: call.id,
+                  name: call.name,
+                  input: z.record(z.string(), z.unknown()).parse(call.args),
+                })),
+              ],
+        );
       }
     }
   }
@@ -141,7 +155,7 @@ function toResult(message: {
       ? {
           providerMetadata: {
             provider: "anthropic",
-            data: { thinkingBlocks: thinking },
+            data: { contentBlocks: message.content },
           },
         }
       : {}),
