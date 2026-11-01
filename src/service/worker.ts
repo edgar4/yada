@@ -12,12 +12,15 @@ import { CheckpointError } from "../core/checkpoint.js";
 import { runDurable } from "../storage/durable-run.js";
 import { RunLeaseError } from "../storage/runs.js";
 import type { YadaStorage } from "../storage/index.js";
-import { isTerminal } from "./contracts.js";
+import { isTerminal, type RunEvent } from "./contracts.js";
+import { eventKey, type EventBus } from "./events.js";
+import { composeHooks, type AgentEvent, type RunHooks } from "../core/hooks.js";
 export type AgentProfile = Readonly<{
   provider: ProviderAdapter;
   tools: readonly Tool[];
   system: string;
   limits?: RunLimits;
+  hooks?: RunHooks;
   historyChars?: number;
   historyToolChars?: number;
   approvalTtlMs?: number;
@@ -25,6 +28,11 @@ export type AgentProfile = Readonly<{
   maxToolCalls?: number;
   timeoutMs?: number;
 }>;
+const completeOnly = (provider: ProviderAdapter): ProviderAdapter => ({
+  name: provider.name,
+  capabilities: provider.capabilities,
+  complete: (request) => provider.complete(request),
+});
 export type Trace = Readonly<{
   event: "run_finished" | "run_retry";
   status: string;
@@ -43,6 +51,7 @@ export function createWorker(options: {
   pollMs?: number;
   concurrency?: number;
   maxAttempts?: number;
+  bus?: EventBus;
   trace?: (event: Trace) => void | Promise<void>;
 }) {
   const shutdown = new AbortController();
@@ -80,6 +89,46 @@ export function createWorker(options: {
     const started = Date.now();
     const cancellation = new AbortController();
     const runId = JSON.stringify([conversationId, job.id]);
+    const bus = options.bus;
+    const busKey = eventKey(identity, conversationId, job.id);
+    let token = "";
+    let sequence = job.events.length;
+    let recording = Promise.resolve();
+    const record = async (event: AgentEvent) => {
+      if (event.type === "text_delta")
+        return bus?.publish(busKey, {
+          version: 1,
+          sequence,
+          type: "text_delta",
+          at: Date.now(),
+          text: event.delta,
+        });
+      const mapped: Omit<RunEvent, "version" | "sequence" | "at"> | undefined =
+        event.type === "tool_started"
+          ? profile.tools.find((tool) => tool.spec.name === event.call.name)
+              ?.effect === "write"
+            ? undefined
+            : { type: "tool_started", tool: event.call.name }
+          : event.type === "tool_finished"
+            ? {
+                type: "tool_finished",
+                tool: event.call.name,
+                failed: event.failed,
+              }
+            : event.type === "model_finished" && event.usage
+              ? { type: "usage", ...event.usage }
+              : undefined;
+      if (!mapped) return;
+      const updated = await options.storage.jobs.update(
+        identity,
+        conversationId,
+        job.id,
+        mapped,
+        undefined,
+        { runId, token },
+      );
+      sequence = updated.events.length;
+    };
     const executing = async () => {
       const saved = await options.storage.runs.load(identity, runId);
       for (const call of saved?.checkpoint?.pending ?? []) {
@@ -131,6 +180,13 @@ export function createWorker(options: {
       };
       const result = await runDurable({
         ...profile,
+        provider: bus ? profile.provider : completeOnly(profile.provider),
+        hooks: composeHooks(...(profile.hooks ? [profile.hooks] : []), {
+          onEvent: (event) => {
+            recording = recording.then(() => record(event)).catch(() => {});
+            return undefined;
+          },
+        }),
         executeWrite: actionExecutor(
           options.storage.actions,
           identity,
@@ -143,6 +199,7 @@ export function createWorker(options: {
         runId,
         profileId: job.profileId,
         onSuspend: async (result, token) => {
+          await recording;
           await options.storage.jobs.update(
             identity,
             conversationId,
@@ -163,6 +220,7 @@ export function createWorker(options: {
           claim: async (...args) => {
             if (!(await eligible())) throw new RunLeaseError();
             const state = await runs.claim(...args);
+            if (state.lease) token = state.lease.token;
             if (!(await eligible())) {
               if (state.lease && !state.checkpoint?.outcome)
                 await runs.release(identity, args[1], state.lease.token);
@@ -201,6 +259,7 @@ export function createWorker(options: {
           },
         },
       });
+      await recording;
       if (!("approvalId" in result)) {
         const latest = await options.storage.jobs.load(
           identity,

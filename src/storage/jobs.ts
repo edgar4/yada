@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Identity, TerminalResult, Turn } from "../core/contracts.js";
 import {
+  isActivity,
   isTerminal,
   jobInputSchema,
   jobSchema,
@@ -138,16 +139,20 @@ export function createJobStore(
     event: Omit<RunEvent, "version" | "sequence" | "at">,
   ) => {
     const previous = job.events.at(-1);
+    const activity = isActivity(event.type);
     job.updatedAt = Date.now();
-    job.status = event.type;
-    job.availableAt =
-      Date.now() +
-      (event.type === "awaiting_approval"
-        ? 600_000
-        : event.type === "reconciling"
-          ? 5000
-          : 0);
+    if (!activity) {
+      job.status = event.type as Job["status"];
+      job.availableAt =
+        Date.now() +
+        (event.type === "awaiting_approval"
+          ? 600_000
+          : event.type === "reconciling"
+            ? 5000
+            : 0);
+    }
     if (
+      !activity &&
       previous?.type === event.type &&
       previous.approvalId === event.approvalId &&
       previous.text === event.text &&

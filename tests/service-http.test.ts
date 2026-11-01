@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { once } from "node:events";
 import { z } from "zod";
 import { storageFixture } from "./helpers/storage.js";
@@ -214,7 +214,10 @@ it("terminates event streams when access is revoked and hides dependency errors"
   const reader = response.body?.getReader();
   await reader?.read();
   allowed = false;
+  const now = Date.now();
+  const clock = vi.spyOn(Date, "now").mockReturnValue(now + 5001);
   await expect(reader?.read()).rejects.toThrow("disconnected");
+  clock.mockRestore();
   const unavailable = createHandler({
     storage: s.storage,
     origins: [],
