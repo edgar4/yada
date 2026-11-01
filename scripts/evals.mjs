@@ -19,11 +19,15 @@ if (name !== "fake" && process.env.CI) {
   console.error("Live evals are not allowed in CI");
   process.exit(2);
 }
-const selected = process.argv.includes("--scenario")
-  ? scenarios.filter(
-      (s) => s.name === process.argv[process.argv.indexOf("--scenario") + 1],
-    )
-  : scenarios;
+const filter = process.argv.indexOf("--scenario");
+const selected =
+  filter === -1
+    ? scenarios
+    : scenarios.filter((s) => s.name === process.argv[filter + 1]);
+if (!selected.length) {
+  console.error("No scenario matches --scenario");
+  process.exit(2);
+}
 
 const results = [];
 for (const scenario of selected) {
