@@ -1,23 +1,18 @@
 import { z } from "zod";
+const toolNames = z
+  .array(z.string().min(1))
+  .min(1)
+  .max(1000)
+  .refine((tools) => new Set(tools).size === tools.length);
+export const hasAuthorizationHeader = (headers?: Record<string, string>) =>
+  Object.keys(headers ?? {}).some(
+    (name) => name.toLowerCase() === "authorization",
+  );
 const common = {
   name: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/),
   timeoutMs: z.number().int().min(1000).max(600_000).default(30_000),
-  readTools: z
-    .array(z.string().min(1))
-    .min(1)
-    .max(1000)
-    .refine((tools) => new Set(tools).size === tools.length)
-    .optional(),
-  confirmTools: z
-    .union([
-      z.literal("*"),
-      z
-        .array(z.string().min(1))
-        .min(1)
-        .max(1000)
-        .refine((tools) => new Set(tools).size === tools.length),
-    ])
-    .optional(),
+  readTools: toolNames.optional(),
+  confirmTools: z.union([z.literal("*"), toolNames]).optional(),
   resources: z.boolean().optional(),
   writeTools: z
     .record(
@@ -63,9 +58,7 @@ export const mcpConfig = z
     if (
       "headers" in settings &&
       settings.token &&
-      Object.keys(settings.headers ?? {}).some(
-        (name) => name.toLowerCase() === "authorization",
-      )
+      hasAuthorizationHeader(settings.headers)
     )
       context.addIssue({
         code: "custom",
@@ -103,6 +96,7 @@ export const mcpConfig = z
       }
     }
   });
+export type McpSettings = z.output<typeof mcpConfig>;
 export type McpConfig = z.input<typeof mcpConfig>;
 export type McpReadConfig = McpConfig & {
   writeTools?: undefined;

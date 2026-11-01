@@ -1,9 +1,14 @@
 import type { McpOAuth } from "./oauth.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { mcpConfig, type McpConfig, type McpReadConfig } from "./config.js";
 import {
-  connectMcpTransport,
+  hasAuthorizationHeader,
+  mcpConfig,
+  type McpConfig,
+  type McpReadConfig,
+} from "./config.js";
+import {
+  connectParsed,
   type McpAccess,
   type McpConnection,
 } from "./session.js";
@@ -36,9 +41,7 @@ export async function connectMcp(
     oauth &&
     (!("url" in settings) ||
       settings.token ||
-      Object.keys(settings.headers ?? {}).some(
-        (name) => name.toLowerCase() === "authorization",
-      ) ||
+      hasAuthorizationHeader(settings.headers) ||
       new URL(settings.url).href !== oauth.serverUrl ||
       access.identity.actorId !== oauth.identity.actorId ||
       access.identity.tenantId !== oauth.identity.tenantId)
@@ -86,5 +89,5 @@ export async function connectMcp(
         });
   if (oauth && transport instanceof StreamableHTTPClientTransport)
     coordinateOAuthTransport(transport, oauth);
-  return connectMcpTransport(settings, access, transport, signal);
+  return connectParsed(settings, access, transport, signal);
 }

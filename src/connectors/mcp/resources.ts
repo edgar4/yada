@@ -4,7 +4,7 @@ import { z } from "zod";
 import { abortable } from "../../core/abort.js";
 import type { Identity, ReadTool } from "../../core/contracts.js";
 import { readTool } from "../../core/tool.js";
-import { renderBlock } from "./rpc.js";
+import { renderBlock, requestFailure } from "./rpc.js";
 
 const limit = 32_000;
 export type McpPrompt = Pick<Prompt, "name" | "description" | "arguments">;
@@ -14,7 +14,21 @@ type Options = Readonly<{
   authorize: (identity: Identity, name: string) => Promise<boolean>;
   fresh: () => Promise<void>;
 }>;
-const failed = () => new Error("MCP request failed");
+const guarded = async <T>(
+  options: Options,
+  identity: Identity,
+  name: string,
+  signal: AbortSignal,
+  run: () => Promise<T>,
+): Promise<T> => {
+  if (!(await abortable(() => options.authorize(identity, name), signal)))
+    throw new Error("MCP access denied");
+  await options.fresh();
+  return run();
+};
+const fail = (error: unknown): never => {
+  throw requestFailure(error);
+};
 export function resourceTools(server: string, options: Options): ReadTool[] {
   const { client, timeout } = options;
   const define = <S extends z.ZodType>(
@@ -29,10 +43,11 @@ export function resourceTools(server: string, options: Options): ReadTool[] {
       input,
       authorize: (identity) => options.authorize(identity, name),
       async execute(args, identity, signal) {
-        if (!(await abortable(() => options.authorize(identity, name), signal)))
-          throw new Error("MCP access denied");
-        await options.fresh();
-        return (await run(args, signal)).slice(0, limit);
+        return (
+          await guarded(options, identity, name, signal, () =>
+            run(args, signal),
+          )
+        ).slice(0, limit);
       },
     });
   return [
@@ -43,9 +58,7 @@ export function resourceTools(server: string, options: Options): ReadTool[] {
       async ({ cursor }, signal) => {
         const page = await client
           .listResources(cursor ? { cursor } : {}, { signal, timeout })
-          .catch(() => {
-            throw failed();
-          });
+          .catch(fail);
         const resources = page.resources.map(
           ({ uri, name, description, mimeType }) => ({
             uri,
@@ -72,9 +85,7 @@ export function resourceTools(server: string, options: Options): ReadTool[] {
       async ({ uri }, signal) => {
         const result = await client
           .readResource({ uri }, { signal, timeout })
-          .catch(() => {
-            throw failed();
-          });
+          .catch(fail);
         return result.contents
           .map((item) =>
             "text" in item ? item.text : `[blob: ${item.mimeType ?? uri}]`,
@@ -84,48 +95,55 @@ export function resourceTools(server: string, options: Options): ReadTool[] {
     ),
   ];
 }
-export function promptApi(options: Omit<Options, "authorize">) {
-  const { client, timeout, fresh } = options;
+export function promptApi(options: Options) {
+  const { client, timeout } = options;
   return {
-    async prompts(signal?: AbortSignal): Promise<McpPrompt[]> {
-      await fresh();
-      const prompts: McpPrompt[] = [];
-      let cursor: string | undefined;
-      for (let page = 0; page < 100; page++) {
-        const result = await client
-          .listPrompts(cursor ? { cursor } : {}, {
-            ...(signal ? { signal } : {}),
-            timeout,
-          })
-          .catch(() => {
-            throw failed();
-          });
-        prompts.push(
-          ...result.prompts.map(({ name, description, arguments: args }) => ({
-            name,
-            description,
-            arguments: args,
-          })),
-        );
-        cursor = result.nextCursor;
-        if (!cursor) break;
-      }
-      return prompts;
+    async prompts(
+      identity: Identity,
+      signal: AbortSignal = AbortSignal.timeout(timeout),
+    ): Promise<McpPrompt[]> {
+      return guarded(options, identity, "list_prompts", signal, async () => {
+        const prompts: McpPrompt[] = [];
+        const cursors = new Set<string>();
+        let cursor: string | undefined;
+        do {
+          if (cursors.size >= 100)
+            throw new Error("MCP discovery limit exceeded");
+          const result = await client
+            .listPrompts(cursor ? { cursor } : {}, { signal, timeout })
+            .catch(fail);
+          prompts.push(
+            ...result.prompts.map(({ name, description, arguments: args }) => ({
+              name,
+              description,
+              arguments: args,
+            })),
+          );
+          cursor = result.nextCursor;
+          if (cursor) {
+            if (cursors.has(cursor)) throw new Error("Repeated MCP cursor");
+            cursors.add(cursor);
+          }
+        } while (cursor);
+        return prompts;
+      });
     },
     async getPrompt(
+      identity: Identity,
       name: string,
       args: Record<string, string> = {},
-      signal?: AbortSignal,
+      signal: AbortSignal = AbortSignal.timeout(timeout),
     ): Promise<string> {
-      await fresh();
-      const result = await client
-        .getPrompt(
-          { name, arguments: args },
-          { ...(signal ? { signal } : {}), timeout },
-        )
-        .catch(() => {
-          throw failed();
-        });
+      const result = await guarded(
+        options,
+        identity,
+        "get_prompt",
+        signal,
+        () =>
+          client
+            .getPrompt({ name, arguments: args }, { signal, timeout })
+            .catch(fail),
+      );
       const text = result.messages
         .map((message) => renderBlock(message.content))
         .join("\n\n");

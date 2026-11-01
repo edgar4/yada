@@ -1,11 +1,14 @@
 import { contentText } from "../src/core/content.js";
 import { afterEach, expect, it, vi } from "vitest";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { z } from "zod";
 import { drivers, storageFixture } from "./helpers/storage.js";
 import { connectMcpTransport } from "../src/connectors/mcp/session.js";
 import { mcpConfig } from "../src/connectors/mcp/config.js";
+import type { Identity } from "../src/core/contracts.js";
+import { resourceTools, promptApi } from "../src/connectors/mcp/resources.js";
 import { createWorker } from "../src/service/worker.js";
 import { createFakeProvider } from "../src/providers/fake.js";
 import { operationId } from "../src/storage/actions.js";
@@ -61,12 +64,17 @@ function fixture() {
       ],
     }),
   );
-  async function connect(config: Partial<McpConfig>, owner = identity) {
+  async function connect(
+    config: Partial<McpConfig>,
+    owner = identity,
+    allow: (identity: Identity, tool: string) => Promise<boolean> = () =>
+      Promise.resolve(true),
+  ) {
     const [client, remote] = InMemoryTransport.createLinkedPair();
     await server.connect(remote);
     const connection = await connectMcpTransport(
       { name: "std", url: "https://x.test/mcp", ...config } as McpConfig,
-      { identity: owner, authorize: () => Promise.resolve(true) },
+      { identity: owner, authorize: allow },
       client,
       signal(),
     );
@@ -218,14 +226,14 @@ it("keeps resource listings valid JSON within the limit", async () => {
 });
 it("lists prompts and renders them as text", async () => {
   const connection = await fixture().connect({});
-  expect(await connection.prompts?.()).toEqual([
+  expect(await connection.prompts(identity)).toEqual([
     {
       name: "greet",
       description: "Greeting",
       arguments: [{ name: "who", required: true }],
     },
   ]);
-  expect(await connection.getPrompt?.("greet", { who: "Ada" })).toBe(
+  expect(await connection.getPrompt(identity, "greet", { who: "Ada" })).toBe(
     "Hello Ada",
   );
 });
@@ -254,9 +262,9 @@ it("goes stale only when the authorized contract changes", async () => {
   ).rejects.toThrow("contract changed");
   expect(connection.isConnected?.()).toBe(false);
   other.remove();
-  await expect(connection.getPrompt?.("greet", { who: "x" })).rejects.toThrow(
-    "reconnect required",
-  );
+  await expect(
+    connection.getPrompt(identity, "greet", { who: "x" }),
+  ).rejects.toThrow("reconnect required");
 });
 it("reconnects a stale confirm tool through the contract check", async () => {
   const first = fixture();
@@ -332,3 +340,67 @@ for (const driver of drivers)
       "sent bob",
     );
   });
+
+it("authorizes prompt calls against the owner and rejects them after close", async () => {
+  const allow = vi.fn((_: Identity, tool: string) =>
+    Promise.resolve(tool !== "get_prompt"),
+  );
+  const connection = await fixture().connect({}, identity, allow);
+  await expect(connection.prompts(identity)).resolves.toHaveLength(1);
+  expect(allow).toHaveBeenCalledWith(identity, "list_prompts");
+  await expect(
+    connection.prompts({ actorId: "b", tenantId: "t" }),
+  ).rejects.toThrow("access denied");
+  await expect(
+    connection.getPrompt(identity, "greet", { who: "Ada" }),
+  ).rejects.toThrow("access denied");
+  await connection.close();
+  await expect(connection.prompts(identity)).rejects.toThrow("access denied");
+});
+it("rejects resource tools that collide with write tool names", async () => {
+  const f = fixture();
+  const hint = { annotations: { readOnlyHint: true } };
+  f.server.registerTool("list_resources", {}, () => f.send("x"));
+  f.server.registerTool("prep", hint, () => f.send("p"));
+  f.server.registerTool("rcpt", hint, () => f.send("r"));
+  await expect(
+    f.connect({
+      resources: true,
+      writeTools: {
+        list_resources: {
+          version: "1",
+          prepareTool: "prep",
+          receiptTool: "rcpt",
+        },
+      },
+    }),
+  ).rejects.toThrow("conflicts");
+});
+const unused = new Client({ name: "t", version: "1" });
+const gate = {
+  timeout: 1000,
+  authorize: () => Promise.resolve(true),
+  fresh: () => Promise.resolve(),
+};
+it("keeps the OAuth failure signal for resource and prompt requests", async () => {
+  const oauth = () => Promise.reject(new Error("MCP OAuth request failed"));
+  const client = Object.assign(unused, {
+    listResources: oauth,
+    listPrompts: oauth,
+  });
+  const [list] = resourceTools("s", { client, ...gate });
+  await expect(list?.execute({}, identity, signal())).rejects.toThrow(
+    "MCP OAuth request failed",
+  );
+  await expect(
+    promptApi({ client, ...gate }).prompts(identity),
+  ).rejects.toThrow("MCP OAuth request failed");
+});
+it("fails prompt listing on repeated cursors", async () => {
+  const client = Object.assign(new Client({ name: "t", version: "1" }), {
+    listPrompts: () => Promise.resolve({ prompts: [], nextCursor: "same" }),
+  });
+  await expect(
+    promptApi({ client, ...gate }).prompts(identity),
+  ).rejects.toThrow("Repeated MCP cursor");
+});
