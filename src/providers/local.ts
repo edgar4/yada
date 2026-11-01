@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { openAIChat } from "./openai.js";
+import { nativeOpenAIAdapter } from "./native/openai.js";
 import { tuning } from "./options.js";
 export const localOptions = z
   .strictObject({
@@ -16,8 +16,9 @@ const defaultUrls = {
 };
 export function createLocalProvider(config: z.input<typeof localOptions>) {
   const { provider, ...options } = localOptions.parse(config);
-  return openAIChat(provider, {
+  return nativeOpenAIAdapter({
     ...options,
+    name: provider,
     maxRetries: options.maxRetries ?? 2,
     baseUrl:
       options.baseUrl ?? defaultUrls[provider as keyof typeof defaultUrls],
