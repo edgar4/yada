@@ -14,12 +14,13 @@ import { RunLeaseError } from "../storage/runs.js";
 import type { YadaStorage } from "../storage/index.js";
 import { isTerminal, type RunEvent } from "./contracts.js";
 import { eventKey, type EventBus } from "./events.js";
-import type { AgentEvent } from "../core/hooks.js";
+import { composeHooks, type AgentEvent, type RunHooks } from "../core/hooks.js";
 export type AgentProfile = Readonly<{
   provider: ProviderAdapter;
   tools: readonly Tool[];
   system: string;
   limits?: RunLimits;
+  hooks?: RunHooks;
   historyChars?: number;
   historyToolChars?: number;
   approvalTtlMs?: number;
@@ -180,12 +181,12 @@ export function createWorker(options: {
       const result = await runDurable({
         ...profile,
         provider: bus ? profile.provider : completeOnly(profile.provider),
-        hooks: {
+        hooks: composeHooks(...(profile.hooks ? [profile.hooks] : []), {
           onEvent: (event) => {
             recording = recording.then(() => record(event)).catch(() => {});
             return undefined;
           },
-        },
+        }),
         executeWrite: actionExecutor(
           options.storage.actions,
           identity,

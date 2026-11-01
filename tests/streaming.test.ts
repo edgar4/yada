@@ -192,3 +192,63 @@ it("re-authenticates a waiting stream at most every five seconds", async () => {
   await pending;
   expect(s.authenticate.mock.calls.length).toBeLessThanOrEqual(3);
 });
+it("records parallel read calls in call order and keeps profile hooks", async () => {
+  const s = await storageFixture("sqlite");
+  const seen: string[] = [];
+  const slow = (name: string, ms: number) =>
+    readTool({
+      name,
+      description: name,
+      input: z.strictObject({}),
+      authorize: () => Promise.resolve(true),
+      execute: async () => {
+        await new Promise((resolve) => setTimeout(resolve, ms));
+        return name;
+      },
+    });
+  const worker = createWorker({
+    storage: s.storage,
+    profiles: {
+      v1: {
+        provider: createFakeProvider((_, call) =>
+          call === 1
+            ? {
+                content: "",
+                toolCalls: [
+                  { id: "1", name: "slow", args: {} },
+                  { id: "2", name: "fast", args: {} },
+                ],
+                finishReason: "tool_calls",
+              }
+            : { content: "ok", toolCalls: [], finishReason: "stop" },
+        ),
+        tools: [slow("slow", 60), slow("fast", 1)],
+        system: "Help",
+        hooks: {
+          onEvent: (event) => {
+            seen.push(event.type);
+            return undefined;
+          },
+        },
+      },
+    },
+  });
+  await s.storage.jobs.submit(s.identity, "chat", {
+    id: "p",
+    input: "Hi",
+    profileId: "v1",
+  });
+  await worker.tick();
+  const job = await s.storage.jobs.load(s.identity, "chat", "p");
+  expect(
+    job?.events
+      .filter((event) => event.tool)
+      .map((event) => `${event.type}:${event.tool ?? ""}`),
+  ).toEqual([
+    "tool_started:slow",
+    "tool_started:fast",
+    "tool_finished:slow",
+    "tool_finished:fast",
+  ]);
+  expect(seen).toContain("run_finished");
+});
