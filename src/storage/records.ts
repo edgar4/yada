@@ -31,7 +31,8 @@ export function recordStore(db: Knex, encryptionKey: string) {
         .onConflict("id")
         .ignore();
       const raw: unknown = await db("yada_records").where({ id }).first();
-      if (rowSchema.parse(raw).value !== encrypted) throw new StorageConflict();
+      if (rowSchema.safeParse(raw).data?.value !== encrypted)
+        throw new StorageConflict();
     } else {
       const updated = await db("yada_records")
         .where({ id, revision })

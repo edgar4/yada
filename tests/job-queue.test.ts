@@ -105,6 +105,29 @@ for (const driver of drivers)
       expect(job?.status).toBe("queued");
     });
 
+    it("keeps reconciling jobs open when attempts are exhausted", async () => {
+      const s = await storageFixture(driver);
+      await s.storage.jobs.submit(s.identity, "chat", input("one"));
+      await s.storage.jobs.update(s.identity, "chat", "one", {
+        type: "reconciling",
+      });
+      const worker = createWorker({
+        storage: failing(s.storage, new Error("db down")),
+        profiles: { v1: { provider: done(), tools: [], system: "Help" } },
+        maxAttempts: 1,
+      });
+      vi.spyOn(Date, "now").mockReturnValue(Date.now() + 10_000);
+      try {
+        await worker.tick();
+      } finally {
+        vi.restoreAllMocks();
+        await worker.stop();
+      }
+      const job = await s.storage.jobs.load(s.identity, "chat", "one");
+      expect(job?.outcome).toBeUndefined();
+      expect(job?.attempts).toBe(1);
+    });
+
     it("fails timeouts, cancels on request and leaves shutdown resumable", async () => {
       const s = await storageFixture(driver);
       await s.storage.jobs.submit(s.identity, "timeout", input("one"));
