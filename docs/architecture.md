@@ -48,7 +48,7 @@ The runtime supports read tools, a scripted testing provider, and Anthropic, Ope
 
 ## Sub-agents
 
-`agentTool({ name, description, provider, tools, system, limits?, maxRounds?, hooks? })` returns a read tool with input `{ task }` that runs a nested `run()` with the caller's identity and signal and returns the completed text. A failed or suspended sub-agent returns `{"error": "agent_failed", "message": "The sub-agent failed: <code>"}` as the tool result, so the parent model sees only the failure code. Cancellation propagates through the shared signal. Write tools are rejected at construction, and agent tools nest at most two deep (checked at construction). Sub-agent runs are in-memory with no checkpoint, so a resumed parent re-runs the sub-agent, which is safe because it is read-only.
+`agentTool({ name, description, provider, tools, system, limits?, maxRounds?, hooks?, authorize? })` returns a read tool with input `{ task }` that runs a nested `run()` with the caller's identity and signal and returns the completed text. `authorize` gates which identities see the sub-agent (default: everyone); its inner tools still apply their own authorization. A failed or suspended sub-agent returns `{"error": "agent_failed", "message": "The sub-agent failed: <code>"}` as the tool result, so the parent model sees only the failure code. Cancellation propagates through the shared signal. Write tools are rejected at construction, and agent tools nest at most two deep (checked at construction). Sub-agent runs are in-memory with no checkpoint, so a resumed parent re-runs the sub-agent, which is safe because it is read-only.
 
 ## Development checks
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ProviderAdapter, ReadTool, Tool } from "./contracts.js";
+import type { Identity, ProviderAdapter, ReadTool, Tool } from "./contracts.js";
 import type { RunHooks } from "./hooks.js";
 import type { RunLimits } from "./limits.js";
 import { run } from "./runtime.js";
@@ -15,6 +15,7 @@ export function agentTool(options: {
   limits?: RunLimits;
   maxRounds?: number;
   hooks?: RunHooks;
+  authorize?: (identity: Identity) => Promise<boolean>;
 }): ReadTool {
   if (options.tools.some((tool) => tool.effect === "write"))
     throw new Error("Sub-agents cannot use write tools");
@@ -29,7 +30,7 @@ export function agentTool(options: {
     name: options.name,
     description: options.description,
     input: z.strictObject({ task: z.string().min(1) }),
-    authorize: () => Promise.resolve(true),
+    authorize: options.authorize ?? (() => Promise.resolve(true)),
     execute: async ({ task }, identity, signal) => {
       const result = await run({
         provider: options.provider,

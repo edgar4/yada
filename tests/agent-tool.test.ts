@@ -61,6 +61,17 @@ describe("agentTool", () => {
     expect(toolContent(provider)).toContain("agent_failed");
     expect(toolContent(provider)).toContain("refused");
   });
+  it("applies the host authorization", async () => {
+    const tool = agentTool({
+      ...base,
+      name: "helper",
+      provider: createFakeProvider(() => say("inner")),
+      tools: [],
+      authorize: (who) => Promise.resolve(who.actorId === "b"),
+    });
+    expect(await tool.authorize(identity)).toBe(false);
+    expect(await tool.authorize({ actorId: "b", tenantId: "t" })).toBe(true);
+  });
   it("rejects invalid input", async () => {
     const sub = createFakeProvider(() => say("x"));
     const tool = agentTool({ ...base, name: "sub", provider: sub, tools: [] });
