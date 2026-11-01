@@ -7,11 +7,13 @@ import type {
   ProviderAdapter,
   TerminalResult,
   Tool,
+  Turn,
 } from "../core/contracts.js";
 import { CheckpointError } from "../core/checkpoint.js";
 import { runDurable } from "../storage/durable-run.js";
-import { RunLeaseError } from "../storage/runs.js";
+import { RunLeaseError, type RunOwnership } from "../storage/runs.js";
 import type { YadaStorage } from "../storage/index.js";
+import type { JobStore } from "../storage/jobs.js";
 import { isTerminal, type RunEvent } from "./contracts.js";
 import { eventKey, type EventBus } from "./events.js";
 import { composeHooks, type AgentEvent, type RunHooks } from "../core/hooks.js";
@@ -56,28 +58,42 @@ export function createWorker(options: {
 }) {
   const shutdown = new AbortController();
   let cursor = "";
-  let active: Promise<void> | undefined;
+  let scanning: Promise<{ done: Promise<unknown> }> | undefined;
   let loop: Promise<void> | undefined;
+  const running = new Map<string, Promise<void>>();
+  const concurrency = Math.max(1, options.concurrency ?? 4);
   const trace = (event: Trace) => {
     void Promise.resolve()
       .then(() => options.trace?.(event))
       .catch(() => undefined);
   };
-  async function processPage() {
+  async function schedule() {
+    if (running.size >= concurrency) return { done: Promise.resolve() };
     const page = await options.storage.jobs.pending(cursor);
-    cursor = page.cursor;
-    const concurrency = Math.max(1, options.concurrency ?? 4);
-    const tasks = new Set<Promise<void>>();
+    const started: Promise<void>[] = [];
+    let consumed = true;
     for (const entry of page.jobs) {
       if (shutdown.signal.aborted) break;
       if (!Object.hasOwn(options.profiles, entry.job.profileId)) continue;
-      while (tasks.size >= concurrency) await Promise.race(tasks);
+      const key = JSON.stringify([
+        entry.identity.tenantId,
+        entry.identity.actorId,
+        entry.conversationId,
+        entry.job.id,
+      ]);
+      if (running.has(key)) continue;
+      if (running.size >= concurrency) {
+        consumed = false;
+        break;
+      }
       const task = processJob(entry)
         .catch(() => undefined)
-        .finally(() => tasks.delete(task));
-      tasks.add(task);
+        .finally(() => running.delete(key));
+      running.set(key, task);
+      started.push(task);
     }
-    await Promise.all(tasks);
+    if (consumed) cursor = page.cursor;
+    return { done: Promise.all(started) };
   }
   async function processJob({
     identity,
@@ -91,6 +107,17 @@ export function createWorker(options: {
     const runId = JSON.stringify([conversationId, job.id]);
     const bus = options.bus;
     const busKey = eventKey(identity, conversationId, job.id);
+    const runs = options.storage.runs;
+    const loadJob = () =>
+      options.storage.jobs.load(identity, conversationId, job.id);
+    const updateJob = (
+      ...args: [
+        event: Parameters<JobStore["update"]>[3],
+        outcome?: TerminalResult,
+        lease?: RunOwnership,
+        turns?: readonly Turn[],
+      ]
+    ) => options.storage.jobs.update(identity, conversationId, job.id, ...args);
     let token = "";
     let sequence = job.events.length;
     let recording = Promise.resolve();
@@ -119,18 +146,11 @@ export function createWorker(options: {
               ? { type: "usage", ...event.usage }
               : undefined;
       if (!mapped) return;
-      const updated = await options.storage.jobs.update(
-        identity,
-        conversationId,
-        job.id,
-        mapped,
-        undefined,
-        { runId, token },
-      );
+      const updated = await updateJob(mapped, undefined, { runId, token });
       sequence = updated.events.length;
     };
     const executing = async () => {
-      const saved = await options.storage.runs.load(identity, runId);
+      const saved = await runs.load(identity, runId);
       for (const call of saved?.checkpoint?.pending ?? []) {
         const action = await options.storage.actions.load(
           identity,
@@ -141,12 +161,93 @@ export function createWorker(options: {
       return false;
     };
     const checkCancellation = async () => {
-      const latest = await options.storage.jobs.load(
-        identity,
-        conversationId,
-        job.id,
-      );
+      const latest = await loadJob();
       if (latest?.cancelRequested && !(await executing())) cancellation.abort();
+    };
+    const counters = async (): Promise<Partial<Trace>> => {
+      const saved = (await runs.load(identity, runId))?.checkpoint;
+      return saved
+        ? {
+            rounds: saved.rounds,
+            toolCalls: saved.calls,
+            ...(saved.usage ?? {}),
+          }
+        : {};
+    };
+    const eligible = async () => {
+      const current = await loadJob();
+      return (
+        current &&
+        !isTerminal(current.status) &&
+        (current.cancelRequested || current.availableAt <= Date.now())
+      );
+    };
+    const traceFinished = async (status: string, code?: string) => {
+      trace({
+        event: "run_finished",
+        status,
+        elapsedMs: Date.now() - started,
+        attempt: job.attempts + 1,
+        ...(code === undefined ? {} : { code }),
+        ...(await counters()),
+      });
+    };
+    const finalize = async (result: TerminalResult, historyLength: number) => {
+      const latest = await loadJob();
+      const final: TerminalResult =
+        result.status === "cancelled" &&
+        !latest?.cancelRequested &&
+        !shutdown.signal.aborted
+          ? { status: "failed", code: "timeout" }
+          : result;
+      const turns =
+        final.status === "completed"
+          ? (await runs.load(identity, runId))?.checkpoint?.messages.slice(
+              historyLength,
+            )
+          : undefined;
+      await updateJob(
+        {
+          type: final.status,
+          ...(final.status === "completed"
+            ? { text: final.text }
+            : final.status === "failed"
+              ? { code: final.code }
+              : {}),
+        },
+        final,
+        undefined,
+        turns,
+      );
+      await traceFinished(
+        final.status,
+        final.status === "failed" ? final.code : undefined,
+      );
+    };
+    const handleFailure = async (error: unknown) => {
+      if (error instanceof RunLeaseError || shutdown.signal.aborted) return;
+      const held = (await runs.load(identity, runId))?.lease;
+      if (held && held.token !== token && held.expiresAt > Date.now()) return;
+      const latest = await loadJob();
+      if (!latest || isTerminal(latest.status)) return;
+      const attempt = latest.attempts + 1;
+      const exhausted =
+        attempt >= (options.maxAttempts ?? 5) &&
+        latest.status !== "reconciling" &&
+        !(await executing().catch(() => true));
+      if (exhausted)
+        await updateJob(
+          { type: "failed", code: "retry_exhausted" },
+          { status: "failed", code: "retry_exhausted" },
+        );
+      else await options.storage.jobs.retry(identity, conversationId, job.id);
+      trace({
+        event: exhausted ? "run_finished" : "run_retry",
+        status: exhausted ? "failed" : "retryable",
+        elapsedMs: Date.now() - started,
+        attempt,
+        ...(exhausted ? { code: "retry_exhausted" } : {}),
+      });
     };
     try {
       await checkCancellation();
@@ -155,29 +256,6 @@ export function createWorker(options: {
         profile.historyChars ?? 128_000,
         profile.historyToolChars,
       );
-      const runs = options.storage.runs;
-      const counters = async (): Promise<Partial<Trace>> => {
-        const saved = (await runs.load(identity, runId))?.checkpoint;
-        return saved
-          ? {
-              rounds: saved.rounds,
-              toolCalls: saved.calls,
-              ...(saved.usage ?? {}),
-            }
-          : {};
-      };
-      const eligible = async () => {
-        const current = await options.storage.jobs.load(
-          identity,
-          conversationId,
-          job.id,
-        );
-        return (
-          current &&
-          !isTerminal(current.status) &&
-          (current.cancelRequested || current.availableAt <= Date.now())
-        );
-      };
       const result = await runDurable({
         ...profile,
         provider: bus ? profile.provider : completeOnly(profile.provider),
@@ -204,10 +282,7 @@ export function createWorker(options: {
             result.status === "awaiting_approval"
               ? await options.storage.actions.load(identity, result.approvalId)
               : undefined;
-          await options.storage.jobs.update(
-            identity,
-            conversationId,
-            job.id,
+          await updateJob(
             {
               type: result.status,
               approvalId: result.approvalId,
@@ -239,124 +314,41 @@ export function createWorker(options: {
               state.lease &&
               !state.checkpoint?.outcome
             )
-              await options.storage.jobs.update(
-                identity,
-                conversationId,
-                job.id,
-                { type: "running" },
-                undefined,
-                { runId, token: state.lease.token },
-              );
+              await updateJob({ type: "running" }, undefined, {
+                runId,
+                token: state.lease.token,
+              });
             return state;
           },
           save: async (...args) => {
             if (shutdown.signal.aborted) throw new CheckpointError();
             await runs.save(...args);
-            await options.storage.jobs.update(
-              identity,
-              conversationId,
-              job.id,
-              { type: "progress" },
-              undefined,
-              { runId: args[1], token: args[2] },
-            );
+            await updateJob({ type: "progress" }, undefined, {
+              runId: args[1],
+              token: args[2],
+            });
           },
           renew: async (...args) => {
-            await checkCancellation();
+            await checkCancellation().catch(() => undefined);
             await runs.renew(...args);
           },
         },
       });
       await recording;
-      if (!("approvalId" in result)) {
-        const latest = await options.storage.jobs.load(
-          identity,
-          conversationId,
-          job.id,
-        );
-        const final: TerminalResult =
-          result.status === "cancelled" &&
-          !latest?.cancelRequested &&
-          !shutdown.signal.aborted
-            ? { status: "failed", code: "timeout" }
-            : result;
-        const turns =
-          final.status === "completed"
-            ? (await runs.load(identity, runId))?.checkpoint?.messages.slice(
-                history.length,
-              )
-            : undefined;
-        await options.storage.jobs.update(
-          identity,
-          conversationId,
-          job.id,
-          {
-            type: final.status,
-            ...(final.status === "completed"
-              ? { text: final.text }
-              : final.status === "failed"
-                ? { code: final.code }
-                : {}),
-          },
-          final,
-          undefined,
-          turns,
-        );
-        trace({
-          event: "run_finished",
-          status: final.status,
-          elapsedMs: Date.now() - started,
-          attempt: job.attempts + 1,
-          ...(final.status === "failed" ? { code: final.code } : {}),
-          ...(await counters()),
-        });
-        return;
-      }
-      trace({
-        event: "run_finished",
-        status: result.status,
-        elapsedMs: Date.now() - started,
-        attempt: job.attempts + 1,
-        ...(await counters()),
-      });
+      if ("approvalId" in result) await traceFinished(result.status);
+      else await finalize(result, history.length);
     } catch (error) {
-      if (error instanceof RunLeaseError || shutdown.signal.aborted) return;
-      const held = (await options.storage.runs.load(identity, runId))?.lease;
-      if (held && held.token !== token && held.expiresAt > Date.now()) return;
-      const latest = await options.storage.jobs.load(
-        identity,
-        conversationId,
-        job.id,
-      );
-      if (!latest || isTerminal(latest.status)) return;
-      const attempt = latest.attempts + 1;
-      const exhausted =
-        attempt >= (options.maxAttempts ?? 5) &&
-        latest.status !== "reconciling" &&
-        !(await executing().catch(() => true));
-      if (exhausted)
-        await options.storage.jobs.update(
-          identity,
-          conversationId,
-          job.id,
-          { type: "failed", code: "retry_exhausted" },
-          { status: "failed", code: "retry_exhausted" },
-        );
-      else await options.storage.jobs.retry(identity, conversationId, job.id);
-      trace({
-        event: exhausted ? "run_finished" : "run_retry",
-        status: exhausted ? "failed" : "retryable",
-        elapsedMs: Date.now() - started,
-        attempt,
-        ...(exhausted ? { code: "retry_exhausted" } : {}),
-      });
+      await handleFailure(error);
     }
   }
-  function tick() {
-    active ??= processPage().finally(() => {
-      active = undefined;
-    });
-    return active;
+  const scan = () =>
+    (scanning ??= schedule().finally(() => {
+      scanning = undefined;
+    }));
+  async function tick() {
+    await (
+      await scan()
+    ).done;
   }
   return {
     tick,
@@ -365,7 +357,7 @@ export function createWorker(options: {
       loop = (async () => {
         while (!shutdown.signal.aborted) {
           try {
-            await tick();
+            await scan();
           } catch {
             trace({
               event: "run_retry",
@@ -385,8 +377,9 @@ export function createWorker(options: {
     },
     async stop() {
       shutdown.abort();
-      await active;
+      await scanning?.catch(() => undefined);
       await loop;
+      await Promise.all(running.values());
     },
   };
 }

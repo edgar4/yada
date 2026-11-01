@@ -269,6 +269,7 @@ for (const driver of drivers)
         concurrency: 3,
       });
       await worker.tick();
+      await worker.tick();
       await worker.stop();
       expect(peak).toBe(3);
       for (let index = 0; index < 5; index++)
@@ -355,7 +356,7 @@ for (const driver of drivers)
         const records = recordStore(db, s.config.encryptionKey);
         const broken = createJobStore({
           ...records,
-          transaction: (operation) =>
+          transact: (operation) =>
             records.transaction((tx) =>
               operation({
                 ...tx,
