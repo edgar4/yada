@@ -1,10 +1,15 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { Tool as RemoteTool } from "@modelcontextprotocol/sdk/types.js";
+import {
+  ToolListChangedNotificationSchema,
+  type Tool as RemoteTool,
+} from "@modelcontextprotocol/sdk/types.js";
 import type { Identity, ReadTool, Tool } from "../../core/contracts.js";
 import { abortable } from "../../core/abort.js";
+import { confirmTool } from "../../core/policy.js";
 import { mcpConfig, type McpConfig, type McpReadConfig } from "./config.js";
-import { discoverMcpTools } from "./discovery.js";
+import { canonical, discoverMcpTools } from "./discovery.js";
+import { promptApi, resourceTools, type McpPrompt } from "./resources.js";
 import { mcpInvoker, readResult } from "./rpc.js";
 import { mcpWriteTool } from "./write.js";
 export type McpAccess = Readonly<{
@@ -15,6 +20,12 @@ export type McpConnection<T extends Tool = ReadTool> = Readonly<{
   tools: readonly T[];
   close: () => Promise<void>;
   isConnected?: () => boolean;
+  prompts?: (signal?: AbortSignal) => Promise<McpPrompt[]>;
+  getPrompt?: (
+    name: string,
+    args?: Record<string, string>,
+    signal?: AbortSignal,
+  ) => Promise<string>;
 }>;
 export function connectMcpTransport(
   config: McpReadConfig,
@@ -54,12 +65,6 @@ export async function connectMcpTransport(
   try {
     await abortable(() => client.connect(transport), signal);
     connected = true;
-    const catalog = await discoverMcpTools(client, signal, settings.timeoutMs);
-    const required = (name: string) => {
-      const tool = catalog.get(name);
-      if (!tool) throw new Error("Configured MCP tool not found");
-      return tool;
-    };
     const writes = new Map(Object.entries(settings.writeTools ?? {}));
     const helpers = new Set(
       [...writes.values()].flatMap((mapping) => [
@@ -67,33 +72,107 @@ export async function connectMcpTransport(
         mapping.receiptTool,
       ]),
     );
-    for (const [name, mapping] of writes) {
-      if (required(name).annotations?.readOnlyHint === true)
-        throw new Error("MCP write tool is marked as read-only");
-      for (const helper of [mapping.prepareTool, mapping.receiptTool])
-        if (required(helper).annotations?.readOnlyHint !== true)
-          throw new Error("MCP helper is not marked as read-only");
-    }
-    const reads: RemoteTool[] = [];
-    for (const tool of catalog.values()) {
-      if (writes.has(tool.name) || helpers.has(tool.name)) continue;
-      if (
-        settings.readTools
-          ? !settings.readTools.includes(tool.name)
-          : tool.annotations?.readOnlyHint !== true
-      )
-        continue;
-      if (tool.annotations?.readOnlyHint === false)
-        throw new Error("MCP tool is marked as mutating");
-      reads.push(tool);
-    }
-    if (settings.readTools && reads.length !== settings.readTools.length)
-      throw new Error("Configured MCP tool not found");
-    const selected = [
-      ...reads,
-      ...[...writes.keys(), ...helpers].map(required),
-    ];
-    const rpc = mcpInvoker(client, selected, authorize, settings.timeoutMs);
+    const select = (catalog: Map<string, RemoteTool>) => {
+      const required = (name: string) => {
+        const tool = catalog.get(name);
+        if (!tool) throw new Error("Configured MCP tool not found");
+        return tool;
+      };
+      for (const [name, mapping] of writes) {
+        if (required(name).annotations?.readOnlyHint === true)
+          throw new Error("MCP write tool is marked as read-only");
+        for (const helper of [mapping.prepareTool, mapping.receiptTool])
+          if (required(helper).annotations?.readOnlyHint !== true)
+            throw new Error("MCP helper is not marked as read-only");
+      }
+      const listed = Array.isArray(settings.confirmTools)
+        ? settings.confirmTools
+        : [];
+      const reads: RemoteTool[] = [];
+      const confirms = listed.map(required);
+      for (const tool of catalog.values()) {
+        if (
+          writes.has(tool.name) ||
+          helpers.has(tool.name) ||
+          listed.includes(tool.name)
+        )
+          continue;
+        const readOnly = tool.annotations?.readOnlyHint === true;
+        if (
+          settings.readTools ? settings.readTools.includes(tool.name) : readOnly
+        ) {
+          if (tool.annotations?.readOnlyHint === false)
+            throw new Error("MCP tool is marked as mutating");
+          reads.push(tool);
+        } else if (settings.confirmTools === "*" && !readOnly)
+          confirms.push(tool);
+      }
+      if (settings.readTools && reads.length !== settings.readTools.length)
+        throw new Error("Configured MCP tool not found");
+      const selected = [
+        ...reads,
+        ...confirms,
+        ...[...writes.keys(), ...helpers].map(required),
+      ];
+      return { reads, confirms, selected, required };
+    };
+    const fingerprint = (tools: readonly RemoteTool[]) =>
+      canonical(
+        tools
+          .map(
+            ({
+              name,
+              description,
+              inputSchema,
+              outputSchema,
+              annotations,
+            }) => ({
+              name,
+              description,
+              inputSchema,
+              outputSchema,
+              annotations,
+            }),
+          )
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      );
+    const { reads, confirms, selected, required } = select(
+      await discoverMcpTools(client, signal, settings.timeoutMs),
+    );
+    const expected = fingerprint(selected);
+    let stale = false;
+    let checking: Promise<void> = Promise.resolve();
+    client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
+      checking = checking.then(async () => {
+        try {
+          const next = await discoverMcpTools(
+            client,
+            AbortSignal.timeout(settings.timeoutMs),
+            settings.timeoutMs,
+          );
+          if (fingerprint(select(next).selected) !== expected) stale = true;
+        } catch {
+          stale = true;
+        }
+      });
+    });
+    const fresh = async () => {
+      await checking;
+      if (stale)
+        throw new Error("MCP tool contract changed; reconnect required");
+    };
+    const base = mcpInvoker(client, selected, authorize, settings.timeoutMs);
+    const rpc = {
+      validate: base.validate,
+      call: async (...args: Parameters<typeof base.call>) => {
+        await fresh();
+        return base.call(...args);
+      },
+      read: async (...args: Parameters<typeof base.read>) => {
+        await fresh();
+        return base.read(...args);
+      },
+    };
     const spec = (remote: RemoteTool) => {
       const name = `${settings.name}__${remote.name}`;
       if (name.length > 64)
@@ -108,7 +187,7 @@ export async function connectMcpTransport(
         parameters: remote.inputSchema,
       };
     };
-    const tools: Tool[] = reads.map((remote) => ({
+    const read = (remote: RemoteTool): ReadTool => ({
       effect: "read",
       spec: spec(remote),
       authorize: (identity) => authorize(identity, remote.name),
@@ -117,7 +196,23 @@ export async function connectMcpTransport(
           await rpc.read(remote.name, args, identity, callSignal),
         );
       },
-    }));
+    });
+    const tools: Tool[] = [
+      ...reads.map(read),
+      ...confirms.map((remote) => confirmTool(read(remote))),
+    ];
+    if (settings.resources) {
+      const extra = resourceTools(settings.name, {
+        client,
+        timeout: settings.timeoutMs,
+        authorize,
+        fresh,
+      });
+      const names = new Set(tools.map((tool) => tool.spec.name));
+      if (extra.some((tool) => names.has(tool.spec.name)))
+        throw new Error("MCP resource tool name conflicts with a remote tool");
+      tools.push(...extra);
+    }
     for (const [name, mapping] of writes) {
       const remote = required(name);
       tools.push(
@@ -135,7 +230,12 @@ export async function connectMcpTransport(
         }),
       );
     }
-    return { tools, close, isConnected: () => connected && !closed };
+    return {
+      tools,
+      close,
+      isConnected: () => connected && !closed && !stale,
+      ...promptApi({ client, timeout: settings.timeoutMs, fresh }),
+    };
   } catch (error) {
     await close();
     throw error;

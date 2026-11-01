@@ -118,6 +118,15 @@ export async function reconnectingMcp(
   return {
     tools,
     isConnected: () => !closed && (current.isConnected?.() ?? true),
+    prompts: async (callSignal) => {
+      await ready(callSignal ?? AbortSignal.timeout(10_000));
+      return current.prompts?.(callSignal) ?? [];
+    },
+    getPrompt: async (name, args, callSignal) => {
+      await ready(callSignal ?? AbortSignal.timeout(10_000));
+      if (!current.getPrompt) throw new Error("MCP prompts unavailable");
+      return current.getPrompt(name, args, callSignal);
+    },
     async close() {
       closed = true;
       await current.close();

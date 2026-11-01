@@ -8,6 +8,17 @@ const common = {
     .max(1000)
     .refine((tools) => new Set(tools).size === tools.length)
     .optional(),
+  confirmTools: z
+    .union([
+      z.literal("*"),
+      z
+        .array(z.string().min(1))
+        .min(1)
+        .max(1000)
+        .refine((tools) => new Set(tools).size === tools.length),
+    ])
+    .optional(),
+  resources: z.boolean().optional(),
   writeTools: z
     .record(
       z.string().min(1),
@@ -63,14 +74,27 @@ export const mcpConfig = z
     const reads = new Set(settings.readTools);
     const writes = new Set(Object.keys(settings.writeTools ?? {}));
     const helpers = new Set<string>();
+    const confirms = Array.isArray(settings.confirmTools)
+      ? settings.confirmTools
+      : [];
+    if (confirms.some((name) => reads.has(name)))
+      context.addIssue({
+        code: "custom",
+        message: "Overlapping MCP tool roles",
+      });
     for (const [name, mapping] of Object.entries(settings.writeTools ?? {})) {
-      if (reads.has(name))
+      if (reads.has(name) || confirms.includes(name))
         context.addIssue({
           code: "custom",
           message: "Overlapping MCP tool roles",
         });
       for (const helper of [mapping.prepareTool, mapping.receiptTool]) {
-        if (reads.has(helper) || writes.has(helper) || helpers.has(helper))
+        if (
+          reads.has(helper) ||
+          writes.has(helper) ||
+          helpers.has(helper) ||
+          confirms.includes(helper)
+        )
           context.addIssue({
             code: "custom",
             message: "Overlapping MCP helper roles",
@@ -80,7 +104,10 @@ export const mcpConfig = z
     }
   });
 export type McpConfig = z.input<typeof mcpConfig>;
-export type McpReadConfig = McpConfig & { writeTools?: undefined };
+export type McpReadConfig = McpConfig & {
+  writeTools?: undefined;
+  confirmTools?: undefined;
+};
 export type McpWriteMapping = NonNullable<McpConfig["writeTools"]>[string];
 export function mcpServersFromEnv(
   env: Readonly<Record<string, string | undefined>>,
