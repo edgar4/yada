@@ -20,6 +20,7 @@ export const actionSchema = z.object({
     "executing",
     "completed",
     "expired",
+    "unknown",
   ]),
   receipt: z.string().max(32_000).optional(),
 });
@@ -34,6 +35,25 @@ export const operationId = (
       JSON.stringify([identity.tenantId, identity.actorId, runId, callId]),
     )
     .digest("hex");
+export type RememberScope = "run" | "conversation";
+export const unknownOutcome =
+  "Action outcome unknown; it may or may not have been applied. Do not retry automatically.";
+export class ActionConflict extends Error {
+  constructor() {
+    super("Action decision conflict");
+  }
+}
+const conversationOf = (runId: string) => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(runId);
+  } catch {
+    return runId;
+  }
+  return Array.isArray(parsed) && typeof parsed[0] === "string"
+    ? parsed[0]
+    : runId;
+};
 export interface ActionStore {
   load(identity: Identity, id: string): Promise<Action | undefined>;
   propose(identity: Identity, action: Action): Promise<Action>;
@@ -44,12 +64,43 @@ export interface ActionStore {
     ownership?: RunOwnership,
   ): Promise<boolean>;
   receipt(identity: Identity, id: string, receipt: string): Promise<void>;
+  unknown(identity: Identity, id: string): Promise<void>;
+  remember(
+    identity: Identity,
+    action: Action,
+    scope: RememberScope,
+  ): Promise<void>;
+  remembered(
+    identity: Identity,
+    runId: string,
+    tool: string,
+    toolVersion: string,
+    args: unknown,
+  ): Promise<boolean>;
 }
 export function createActionStore(
   records: ReturnType<typeof recordStore>,
 ): ActionStore {
   const key = (identity: Identity, id: string) =>
     JSON.stringify(["action", identity.tenantId, identity.actorId, id]);
+  const grantKey = (
+    identity: Identity,
+    scope: RememberScope,
+    runId: string,
+    tool: string,
+    toolVersion: string,
+    args: unknown,
+  ) =>
+    JSON.stringify([
+      "grant",
+      identity.tenantId,
+      identity.actorId,
+      scope,
+      scope === "run" ? runId : conversationOf(runId),
+      tool,
+      toolVersion,
+      createHash("sha256").update(JSON.stringify(args)).digest("hex"),
+    ]);
   return {
     async load(identity, id) {
       const record = await records.read(key(identity, id));
@@ -82,7 +133,7 @@ export function createActionStore(
                 ? "approved"
                 : "declined";
         else if (state.status !== (approved ? "approved" : "declined"))
-          throw new Error("Action decision conflict");
+          throw new ActionConflict();
         return { value: state, result: state };
       }),
     begin: (identity, id, ownership) => {
@@ -124,6 +175,42 @@ export function createActionStore(
         state.status = "completed";
         return { value: state, result: undefined };
       });
+    },
+    async unknown(identity, id) {
+      await records.mutate(key(identity, id), (value) => {
+        const state = actionSchema.parse(value);
+        if (state.status === "executing") {
+          state.status = "unknown";
+          state.receipt = unknownOutcome;
+        } else if (state.status !== "unknown")
+          throw new Error("Action not executing");
+        return { value: state, result: undefined };
+      });
+    },
+    async remember(identity, action, scope) {
+      if (action.status !== "approved")
+        throw new Error("Only approved actions can be remembered");
+      await records.mutate(
+        grantKey(
+          identity,
+          scope,
+          action.runId,
+          action.tool,
+          action.toolVersion,
+          action.args,
+        ),
+        () => ({ value: true, result: undefined }),
+      );
+    },
+    async remembered(identity, runId, tool, toolVersion, args) {
+      for (const scope of ["run", "conversation"] as const)
+        if (
+          await records.read(
+            grantKey(identity, scope, runId, tool, toolVersion, args),
+          )
+        )
+          return true;
+      return false;
     },
   };
 }

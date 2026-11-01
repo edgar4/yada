@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { once } from "node:events";
 import { z } from "zod";
 import { storageFixture } from "./helpers/storage.js";
@@ -6,7 +6,7 @@ import { createHandler } from "../src/service/http.js";
 import { createNodeServer } from "../src/service/node.js";
 import { createWorker } from "../src/service/worker.js";
 import { createFakeProvider } from "../src/providers/fake.js";
-import { eventSchema } from "../src/service/contracts.js";
+import { eventSchema, maxJobBodyBytes } from "../src/service/contracts.js";
 async function setup() {
   const s = await storageFixture("sqlite");
   const handler = createHandler({
@@ -60,7 +60,12 @@ it("enforces authentication, origin, profile and input boundaries", async () => 
   ).toBe(403);
   expect((await s.request("", { method: "POST", body: "{" })).status).toBe(400);
   expect(
-    (await s.request("", { method: "POST", body: "x".repeat(65537) })).status,
+    (
+      await s.request("", {
+        method: "POST",
+        body: "x".repeat(maxJobBodyBytes + 1),
+      })
+    ).status,
   ).toBe(413);
   expect((await s.request("missing")).status).toBe(404);
   expect((await s.request("", { method: "GET" })).status).toBe(405);
@@ -166,6 +171,10 @@ it("serves opaque approval previews and binds decisions to their run", async () 
     expiresAt: Date.now() + 60000,
     status: "pending",
   });
+  await s.storage.jobs.update(s.identity, "chat", "a", {
+    type: "awaiting_approval",
+    approvalId: "approval",
+  });
   const preview = await s.request("/a/approvals/approval");
   expect(preview.status).toBe(200);
   expect(await preview.text()).not.toContain("private");
@@ -188,10 +197,93 @@ it("serves opaque approval previews and binds decisions to their run", async () 
     (
       await s.request("/a/approvals/approval/decision", {
         method: "POST",
+        body: JSON.stringify({ approved: true }),
+      })
+    ).status,
+  ).toBe(202);
+  expect(
+    (
+      await s.request("/a/approvals/approval/decision", {
+        method: "POST",
         body: JSON.stringify({ approved: false }),
       })
     ).status,
-  ).toBe(503);
+  ).toBe(409);
+});
+it("answers contradictory concurrent decisions with 409", async () => {
+  const s = await setup();
+  await s.storage.jobs.submit(s.identity, "chat", {
+    id: "a",
+    profileId: "v1",
+    input: "Hi",
+  });
+  await s.storage.jobs.update(s.identity, "chat", "a", {
+    type: "awaiting_approval",
+    approvalId: "approval",
+  });
+  await s.storage.actions.propose(s.identity, {
+    id: "approval",
+    runId: JSON.stringify(["chat", "a"]),
+    callId: "call",
+    tool: "rename",
+    toolVersion: "v1",
+    args: {},
+    preview: "Rename record",
+    version: "1",
+    expiresAt: Date.now() + 60000,
+    status: "pending",
+  });
+  await s.storage.actions.decide(s.identity, "approval", true);
+  expect(
+    (
+      await s.request("/a/approvals/approval/decision", {
+        method: "POST",
+        body: JSON.stringify({ approved: false }),
+      })
+    ).status,
+  ).toBe(409);
+});
+it("rejects approval decisions for runs that are terminal or not awaiting", async () => {
+  const s = await setup();
+  const runId = JSON.stringify(["chat", "a"]);
+  await s.storage.jobs.submit(s.identity, "chat", {
+    id: "a",
+    input: "Hi",
+    profileId: "v1",
+  });
+  await s.storage.actions.propose(s.identity, {
+    id: "approval",
+    runId,
+    callId: "call",
+    tool: "rename",
+    toolVersion: "v1",
+    args: {},
+    preview: "Rename record",
+    version: "1",
+    expiresAt: Date.now() + 60000,
+    status: "pending",
+  });
+  const decide = () =>
+    s.request("/a/approvals/approval/decision", {
+      method: "POST",
+      body: JSON.stringify({ approved: true, remember: "conversation" }),
+    });
+  expect((await decide()).status).toBe(409);
+  await s.storage.jobs.update(s.identity, "chat", "a", {
+    type: "awaiting_approval",
+    approvalId: "approval",
+  });
+  await s.storage.jobs.update(
+    s.identity,
+    "chat",
+    "a",
+    { type: "failed", code: "timeout" },
+    { status: "failed", code: "timeout" },
+  );
+  expect((await decide()).status).toBe(409);
+  expect((await s.storage.actions.load(s.identity, "approval"))?.status).toBe(
+    "pending",
+  );
 });
 it("terminates event streams when access is revoked and hides dependency errors", async () => {
   const s = await setup();
@@ -214,7 +306,10 @@ it("terminates event streams when access is revoked and hides dependency errors"
   const reader = response.body?.getReader();
   await reader?.read();
   allowed = false;
+  const now = Date.now();
+  const clock = vi.spyOn(Date, "now").mockReturnValue(now + 5001);
   await expect(reader?.read()).rejects.toThrow("disconnected");
+  clock.mockRestore();
   const unavailable = createHandler({
     storage: s.storage,
     origins: [],

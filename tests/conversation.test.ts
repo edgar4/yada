@@ -36,7 +36,7 @@ it("resumes committed messages and does not save failed runs", async () => {
     await runConversation({ ...options, signal: AbortSignal.abort() });
     expect(
       (await store.conversations.load(options.identity, "one"))?.revision,
-    ).toBe(2);
+    ).toBe(3);
   } finally {
     await store.close();
   }

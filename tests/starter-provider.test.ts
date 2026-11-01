@@ -109,8 +109,8 @@ it("uses the configured real provider adapter and executes its tool call", async
       expect(
         (
           await fixture.storage.conversations.load(starterIdentity, "chat")
-        )?.messages.at(-1)?.content,
-      ).toBe("The time tool ran.");
+        )?.messages.at(-1),
+      ).toMatchObject({ content: "The time tool ran." });
     } finally {
       await app.close();
     }

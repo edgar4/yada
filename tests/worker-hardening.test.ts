@@ -70,3 +70,44 @@ it("does not execute inherited agent profiles", async () => {
     await worker.stop();
   }
 });
+
+it("reports rounds, tool calls and usage in the trace", async () => {
+  const s = await storageFixture("sqlite");
+  await s.storage.jobs.submit(s.identity, "chat", {
+    id: "one",
+    profileId: "v1",
+    input: "Hello",
+  });
+  const trace = vi.fn();
+  const worker = createWorker({
+    storage: s.storage,
+    trace,
+    profiles: {
+      v1: {
+        provider: createFakeProvider(() => ({
+          content: "Done",
+          toolCalls: [],
+          finishReason: "stop",
+          usage: { inputTokens: 4, outputTokens: 2 },
+        })),
+        tools: [],
+        system: "Help",
+      },
+    },
+  });
+  try {
+    await worker.tick();
+    expect(trace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "run_finished",
+        status: "completed",
+        rounds: 1,
+        toolCalls: 0,
+        inputTokens: 4,
+        outputTokens: 2,
+      }),
+    );
+  } finally {
+    await worker.stop();
+  }
+});

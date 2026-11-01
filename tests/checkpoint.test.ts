@@ -76,7 +76,7 @@ it("retains consumed budgets and call IDs on recovery", async () => {
   expect(s.provider.requests).toHaveLength(0);
   const provider = createFakeProvider(() => ({
     content: "",
-    toolCalls: pending.pending,
+    toolCalls: [...pending.pending, ...pending.pending],
     finishReason: "tool_calls",
   }));
   expect(

@@ -20,6 +20,7 @@ export const approvalSchema = z.strictObject({
     "executing",
     "completed",
     "expired",
+    "unknown",
   ]),
   expiresAt: z.number(),
 });
@@ -150,7 +151,7 @@ export class BrowserClient {
 
   createInput(
     profileId: string,
-    input: string,
+    input: JobInput["input"],
     id: string = crypto.randomUUID(),
   ): JobInput {
     return jobInputSchema.parse({ id, profileId, input });
@@ -229,11 +230,12 @@ export class BrowserClient {
     approvalId: string,
     approved: boolean,
     signal?: AbortSignal,
+    remember?: "run" | "conversation",
   ): Promise<void> {
     await this.json(
       `${this.path(conversationId, runId)}/approvals/${encodeURIComponent(approvalId)}/decision`,
       "POST",
-      JSON.stringify({ approved }),
+      JSON.stringify(remember ? { approved, remember } : { approved }),
       signal,
     );
   }
@@ -246,7 +248,8 @@ export class BrowserClient {
     let cursor = options.after ?? 0;
     if (!Number.isSafeInteger(cursor) || cursor < 0)
       throw new ClientError("Invalid event cursor");
-    for (let attempt = 0; ; attempt++) {
+    let attempt = 0;
+    for (;;) {
       try {
         const response = await this.request(
           `${this.path(conversationId, runId)}/events?after=${String(cursor)}`,
@@ -267,10 +270,13 @@ export class BrowserClient {
           } catch {
             throw new ClientError("Invalid run event");
           }
-          if (event.sequence <= cursor) continue;
-          if (event.sequence !== cursor + 1)
-            throw new ClientError("Event sequence gap");
-          cursor = event.sequence;
+          if (event.type !== "text_delta") {
+            if (event.sequence <= cursor) continue;
+            if (event.sequence !== cursor + 1)
+              throw new ClientError("Event sequence gap");
+            cursor = event.sequence;
+            attempt = 0;
+          }
           yield event;
           if (terminal(event)) return;
         }
@@ -281,6 +287,7 @@ export class BrowserClient {
         throw new ClientError("Event stream disconnected; reconnect to resume");
       options.onReconnect?.(attempt + 1);
       await wait(this.delay(attempt), options.signal);
+      attempt++;
     }
   }
 

@@ -1,7 +1,11 @@
 import { abortable } from "../core/abort.js";
-import type { ActionExecutor } from "../core/action.js";
+import type { ActionExecutor, Suspension } from "../core/action.js";
 import type { Identity } from "../core/contracts.js";
-import { operationId, type ActionStore } from "../storage/actions.js";
+import {
+  operationId,
+  unknownOutcome,
+  type ActionStore,
+} from "../storage/actions.js";
 import { CheckpointError } from "../core/checkpoint.js";
 export function actionExecutor(
   store: ActionStore,
@@ -27,7 +31,15 @@ export function actionExecutor(
         args: call.args,
         ...prepared,
         expiresAt: Date.now() + ttlMs,
-        status: "pending",
+        status: (await store.remembered(
+          identity,
+          runId,
+          tool.spec.name,
+          tool.version,
+          call.args,
+        ))
+          ? "approved"
+          : "pending",
       });
     }
     if (
@@ -36,7 +48,13 @@ export function actionExecutor(
       JSON.stringify(state.args) !== JSON.stringify(call.args)
     )
       throw new Error("Action mismatch");
-    if (state.status === "completed") return state.receipt ?? "";
+    if (state.status === "completed" || state.status === "unknown")
+      return state.receipt ?? "";
+    const unresolved = async (): Promise<string | Suspension> => {
+      if (tool.reconcile) return { status: "reconciling", approvalId: id };
+      await store.unknown(identity, id);
+      return unknownOutcome;
+    };
     if (state.status === "pending" && state.expiresAt <= Date.now())
       state = await store.decide(identity, id, false);
     if (state.status === "pending")
@@ -78,19 +96,18 @@ export function actionExecutor(
           await store.receipt(identity, id, receipt);
           return receipt;
         } catch {
-          return { status: "reconciling", approvalId: id };
+          return unresolved();
         }
       }
       state = await store.load(identity, id);
       if (state?.status === "expired")
         return "Action approval expired; no change was made.";
     }
+    if (!tool.reconcile) return unresolved();
+    const reconcile = tool.reconcile.bind(tool);
     let receipt: string | undefined;
     try {
-      receipt = await abortable(
-        () => tool.reconcile(id, identity, signal),
-        signal,
-      );
+      receipt = await abortable(() => reconcile(id, identity, signal), signal);
     } catch {
       return { status: "reconciling", approvalId: id };
     }

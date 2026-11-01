@@ -125,7 +125,7 @@ for (const driver of drivers)
         expect(
           (await fixture.storage.conversations.load(starterIdentity, "chat"))
             ?.messages,
-        ).toHaveLength(2);
+        ).toHaveLength(4);
         const events = await send(
           "/v1/conversations/chat/runs/first/events",
           "GET",
@@ -153,7 +153,7 @@ for (const driver of drivers)
         expect(
           (await fixture.storage.conversations.load(starterIdentity, "chat"))
             ?.messages,
-        ).toHaveLength(2);
+        ).toHaveLength(4);
         expect(
           (await send("/auth/logout", "POST", undefined, nextCookie)).status,
         ).toBe(200);

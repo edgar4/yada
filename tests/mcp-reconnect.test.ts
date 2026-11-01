@@ -51,7 +51,12 @@ it("closes a replacement created while shutdown is pending", async () => {
     isConnected: () => false,
     close: vi.fn(() => Promise.resolve()),
   };
-  const next = { tools: [tool], close: vi.fn(() => Promise.resolve()) };
+  const next = {
+    tools: [tool],
+    close: vi.fn(() => Promise.resolve()),
+    prompts: vi.fn(),
+    getPrompt: vi.fn(),
+  };
   let release: (connection: McpConnection) => void = () => undefined;
   const waiting = new Promise<McpConnection>((resolve) => {
     release = resolve;
@@ -94,6 +99,8 @@ function connection(description = "lookup") {
   });
   return {
     tools: [tool],
+    prompts: vi.fn(() => Promise.resolve([])),
+    getPrompt: vi.fn(() => Promise.resolve("")),
     isConnected: () => connected,
     disconnect() {
       connected = false;
@@ -145,15 +152,18 @@ it("fails closed when reconnect discovery changes and permits a later clean reco
     .mockResolvedValueOnce(changed)
     .mockRejectedValueOnce(new Error("offline"))
     .mockResolvedValueOnce(recovered);
+  vi.useFakeTimers({ toFake: ["Date"] });
   const resilient = await reconnectingMcp(connect);
   first.disconnect();
   await expect(
     (resilient.tools[0] as ReadTool).execute({}, identity, signal()),
   ).rejects.toThrow("changed");
+  vi.setSystemTime(Date.now() + 31_000);
   expect(changed.close).toHaveBeenCalledOnce();
   await expect(
     (resilient.tools[0] as ReadTool).authorize(identity),
   ).rejects.toThrow("offline");
+  vi.setSystemTime(Date.now() + 31_000);
   expect(
     await (resilient.tools[0] as ReadTool).execute(
       { id: "a" },
@@ -161,11 +171,37 @@ it("fails closed when reconnect discovery changes and permits a later clean reco
       signal(),
     ),
   ).toBe("ok");
+  vi.useRealTimers();
+  await resilient.close();
+});
+it("rethrows a failed reconnect without reconnecting until the backoff passes", async () => {
+  const first = connection();
+  const connect = vi
+    .fn()
+    .mockResolvedValueOnce(first)
+    .mockRejectedValueOnce(new Error("offline"))
+    .mockResolvedValueOnce(connection());
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const resilient = await reconnectingMcp(connect);
+  const tool = resilient.tools[0] as ReadTool;
+  first.disconnect();
+  for (let i = 0; i < 3; i++)
+    await expect(tool.authorize(identity)).rejects.toThrow("offline");
+  expect(connect).toHaveBeenCalledTimes(2);
+  vi.setSystemTime(Date.now() + 31_000);
+  expect(await tool.authorize(identity)).toBe(true);
+  expect(connect).toHaveBeenCalledTimes(3);
+  vi.useRealTimers();
   await resilient.close();
 });
 it("handles connections without liveness hooks", async () => {
   const original = connection();
-  const basic: McpConnection = { tools: original.tools, close: original.close };
+  const basic: McpConnection = {
+    tools: original.tools,
+    close: original.close,
+    prompts: original.prompts,
+    getPrompt: original.getPrompt,
+  };
   const connect = vi.fn(() => Promise.resolve(basic));
   const resilient = await reconnectingMcp(connect);
   expect(resilient.isConnected?.()).toBe(true);
@@ -177,5 +213,22 @@ it("handles connections without liveness hooks", async () => {
     ),
   ).toBe("ok");
   expect(connect).toHaveBeenCalledOnce();
+  await resilient.close();
+});
+it("reconnects with the connection's configured timeout", async () => {
+  const first = { ...connection(), timeoutMs: 50 };
+  const aborted: boolean[] = [];
+  const connect = vi.fn(async (signal: AbortSignal) => {
+    if (connect.mock.calls.length === 1) return first;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    aborted.push(signal.aborted);
+    return connection();
+  });
+  const resilient = await reconnectingMcp(connect);
+  first.disconnect();
+  const tool = resilient.tools[0];
+  if (tool?.effect !== "read") throw new Error("expected read");
+  await tool.execute({ id: "a" }, identity, AbortSignal.timeout(5000));
+  expect(aborted).toEqual([true]);
   await resilient.close();
 });

@@ -1,3 +1,4 @@
+import { contentText } from "../src/core/content.js";
 import { afterEach, expect, it } from "vitest";
 import { mkdtemp, mkdir, writeFile, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
@@ -40,8 +41,10 @@ it("discovers metadata and loads instructions and references only on request", a
   const tool = catalog.tools[0];
   if (!tool) throw new Error("Missing skill tool");
   expect(await tool.authorize(identity)).toBe(true);
-  const read = (args: unknown) =>
-    tool.execute(args, identity, new AbortController().signal);
+  const read = async (args: unknown) =>
+    contentText(
+      await tool.execute(args, identity, new AbortController().signal),
+    );
   expect(JSON.parse(await read({ name: "support" }))).toMatchObject({
     content: source,
     resources: ["references/policy.md"],
@@ -105,9 +108,11 @@ it("uses skill tools through the existing provider loop and enforces host author
     directories: [f.root],
     authorize: () => Promise.resolve(false),
   });
-  await expect(run({ ...options, ...denied })).resolves.toEqual({
-    status: "failed",
-    code: "tool_denied",
+  const hidden = await run({ ...options, ...denied });
+  expect(hidden.status).toBe("completed");
+  expect(provider.requests.at(-1)?.messages.at(-1)).toMatchObject({
+    role: "tool",
+    content: expect.stringContaining("unknown_tool") as string,
   });
 });
 
@@ -145,7 +150,8 @@ it("supports multiline metadata and reports vendor extensions without granting c
     description: "Answer support questions",
     compatibility: "Needs order tools",
   });
-  expect(parsed.warnings).toHaveLength(2);
+  expect(parsed.allowedTools).toEqual(["Bash"]);
+  expect(parsed.warnings).toHaveLength(1);
 });
 
 it.each([
@@ -163,9 +169,11 @@ it.each([
 
 it("ignores absent roots and rejects duplicate skill names", async () => {
   const f = await fixture();
-  expect(
-    await loadSkills({ directories: [join(f.root, "absent")], authorize }),
-  ).toEqual({ system: "", tools: [], warnings: [] });
+  const empty = await loadSkills({
+    directories: [join(f.root, "absent")],
+    authorize,
+  });
+  expect([empty.system, empty.tools, empty.warnings]).toEqual(["", [], []]);
   await expect(
     loadSkills({ directories: [f.root, f.directory], authorize }),
   ).rejects.toThrow("Duplicate skill");
@@ -296,4 +304,35 @@ it("bounds skill counts and aggregate text memory", async () => {
       );
   }
   await expect(f.load()).rejects.toThrow("catalog exceeds");
+});
+
+it("rejects an invalid directory name when frontmatter has no name", () => {
+  expect(() =>
+    parseSkill("---\ndescription: d\n---\nBody", "Bad_Name"),
+  ).toThrow("invalid name");
+});
+it("makes progress when the read limit lands inside a surrogate pair", async () => {
+  const f = await fixture();
+  await writeFile(join(f.directory, "references/emoji.md"), "😀😀");
+  const catalog = await f.load();
+  const tool = catalog.tools.find((t) => t.spec.name === "yada_read_skill");
+  const out = JSON.parse(
+    (await tool?.execute(
+      { name: "support", path: "references/emoji.md", offset: 0, limit: 1 },
+      identity,
+      AbortSignal.timeout(5000),
+    )) as string,
+  ) as { content: string; nextOffset: number };
+  expect(out.content).toBe("😀");
+  expect(out.nextOffset).toBe(2);
+});
+it("accepts non-string metadata values and warns on unknown keys", () => {
+  const parsed = parseSkill(
+    "---\ndescription: D\nmetadata:\n  version: 1.0\n  tags: [a, b]\nextra: 1\n---\nBody",
+    "docs",
+  );
+  expect(parsed.name).toBe("docs");
+  expect(parsed.warnings).toEqual([
+    "Skill docs: extra is not enforced by Yada; host tool permissions still apply",
+  ]);
 });

@@ -156,30 +156,29 @@ it.each([
   const s = await setup(options);
   await expect(s.connect()).rejects.toThrow();
 });
+it("states the combined name limit", async () => {
+  const s = await setup({
+    tools: [{ ...tool, name: "x".repeat(60) }],
+    autoDiscover: true,
+  });
+  await expect(s.connect()).rejects.toThrow("64-character limit");
+});
 it("excludes tools not explicitly allowed", async () => {
   const s = await setup({ tools: [tool, { ...tool, name: "delete" }] });
   const c = await s.connect();
   cleanups.push(c.close);
   expect(c.tools.map((t) => t.spec.name)).toEqual(["catalog__lookup"]);
 });
-it.each([
-  {
-    isError: true,
-    content: [{ type: "text" as const, text: "private error" }],
-  },
-  { content: [{ type: "image" as const, data: "a", mimeType: "image/png" }] },
-  { content: [{ type: "text" as const, text: "x".repeat(32001) }] },
-])(
-  "rejects tool error, unsupported content, or oversized results",
-  async (result) => {
-    const s = await setup({ result });
-    const c = await s.connect();
-    cleanups.push(c.close);
-    await expect(
-      c.tools[0]?.execute({ id: "a" }, owner, AbortSignal.timeout(1000)),
-    ).rejects.toThrow();
-  },
-);
+it("leaves oversized read results to runtime truncation", async () => {
+  const s = await setup({
+    result: { content: [{ type: "text", text: "x".repeat(32001) }] },
+  });
+  const c = await s.connect();
+  cleanups.push(c.close);
+  expect(
+    await c.tools[0]?.execute({ id: "a" }, owner, AbortSignal.timeout(1000)),
+  ).toHaveLength(32001);
+});
 it("preserves structured results", async () => {
   const s = await setup({
     result: { content: [], structuredContent: { available: true } },

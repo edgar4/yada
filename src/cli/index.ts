@@ -11,8 +11,6 @@ try {
   ) {
     console.log(usage);
   } else {
-    if (process.versions.node.split(".")[0] !== "24")
-      throw new Error("Yada requires Node 24.");
     const [command, ...rest] = args;
     const positional = rest.filter((arg) => !arg.startsWith("-"));
     if (

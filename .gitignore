@@ -13,3 +13,4 @@ coverage/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+/.vitest/

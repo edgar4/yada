@@ -1,7 +1,8 @@
+import { contentText } from "../src/core/content.js";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createFakeProvider, readTool, run } from "../src/index.js";
-import type { ProviderResult } from "../src/index.js";
+import type { ProviderResult, RunCheckpoint } from "../src/index.js";
 const answer: ProviderResult = {
   content: "Done",
   toolCalls: [],
@@ -63,10 +64,12 @@ describe("standalone runtime", () => {
   it("hides unauthorized tools", async () => {
     const s = setup();
     s.authorize.mockResolvedValue(false);
-    expect(await run(s.options)).toEqual({
-      status: "failed",
-      code: "tool_denied",
-    });
+    expect(await run(s.options)).toEqual({ status: "completed", text: "Done" });
+    expect(
+      JSON.parse(
+        contentText(s.provider.requests[1]?.messages.at(-1)?.content ?? ""),
+      ),
+    ).toMatchObject({ error: "unknown_tool" });
     expect(s.provider.requests[0]?.tools).toEqual([]);
     expect(s.execute).not.toHaveBeenCalled();
   });
@@ -80,18 +83,108 @@ describe("standalone runtime", () => {
     expect(s.execute).not.toHaveBeenCalled();
   });
   it.each([{ id: 1 }, { id: "a", tenantId: "other" }, null])(
-    "rejects invalid arguments %j",
+    "returns invalid arguments %j to the model",
     async (args) => {
       const s = setup([
         { ...invocation, toolCalls: [{ id: "1", name: "lookup", args }] },
       ]);
       expect(await run(s.options)).toEqual({
-        status: "failed",
-        code: "dependency_failed",
+        status: "completed",
+        text: "Done",
       });
+      const message = s.provider.requests[1]?.messages.at(-1);
+      expect(message).toMatchObject({ role: "tool", toolCallId: "1" });
+      expect(JSON.parse(contentText(message?.content ?? ""))).toMatchObject({
+        error: "invalid_arguments",
+      });
+      expect(message?.content).not.toContain("other");
       expect(s.execute).not.toHaveBeenCalled();
     },
   );
+  it("returns unknown tools to the model", async () => {
+    const s = setup([
+      { ...invocation, toolCalls: [{ id: "1", name: "nope", args: {} }] },
+    ]);
+    expect(await run(s.options)).toEqual({ status: "completed", text: "Done" });
+    expect(
+      JSON.parse(
+        contentText(s.provider.requests[1]?.messages.at(-1)?.content ?? ""),
+      ),
+    ).toMatchObject({ error: "unknown_tool" });
+  });
+  it("returns a generic message for tool failures", async () => {
+    const s = setup();
+    s.execute.mockRejectedValue(new Error("secret"));
+    expect(await run(s.options)).toEqual({ status: "completed", text: "Done" });
+    const content = contentText(
+      s.provider.requests[1]?.messages.at(-1)?.content ?? "",
+    );
+    expect(JSON.parse(content)).toMatchObject({ error: "tool_failed" });
+    expect(content).not.toContain("secret");
+  });
+  it("fails after three consecutive tool failures", async () => {
+    const s = setup(
+      Array.from({ length: 5 }, (_, index): ProviderResult => ({
+        ...invocation,
+        toolCalls: [{ id: String(index), name: "lookup", args: { id: "a" } }],
+      })),
+    );
+    s.execute.mockRejectedValue(new Error("x"));
+    expect(await run(s.options)).toEqual({
+      status: "failed",
+      code: "dependency_failed",
+    });
+    expect(s.provider.requests).toHaveLength(3);
+  });
+  it("resets the failure count after a success", async () => {
+    const s = setup(
+      Array.from({ length: 5 }, (_, index): ProviderResult => ({
+        ...invocation,
+        toolCalls: [{ id: String(index), name: "lookup", args: { id: "a" } }],
+      })).concat([answer]),
+    );
+    s.execute
+      .mockRejectedValueOnce(new Error("x"))
+      .mockRejectedValueOnce(new Error("x"))
+      .mockResolvedValueOnce("ok")
+      .mockRejectedValueOnce(new Error("x"))
+      .mockRejectedValueOnce(new Error("x"));
+    expect(await run({ ...s.options, maxRounds: 10 })).toEqual({
+      status: "completed",
+      text: "Done",
+    });
+  });
+  it("resumes a pending failed call with a persisted failure count", async () => {
+    const s = setup();
+    s.execute.mockRejectedValue(new Error("x"));
+    const saved: RunCheckpoint[] = [];
+    await run({
+      ...s.options,
+      persist: (checkpoint) => {
+        saved.push(checkpoint);
+        return Promise.resolve();
+      },
+    });
+    const resume = saved.find((item) => item.pending.length);
+    expect(resume).toBeDefined();
+    const again = setup([answer]);
+    again.execute.mockRejectedValue(new Error("x"));
+    expect(
+      await run({
+        ...again.options,
+        checkpoint: { ...(resume as RunCheckpoint), failures: 2 },
+      }),
+    ).toEqual({ status: "failed", code: "dependency_failed" });
+    expect(again.provider.requests).toHaveLength(0);
+  });
+  it("keeps cancellation and revoked access terminal over tool errors", async () => {
+    const s = setup();
+    s.execute.mockImplementation(() => {
+      s.controller.abort();
+      return Promise.reject(new Error("x"));
+    });
+    expect(await run(s.options)).toEqual({ status: "cancelled" });
+  });
   it("rejects duplicate tool registration", async () => {
     const s = setup();
     await expect(
@@ -175,21 +268,46 @@ describe("standalone runtime", () => {
       });
     },
   );
-  it("does not expose dependency errors", async () => {
+  it("truncates oversized tool output", async () => {
     const s = setup();
-    s.execute.mockRejectedValue(new Error("secret"));
+    s.execute.mockResolvedValue("x".repeat(32005));
+    expect(await run(s.options)).toEqual({ status: "completed", text: "Done" });
+    const content = contentText(
+      s.provider.requests[1]?.messages.at(-1)?.content ?? "",
+    );
+    expect(content).toBe(`${"x".repeat(32000)}…[truncated 5 chars]`);
+  });
+  it("completes with earlier assistant text when the final text is empty", async () => {
+    const s = setup([
+      { ...invocation, content: "Earlier" },
+      { ...answer, content: "" },
+    ]);
     expect(await run(s.options)).toEqual({
-      status: "failed",
-      code: "dependency_failed",
+      status: "completed",
+      text: "Earlier",
     });
   });
-  it("bounds tool output", async () => {
-    const s = setup();
-    s.execute.mockResolvedValue("x".repeat(32001));
+  it("fails empty final text when no assistant text exists", async () => {
+    const s = setup([invocation, { ...answer, content: "" }]);
     expect(await run(s.options)).toEqual({
       status: "failed",
       code: "invalid_response",
     });
+  });
+  it("rewrites call IDs reused across rounds", async () => {
+    const s = setup([invocation, invocation, answer]);
+    expect(await run(s.options)).toEqual({ status: "completed", text: "Done" });
+    const last = s.provider.requests[2]?.messages;
+    expect(last?.at(-1)).toMatchObject({ role: "tool", toolCallId: "1-r2" });
+    expect(last?.at(-2)).toMatchObject({
+      role: "assistant",
+      toolCalls: [{ id: "1-r2" }],
+    });
+  });
+  it("fails refusals", async () => {
+    expect(
+      await run(setup([{ ...answer, finishReason: "refusal" }]).options),
+    ).toEqual({ status: "failed", code: "refused" });
   });
   it("rejects empty answers", async () => {
     expect(await run(setup([{ ...answer, content: "" }]).options)).toEqual({

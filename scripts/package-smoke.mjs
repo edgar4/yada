@@ -27,7 +27,16 @@ try {
     );
   assert(!packed.files.some(({ path }) => /(?:^|\/)\.env/.test(path)));
   assert(packed.files.some(({ path }) => path === "LICENSE"));
-  for (const entry of ["index", "client/index", "widget/index"])
+  for (const entry of [
+    "index",
+    "client/index",
+    "widget/index",
+    "entries/skills",
+    "entries/providers",
+    "entries/storage",
+    "entries/mcp",
+    "entries/service",
+  ])
     for (const extension of ["js", "d.ts"])
       assert(
         packed.files.some(({ path }) => path === `dist/${entry}.${extension}`),
@@ -63,6 +72,14 @@ import { createFakeProvider, createStorage, loadSkills, run } from "@edgaralochi
 import { mkdir, writeFile } from "node:fs/promises";
 import * as client from "@edgaralochi/yada/client";
 import * as widget from "@edgaralochi/yada/widget";
+import * as root from "@edgaralochi/yada";
+import * as providers from "@edgaralochi/yada/providers";
+import * as storageEntry from "@edgaralochi/yada/storage";
+import * as mcp from "@edgaralochi/yada/mcp";
+import * as skillsEntry from "@edgaralochi/yada/skills";
+import * as service from "@edgaralochi/yada/service";
+for (const entry of [providers, storageEntry, mcp, skillsEntry, service])
+  for (const key of Object.keys(entry)) assert.equal(entry[key], root[key], key);
 assert(Object.keys(client).length > 0);
 assert(Object.keys(widget).length > 0);
 const provider = createFakeProvider(() => ({content: "installed", toolCalls: [], finishReason: "stop"}));
@@ -73,18 +90,40 @@ await writeFile("skills/installed/SKILL.md", ["---", "name: installed", "descrip
 const skills = await loadSkills({directories: ["skills"], authorize: async () => true});
 assert.match(skills.system, /Verify packaged skills/);
 assert.match(await skills.tools[0].execute({name: "installed"}, {actorId: "test", tenantId: "test"}, AbortSignal.timeout(5000)), /Use the installed runtime/);
-const storage = await createStorage({driver: "sqlite", filename: ":memory:", encryptionKey: "11".repeat(32)});
-await storage.close();
+await assert.rejects(createStorage({driver: "sqlite", filename: ":memory:", encryptionKey: "11".repeat(32)}), /npm install better-sqlite3/);
+const gemini = root.createProvider({provider: "gemini", apiKey: "key"});
+await assert.rejects(gemini.complete({system: "s", messages: [], tools: [], signal: AbortSignal.timeout(5000)}), /google-genai @langchain.core/);
 `,
   );
   execute(process.execPath, ["smoke.mjs"], temporary);
+  execute(
+    npm,
+    ["install", "--no-save", "--no-audit", "--no-fund", "better-sqlite3"],
+    temporary,
+  );
+  await writeFile(
+    join(temporary, "sqlite.mjs"),
+    `
+import assert from "node:assert/strict";
+import { createStorage } from "@edgaralochi/yada/storage";
+const storage = await createStorage({driver: "sqlite", filename: ":memory:", encryptionKey: "11".repeat(32)});
+assert(storage);
+await storage.close();
+`,
+  );
+  execute(process.execPath, ["sqlite.mjs"], temporary);
   await writeFile(
     join(temporary, "types.ts"),
     `
 import * as runtime from "@edgaralochi/yada";
 import * as client from "@edgaralochi/yada/client";
 import * as widget from "@edgaralochi/yada/widget";
-void [runtime, client, widget];
+import * as providers from "@edgaralochi/yada/providers";
+import * as storage from "@edgaralochi/yada/storage";
+import * as mcp from "@edgaralochi/yada/mcp";
+import * as skills from "@edgaralochi/yada/skills";
+import * as service from "@edgaralochi/yada/service";
+void [runtime, client, widget, providers, storage, mcp, skills, service];
 `,
   );
   execute(

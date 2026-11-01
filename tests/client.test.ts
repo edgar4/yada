@@ -41,6 +41,27 @@ const collect = async (events: AsyncGenerator<RunEvent>) => {
 };
 
 describe("browser client", () => {
+  it("yields live text deltas without moving the replay cursor", async () => {
+    const transport = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        stream(
+          event(1, "queued"),
+          { ...event(1, "text_delta"), text: "Hi" },
+          event(2, "tool_started"),
+          { ...event(1, "text_delta"), text: "!" },
+          event(3, "completed"),
+        ),
+      );
+    const events = await collect(setup(transport).events("chat", "run"));
+    expect(events.map((value) => value.type)).toEqual([
+      "queued",
+      "text_delta",
+      "tool_started",
+      "text_delta",
+      "completed",
+    ]);
+  });
   it("validates configuration and stable request input", () => {
     expect(() => new BrowserClient({ baseUrl: "file:///a" })).toThrow("HTTP");
     for (const baseUrl of [
@@ -131,6 +152,23 @@ describe("browser client", () => {
     expect(transport.mock.calls[2]?.[1]?.body).toBe('{"approved":false}');
   });
 
+  it("sends a remembered approval scope", async () => {
+    const transport = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await setup(transport).decide(
+      "chat",
+      "run",
+      "a",
+      true,
+      undefined,
+      "conversation",
+    );
+    expect(transport.mock.calls[0]?.[1]?.body).toBe(
+      '{"approved":true,"remember":"conversation"}',
+    );
+  });
+
   it("reconnects from its last cursor and deduplicates replay", async () => {
     const transport = vi
       .fn<typeof fetch>()
@@ -144,7 +182,33 @@ describe("browser client", () => {
       ),
     ).resolves.toEqual([event(1, "queued"), event(2, "completed")]);
     expect(transport.mock.calls[2]?.[0]).toContain("after=1");
-    expect(reconnect.mock.calls).toEqual([[1], [2]]);
+    expect(reconnect.mock.calls).toEqual([[1], [1]]);
+  });
+
+  it("resets the retry budget after events are received", async () => {
+    const offline = () => Promise.reject(new TypeError("offline"));
+    const transport = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce(offline)
+      .mockResolvedValueOnce(stream(event(1, "queued")))
+      .mockImplementationOnce(offline)
+      .mockResolvedValueOnce(stream(event(2, "progress")))
+      .mockImplementationOnce(offline)
+      .mockResolvedValueOnce(stream(event(3, "completed")));
+    await expect(
+      collect(setup(transport, 2).events("chat", "run")),
+    ).resolves.toHaveLength(3);
+  });
+
+  it("accepts approvals with unknown outcomes", async () => {
+    const transport = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        json({ id: "a", preview: "p", status: "unknown", expiresAt: 1 }),
+      );
+    await expect(
+      setup(transport).getApproval("chat", "run", "a"),
+    ).resolves.toMatchObject({ status: "unknown" });
   });
 
   it("resumes an explicit cursor and closes at all terminal statuses", async () => {

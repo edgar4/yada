@@ -48,8 +48,8 @@ for (const driver of drivers)
       await restoreStorage(target.config, backup);
       expect(
         (await target.storage.conversations.load(source.identity, "chat"))
-          ?.messages[0]?.content,
-      ).toBe("private message");
+          ?.messages[0],
+      ).toMatchObject({ content: "private message" });
       await expect(restoreStorage(target.config, backup)).rejects.toThrow(
         "empty",
       );

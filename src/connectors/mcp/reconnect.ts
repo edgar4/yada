@@ -29,20 +29,29 @@ export async function reconnectingMcp(
   let current = await connect(signal);
   const expected = contract(current);
   let closed = false;
+  const deadline = () => AbortSignal.timeout(current.timeoutMs ?? 10_000);
   const isClosed = () => closed;
   let pending: Promise<void> | undefined;
+  let failure: { error: unknown; until: number } | undefined;
   async function ready(callSignal: AbortSignal) {
     callSignal.throwIfAborted();
     if (closed) throw new Error("MCP connection closed");
     if (current.isConnected?.() === false) {
+      if (failure && Date.now() < failure.until) throw failure.error;
       pending ??= (async () => {
-        await current.close();
-        const next = await connect(AbortSignal.timeout(10_000));
-        if (isClosed() || contract(next) !== expected) {
-          await next.close();
-          throw new Error("MCP discovery changed");
+        try {
+          await current.close();
+          const next = await connect(deadline());
+          if (isClosed() || contract(next) !== expected) {
+            await next.close();
+            throw new Error("MCP discovery changed");
+          }
+          current = next;
+          failure = undefined;
+        } catch (error) {
+          failure = { error, until: Date.now() + 30_000 };
+          throw error;
         }
-        current = next;
       })().finally(() => {
         pending = undefined;
       });
@@ -61,7 +70,7 @@ export async function reconnectingMcp(
     };
     const authorize = async (identity: Identity) => {
       if (closed) return false;
-      await ready(AbortSignal.timeout(10_000));
+      await ready(deadline());
       return find().authorize(identity);
     };
     async function invoke<T>(
@@ -93,10 +102,14 @@ export async function reconnectingMcp(
           invoke(context.identity, context.signal, () =>
             write().execute(args, context),
           ),
-        reconcile: (id, identity, callSignal) =>
-          invoke(identity, callSignal, () =>
-            write().reconcile(id, identity, callSignal),
-          ),
+        ...(original.reconcile
+          ? {
+              reconcile: (id, identity, callSignal) =>
+                invoke(identity, callSignal, async () =>
+                  write().reconcile?.(id, identity, callSignal),
+                ),
+            }
+          : {}),
       };
     }
     return {
@@ -114,6 +127,14 @@ export async function reconnectingMcp(
   return {
     tools,
     isConnected: () => !closed && (current.isConnected?.() ?? true),
+    prompts: async (identity, callSignal) => {
+      await ready(callSignal ?? deadline());
+      return current.prompts(identity, callSignal);
+    },
+    getPrompt: async (identity, name, args, callSignal) => {
+      await ready(callSignal ?? deadline());
+      return current.getPrompt(identity, name, args, callSignal);
+    },
     async close() {
       closed = true;
       await current.close();

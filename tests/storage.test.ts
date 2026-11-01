@@ -10,6 +10,9 @@ import {
   type StorageConfig,
   type YadaStorage,
 } from "../src/index.js";
+import { openDatabase } from "../src/storage/database.js";
+import { recordStore } from "../src/storage/records.js";
+import { RunLeaseError } from "../src/storage/runs.js";
 const key = "ab".repeat(32);
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -171,6 +174,54 @@ for (const driver of drivers)
           (await readFile(s.config.filename ?? "")).includes("private-token"),
         ).toBe(false);
       }
+    });
+
+    it("retries transactions on conflict and keeps lease loss fatal", async () => {
+      const s = await setup();
+      const db = await openDatabase(s.config);
+      try {
+        const records = recordStore(db, key);
+        let calls = 0;
+        await expect(
+          records.transact(() => {
+            if (++calls < 3) throw new StorageConflict();
+            return Promise.resolve("ok");
+          }),
+        ).resolves.toBe("ok");
+        calls = 0;
+        await expect(
+          records.transact(() => {
+            calls++;
+            throw new StorageConflict();
+          }),
+        ).rejects.toBeInstanceOf(StorageConflict);
+        expect(calls).toBe(20);
+        calls = 0;
+        await expect(
+          records.transact(() => {
+            calls++;
+            throw new RunLeaseError();
+          }),
+        ).rejects.toBeInstanceOf(RunLeaseError);
+        expect(calls).toBe(1);
+      } finally {
+        await db.destroy();
+      }
+      await s.store.jobs.submit(s.identity, "chat", {
+        id: "one",
+        profileId: "v1",
+        input: "Hello",
+      });
+      await expect(
+        s.store.jobs.update(
+          s.identity,
+          "chat",
+          "one",
+          { type: "progress" },
+          undefined,
+          { runId: JSON.stringify(["chat", "one"]), token: "stale" },
+        ),
+      ).rejects.toBeInstanceOf(RunLeaseError);
     });
   });
 it("defaults to SQLite and validates configuration", () => {

@@ -72,7 +72,7 @@ it("serializes prepare, approved execution and receipt context through a real HT
         },
       ),
     ).toBe("http-receipt");
-    expect(await tool.reconcile("approved-operation", owner, signal)).toBe(
+    expect(await tool.reconcile?.("approved-operation", owner, signal)).toBe(
       "http-receipt",
     );
     const requests = fixture.calls.mock.calls.map(([request]) => request);

@@ -1,12 +1,19 @@
 import { z } from "zod";
+const toolNames = z
+  .array(z.string().min(1))
+  .min(1)
+  .max(1000)
+  .refine((tools) => new Set(tools).size === tools.length);
+export const hasAuthorizationHeader = (headers?: Record<string, string>) =>
+  Object.keys(headers ?? {}).some(
+    (name) => name.toLowerCase() === "authorization",
+  );
 const common = {
-  name: z.string().regex(/^[a-z][a-z0-9_]{0,19}$/),
-  readTools: z
-    .array(z.string().min(1))
-    .min(1)
-    .max(1000)
-    .refine((tools) => new Set(tools).size === tools.length)
-    .optional(),
+  name: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/),
+  timeoutMs: z.number().int().min(1000).max(600_000).default(30_000),
+  readTools: toolNames.optional(),
+  confirmTools: z.union([z.literal("*"), toolNames]).optional(),
+  resources: z.boolean().optional(),
   writeTools: z
     .record(
       z.string().min(1),
@@ -36,25 +43,51 @@ export const mcpConfig = z
         );
       }),
       token: z.string().min(1).optional(),
+      headers: z.record(z.string(), z.string()).optional(),
     }),
     z.strictObject({
       ...common,
       command: z.string().min(1),
       args: z.array(z.string()).default([]),
+      env: z.record(z.string(), z.string()).optional(),
+      cwd: z.string().min(1).optional(),
+      stderr: z.enum(["ignore", "inherit"]).default("ignore"),
     }),
   ])
   .superRefine((settings, context) => {
+    if (
+      "headers" in settings &&
+      settings.token &&
+      hasAuthorizationHeader(settings.headers)
+    )
+      context.addIssue({
+        code: "custom",
+        message: "Authorization header conflicts with token",
+      });
     const reads = new Set(settings.readTools);
     const writes = new Set(Object.keys(settings.writeTools ?? {}));
     const helpers = new Set<string>();
+    const confirms = Array.isArray(settings.confirmTools)
+      ? settings.confirmTools
+      : [];
+    if (confirms.some((name) => reads.has(name)))
+      context.addIssue({
+        code: "custom",
+        message: "Overlapping MCP tool roles",
+      });
     for (const [name, mapping] of Object.entries(settings.writeTools ?? {})) {
-      if (reads.has(name))
+      if (reads.has(name) || confirms.includes(name))
         context.addIssue({
           code: "custom",
           message: "Overlapping MCP tool roles",
         });
       for (const helper of [mapping.prepareTool, mapping.receiptTool]) {
-        if (reads.has(helper) || writes.has(helper) || helpers.has(helper))
+        if (
+          reads.has(helper) ||
+          writes.has(helper) ||
+          helpers.has(helper) ||
+          confirms.includes(helper)
+        )
           context.addIssue({
             code: "custom",
             message: "Overlapping MCP helper roles",
@@ -63,8 +96,12 @@ export const mcpConfig = z
       }
     }
   });
+export type McpSettings = z.output<typeof mcpConfig>;
 export type McpConfig = z.input<typeof mcpConfig>;
-export type McpReadConfig = McpConfig & { writeTools?: undefined };
+export type McpReadConfig = McpConfig & {
+  writeTools?: undefined;
+  confirmTools?: undefined;
+};
 export type McpWriteMapping = NonNullable<McpConfig["writeTools"]>[string];
 export function mcpServersFromEnv(
   env: Readonly<Record<string, string | undefined>>,

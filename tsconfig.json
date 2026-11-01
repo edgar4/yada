@@ -18,5 +18,5 @@
       "@edgaralochi/yada/widget": ["./src/widget/index.ts"]
     }
   },
-  "include": ["src", "tests", "examples"]
+  "include": ["src", "tests", "examples", "evals"]
 }

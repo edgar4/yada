@@ -1,40 +1,29 @@
-import { ChatOpenAI } from "@langchain/openai";
 import { z } from "zod";
-import { chatModelAdapter } from "./langchain.js";
-export const localOptions = z.strictObject({
-  provider: z.enum(["ollama", "llamacpp"]),
-  model: z.string().trim().min(1),
-  apiKey: z.string().trim().min(1).optional(),
-  baseUrl: z
-    .url()
-    .refine((value) => {
-      const url = new URL(value);
-      return (
-        ["http:", "https:"].includes(url.protocol) &&
-        !url.username &&
-        !url.password &&
-        !url.search &&
-        !url.hash
-      );
-    })
-    .optional(),
-});
+import { nativeOpenAIAdapter } from "./native/openai.js";
+import { defaultMaxRetries, tuning } from "./options.js";
+export const localOptions = z
+  .strictObject({
+    provider: z.enum(["ollama", "llamacpp", "openai-compatible"]),
+    model: z.string().trim().min(1),
+    apiKey: z.string().trim().min(1).optional(),
+    vision: z.boolean().optional(),
+    ...tuning,
+  })
+  .refine((value) => value.provider !== "openai-compatible" || value.baseUrl);
+const defaultUrls: Record<
+  z.infer<typeof localOptions>["provider"],
+  string | undefined
+> = {
+  ollama: "http://localhost:11434/v1",
+  llamacpp: "http://localhost:8080/v1",
+  "openai-compatible": undefined,
+};
 export function createLocalProvider(config: z.input<typeof localOptions>) {
-  const options = localOptions.parse(config);
-  return chatModelAdapter(
-    options.provider,
-    new ChatOpenAI({
-      model: options.model,
-      apiKey: options.apiKey ?? "local",
-      configuration: {
-        baseURL:
-          options.baseUrl ??
-          (options.provider === "ollama"
-            ? "http://localhost:11434/v1"
-            : "http://localhost:8080/v1"),
-      },
-      maxRetries: 0,
-      useResponsesApi: false,
-    }),
-  );
+  const { provider, ...options } = localOptions.parse(config);
+  return nativeOpenAIAdapter({
+    ...options,
+    name: provider,
+    maxRetries: options.maxRetries ?? defaultMaxRetries,
+    baseUrl: options.baseUrl ?? defaultUrls[provider],
+  });
 }

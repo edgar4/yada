@@ -8,7 +8,7 @@ COPY src ./src
 COPY README.md LICENSE ./
 COPY docs ./docs
 RUN npm pack --pack-destination /tmp
-RUN npm install --prefix /runtime --omit=dev --no-audit --no-fund /tmp/edgaralochi-yada-*.tgz
+RUN npm install --prefix /runtime --omit=dev --no-audit --no-fund /tmp/edgaralochi-yada-*.tgz better-sqlite3@13.0.3
 
 FROM node:24-bookworm-slim
 ENV NODE_ENV=production

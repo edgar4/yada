@@ -18,7 +18,7 @@ export interface WriteTool {
     signal: AbortSignal,
   ): Promise<Preparation>;
   execute(args: unknown, context: ActionContext): Promise<string>;
-  reconcile(
+  reconcile?(
     operationId: string,
     identity: Identity,
     signal: AbortSignal,
@@ -48,7 +48,7 @@ export function writeTool<S extends z.ZodType>(options: {
     signal: AbortSignal,
   ) => Promise<Preparation>;
   execute: (args: z.output<S>, context: ActionContext) => Promise<string>;
-  reconcile: WriteTool["reconcile"];
+  reconcile?: WriteTool["reconcile"];
 }): WriteTool {
   return {
     effect: "write",
@@ -63,6 +63,6 @@ export function writeTool<S extends z.ZodType>(options: {
       options.prepare(options.input.parse(args), identity, signal),
     execute: async (args, context) =>
       options.execute(options.input.parse(args), context),
-    reconcile: options.reconcile,
+    ...(options.reconcile ? { reconcile: options.reconcile } : {}),
   };
 }

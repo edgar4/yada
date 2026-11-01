@@ -1,3 +1,4 @@
+import { contentSchema } from "../core/content.js";
 import { limitsSchema } from "../core/limits.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -9,8 +10,8 @@ import {
 import type { Identity } from "../core/contracts.js";
 import type { recordStore } from "./records.js";
 const requestSchema = z.object({
-  input: z.string(),
-  limits: limitsSchema.default({ maxContextChars: 64000 }),
+  input: contentSchema,
+  limits: limitsSchema.prefault({}),
   history: z.array(turnSchema).default([]),
   system: z.string(),
   profileId: z.string().min(1),
@@ -48,7 +49,7 @@ export function withRunLease<T>(
     assertOwned: () => void,
   ) => Promise<T>,
 ): Promise<T> {
-  return records.transaction(async (tx) => {
+  return records.transact(async (tx) => {
     const key = JSON.stringify([
       "run",
       identity.tenantId,

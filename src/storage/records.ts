@@ -31,7 +31,8 @@ export function recordStore(db: Knex, encryptionKey: string) {
         .onConflict("id")
         .ignore();
       const raw: unknown = await db("yada_records").where({ id }).first();
-      if (rowSchema.parse(raw).value !== encrypted) throw new StorageConflict();
+      if (rowSchema.safeParse(raw).data?.value !== encrypted)
+        throw new StorageConflict();
     } else {
       const updated = await db("yada_records")
         .where({ id, revision })
@@ -77,5 +78,17 @@ export function recordStore(db: Knex, encryptionKey: string) {
   ): Promise<T> {
     return db.transaction((tx) => operation(recordStore(tx, encryptionKey)));
   }
-  return { read, write, mutate, scan, remove, transaction };
+  async function transact<T>(
+    operation: (records: ReturnType<typeof recordStore>) => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 0; attempt < 20; attempt++) {
+      try {
+        return await transaction(operation);
+      } catch (error) {
+        if (!(error instanceof StorageConflict)) throw error;
+      }
+    }
+    throw new StorageConflict();
+  }
+  return { read, write, mutate, scan, remove, transaction, transact };
 }

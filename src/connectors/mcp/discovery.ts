@@ -4,6 +4,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 export async function discoverMcpTools(
   client: Client,
   signal: AbortSignal,
+  timeout: number,
 ): Promise<Map<string, Tool>> {
   const tools = new Map<string, Tool>();
   const cursors = new Set<string>();
@@ -12,7 +13,7 @@ export async function discoverMcpTools(
     if (cursors.size >= 100) throw new Error("MCP discovery limit exceeded");
     const page = await client.listTools(cursor ? { cursor } : {}, {
       signal,
-      timeout: 10_000,
+      timeout,
     });
     for (const tool of page.tools) {
       if (tools.has(tool.name)) throw new Error("Duplicate MCP tool");

@@ -12,7 +12,26 @@ Requires Node 24:
 npm install @edgaralochi/yada
 ```
 
-Import the runtime from `@edgaralochi/yada`, the browser client from `@edgaralochi/yada/client`, and the widget from `@edgaralochi/yada/widget`. Released under the [MIT license](LICENSE).
+Import the runtime from `@edgaralochi/yada`, the browser client from `@edgaralochi/yada/client`, and the widget from `@edgaralochi/yada/widget`. Narrower entry points are `/providers`, `/storage`, `/mcp`, `/skills` and `/service`; the root exports all of them.
+
+The core, the Anthropic and OpenAI-compatible providers and the fake provider need nothing else. Install only what you use:
+
+| Feature                    | Install                                               |
+| -------------------------- | ----------------------------------------------------- |
+| SQLite storage (default)   | `npm install better-sqlite3`                          |
+| PostgreSQL storage         | `npm install pg`                                      |
+| MySQL storage              | `npm install mysql2`                                  |
+| Gemini, `chatModelAdapter` | `npm install @langchain/core @langchain/google-genai` |
+
+Using a feature without its package fails with an error naming what to install. Released under the [MIT license](LICENSE).
+
+### Upgrading from 0.2
+
+- `better-sqlite3`, `pg`, `mysql2` and the LangChain packages are optional peer dependencies; install the ones you use (see the table above).
+- `@langchain/anthropic` and `@langchain/openai` are no longer used; Anthropic and OpenAI-compatible providers run on the official SDKs.
+- `ReadTool.execute` returns `Content` (a string or an array of text and image parts) instead of `string`.
+- `temperature` is rejected for `anthropic`; use `effort` instead. See [configuration](docs/configuration.md).
+- `maxContextChars` defaults to 256,000 and service `historyChars` to 128,000.
 
 ## Create an agent
 
@@ -45,7 +64,7 @@ Copy `.env.example` to `.env` and enter your provider credentials:
 
 ```dotenv
 YADA_LLM_PROVIDER=anthropic
-YADA_LLM_MODEL=claude-sonnet-4-6
+YADA_LLM_MODEL=claude-opus-5-5
 YADA_LLM_API_KEY=your-anthropic-api-key
 ```
 
@@ -68,6 +87,8 @@ Connect [HTTP APIs and business databases](docs/connectors.md), or build [approv
 See [operations](docs/operations.md) for context and usage controls, backup/restore, key rotation, and retention.
 
 See [packaging and deployment](docs/deployment.md) for installable tarballs, release artifacts and a local Docker example.
+
+See [evals](docs/evals.md) for fixture-based agent scenarios that run in CI and against live models.
 
 ## Development
 

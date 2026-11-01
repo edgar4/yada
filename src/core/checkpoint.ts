@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { failureCodes } from "./contracts.js";
+import { contentSchema } from "./content.js";
 const call = z.object({
   id: z.string().min(1),
   name: z.string(),
@@ -9,7 +11,7 @@ const metadata = z.object({
   data: z.record(z.string(), z.unknown()),
 });
 export const turnSchema = z.discriminatedUnion("role", [
-  z.object({ role: z.literal("user"), content: z.string() }),
+  z.object({ role: z.literal("user"), content: contentSchema }),
   z
     .object({
       role: z.literal("assistant"),
@@ -25,20 +27,14 @@ export const turnSchema = z.discriminatedUnion("role", [
     role: z.literal("tool"),
     toolCallId: z.string(),
     name: z.string(),
-    content: z.string(),
+    content: contentSchema,
   }),
 ]);
 export const runResultSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("completed"), text: z.string() }),
   z.object({
     status: z.literal("failed"),
-    code: z.enum([
-      "limit",
-      "unsupported",
-      "invalid_response",
-      "tool_denied",
-      "dependency_failed",
-    ]),
+    code: z.enum(failureCodes),
   }),
   z.object({ status: z.literal("cancelled") }),
 ]);
@@ -48,6 +44,7 @@ export const checkpointSchema = z.object({
   pending: z.array(call),
   rounds: z.number().int().nonnegative(),
   calls: z.number().int().nonnegative(),
+  failures: z.number().int().nonnegative().optional(),
   reservedCostMicros: z.number().int().nonnegative().optional(),
   usage: z
     .object({

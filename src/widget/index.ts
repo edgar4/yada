@@ -1,3 +1,4 @@
+import { contentText } from "../core/content.js";
 import {
   BrowserClient,
   type Job,
@@ -156,6 +157,8 @@ export function defineYadaWidget(name = "yada-chat"): void {
     private readonly approve = document.createElement("button");
     private readonly decline = document.createElement("button");
     private approvalId: string | undefined;
+    private live: HTMLElement | undefined;
+    private liveText = "";
 
     constructor() {
       super();
@@ -271,6 +274,8 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.active = false;
       this.cancel.disabled = false;
       this.log.replaceChildren();
+      this.live = undefined;
+      this.liveText = "";
       this.error.textContent = "";
       this.status.textContent = "Ready";
       this.approval.hidden = this.cancel.hidden = this.retry.hidden = true;
@@ -296,8 +301,9 @@ export function defineYadaWidget(name = "yada-chat"): void {
         controller.signal.throwIfAborted();
         this.input = { id: job.id, profileId: job.profileId, input: job.input };
         for (const turn of job.history)
-          this.appendMessage(turn.content, turn.role);
-        this.appendMessage(job.input, "user");
+          if (turn.role === "user" || turn.role === "assistant")
+            this.appendMessage(contentText(turn.content), turn.role);
+        this.appendMessage(contentText(job.input), "user");
         this.active = true;
         this.update();
         void this.start(false, job);
@@ -325,7 +331,13 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.send.disabled = !this.options || this.active;
       this.prompt.disabled = !this.options || this.active;
       this.cancel.hidden = !this.active || !this.input;
-      this.typing.hidden = !this.active || !this.approval.hidden;
+      this.typing.hidden = !this.active || !this.approval.hidden || !!this.live;
+    }
+
+    private clearLive(): void {
+      this.live?.remove();
+      this.live = undefined;
+      this.liveText = "";
     }
 
     private isCurrent(controller: AbortController): boolean {
@@ -356,6 +368,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.cancel.disabled = false;
       this.error.textContent = "";
       this.retry.hidden = true;
+      this.clearLive();
       this.status.textContent = "Connecting";
       this.update();
       try {
@@ -399,7 +412,28 @@ export function defineYadaWidget(name = "yada-chat"): void {
       restore = false,
     ): Promise<void> {
       signal.throwIfAborted();
+      if (event.type === "text_delta") {
+        this.liveText += event.text ?? "";
+        if (!this.live) {
+          this.live = document.createElement("div");
+          this.live.className = "assistant";
+          this.log.append(this.live);
+          this.update();
+        }
+        this.live.replaceChildren(markdown(this.liveText));
+        this.log.scrollTop = this.log.scrollHeight;
+        return;
+      }
+      if (event.type === "usage") return;
+      if (event.type === "tool_started" || event.type === "tool_finished") {
+        this.clearLive();
+        this.status.textContent = `${event.type === "tool_started" ? "Running" : "Finished"} ${event.tool ?? "tool"}`;
+        this.update();
+        return;
+      }
       this.status.textContent = event.type.replaceAll("_", " ");
+      if (event.text || ["failed", "cancelled"].includes(event.type))
+        this.clearLive();
       if (event.text && !restore) this.appendMessage(event.text, "assistant");
       this.approval.hidden = true;
       this.update();
