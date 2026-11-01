@@ -44,8 +44,8 @@ type Loop = {
   signal: AbortSignal;
   identity: Identity;
   limits: ReturnType<typeof limitsSchema.parse>;
-  rounds: number;
-  callLimit: number;
+  maxRounds: number;
+  maxToolCalls: number;
   tools: Map<string, Tool>;
   visible: Tool[];
   state: RunCheckpoint;
@@ -73,13 +73,13 @@ export async function run(options: RunOptions): Promise<RunResult> {
 async function runLoop(options: RunOptions): Promise<RunResult> {
   const { provider, signal, hooks } = options;
   const limits = limitsSchema.parse(options.limits ?? {});
-  const rounds = options.maxRounds ?? limits.maxRounds;
-  const callLimit = options.maxToolCalls ?? limits.maxToolCalls;
+  const maxRounds = options.maxRounds ?? limits.maxRounds;
+  const maxToolCalls = options.maxToolCalls ?? limits.maxToolCalls;
   if (
-    !Number.isSafeInteger(rounds) ||
-    rounds < 1 ||
-    !Number.isSafeInteger(callLimit) ||
-    callLimit < 1
+    !Number.isSafeInteger(maxRounds) ||
+    maxRounds < 1 ||
+    !Number.isSafeInteger(maxToolCalls) ||
+    maxToolCalls < 1
   )
     throw new Error("Invalid run limits");
   const identity = Object.freeze({ ...options.identity });
@@ -135,8 +135,8 @@ async function runLoop(options: RunOptions): Promise<RunResult> {
     signal,
     identity,
     limits,
-    rounds,
-    callLimit,
+    maxRounds,
+    maxToolCalls,
     tools,
     visible: [],
     state,
@@ -239,21 +239,7 @@ async function executeGroup(
           slot.resolve(outcome);
           continue;
         }
-        let { content } = outcome;
-        const hook = loop.options.hooks?.afterTool;
-        if (hook)
-          content = await mapText(
-            content,
-            async (text) => (await hook(call, text)) ?? text,
-          );
-        inner.signal.throwIfAborted();
-        content = await mapText(content, (text) =>
-          text.length > limits.maxToolOutput
-            ? `${text.slice(0, limits.maxToolOutput)}…[truncated ${String(text.length - limits.maxToolOutput)} chars]`
-            : text,
-        );
-        if (!loop.options.provider.capabilities.vision)
-          content = contentText(content);
+        const content = await shapeOutput(inner, call, outcome.content);
         slot.resolve({ content, failed: outcome.failed });
       } catch (error) {
         slot.reject(error);
@@ -296,6 +282,28 @@ async function executeGroup(
     abort.abort();
     loop.signal.removeEventListener("abort", forward);
   }
+}
+async function shapeOutput(
+  loop: Loop,
+  call: ToolCall,
+  content: Content,
+): Promise<Content> {
+  const hook = loop.options.hooks?.afterTool;
+  if (hook)
+    content = await mapText(
+      content,
+      async (text) => (await hook(call, text)) ?? text,
+    );
+  loop.signal.throwIfAborted();
+  const { maxToolOutput } = loop.limits;
+  content = await mapText(content, (text) =>
+    text.length > maxToolOutput
+      ? `${text.slice(0, maxToolOutput)}…[truncated ${String(text.length - maxToolOutput)} chars]`
+      : text,
+  );
+  return loop.options.provider.capabilities.vision
+    ? content
+    : contentText(content);
 }
 async function executeCall(loop: Loop, call: ToolCall): Promise<ToolOutcome> {
   const { options, signal, identity } = loop;
@@ -348,7 +356,7 @@ async function executeCall(loop: Loop, call: ToolCall): Promise<ToolOutcome> {
 async function checkLimits(loop: Loop): Promise<RunResult | undefined> {
   const { state, limits, options } = loop;
   const exceeded = () => loop.finish({ status: "failed", code: "limit" });
-  if (state.rounds >= loop.rounds) return exceeded();
+  if (state.rounds >= loop.maxRounds) return exceeded();
   loop.signal.throwIfAborted();
   let contextSize =
     options.system.length +
@@ -452,7 +460,7 @@ async function classify(
     );
   }
   if (result.finishReason !== "tool_calls") return fail("invalid_response");
-  if (state.calls + result.toolCalls.length > loop.callLimit)
+  if (state.calls + result.toolCalls.length > loop.maxToolCalls)
     return fail("limit");
   const seen = new Set<string>();
   const calls: ToolCall[] = [];
