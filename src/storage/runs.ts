@@ -1,3 +1,4 @@
+import { contentSchema } from "../core/content.js";
 import { limitsSchema } from "../core/limits.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -9,7 +10,7 @@ import {
 import type { Identity } from "../core/contracts.js";
 import type { recordStore } from "./records.js";
 const requestSchema = z.object({
-  input: z.string(),
+  input: contentSchema,
   limits: limitsSchema.prefault({}),
   history: z.array(turnSchema).default([]),
   system: z.string(),

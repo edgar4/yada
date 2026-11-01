@@ -2,7 +2,13 @@ import { z } from "zod";
 import type { Identity } from "../core/contracts.js";
 import type { YadaStorage } from "../storage/index.js";
 import { JobConflict } from "../storage/jobs.js";
-import { isTerminal, jobInputSchema, type RunEvent } from "./contracts.js";
+import { contentText } from "../core/content.js";
+import {
+  isTerminal,
+  jobInputSchema,
+  maxJobBodyBytes,
+  type RunEvent,
+} from "./contracts.js";
 import { eventKey, type EventBus } from "./events.js";
 export async function readJson(
   request: Request,
@@ -68,7 +74,9 @@ export function createHandler(options: {
       const conversationId = decodeURIComponent(match[1]);
       const id = match[2] ? decodeURIComponent(match[2]) : undefined;
       if (!id && request.method === "POST") {
-        const input = jobInputSchema.parse(await readJson(request));
+        const input = jobInputSchema.parse(
+          await readJson(request, maxJobBodyBytes),
+        );
         if (!(await options.authorizeProfile(identity, input.profileId)))
           return json({ error: "Profile denied" }, 403);
         return json(
@@ -127,8 +135,8 @@ export function createHandler(options: {
           history: job.history.flatMap((turn) =>
             (turn.role === "user" ||
               (turn.role === "assistant" && !turn.toolCalls.length)) &&
-            turn.content
-              ? [{ role: turn.role, content: turn.content }]
+            contentText(turn.content)
+              ? [{ role: turn.role, content: contentText(turn.content) }]
               : [],
           ),
         });

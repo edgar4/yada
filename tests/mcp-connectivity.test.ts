@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it, vi } from "vitest";
 import { connectMcp, mcpServersFromEnv } from "../src/index.js";
+import { contentText } from "../src/core/content.js";
 import type { McpConnection } from "../src/index.js";
 
 const identity = { actorId: "a", tenantId: "t" };
@@ -26,10 +27,12 @@ async function local(extra: Record<string, unknown> = {}) {
     AbortSignal.timeout(10_000),
   );
   cleanups.push(connection.close);
-  return (name: string) => {
+  return async (name: string) => {
     const tool = connection.tools.find((t) => t.spec.name === `local__${name}`);
     if (!tool) throw new Error("missing tool");
-    return tool.execute({}, identity, AbortSignal.timeout(10_000));
+    return contentText(
+      await tool.execute({}, identity, AbortSignal.timeout(10_000)),
+    );
   };
 }
 it("passes env and cwd to stdio servers", async () => {

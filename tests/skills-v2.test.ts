@@ -1,3 +1,4 @@
+import { contentText } from "../src/core/content.js";
 import { afterEach, expect, it } from "vitest";
 import { mkdtemp, mkdir, writeFile, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
@@ -50,10 +51,12 @@ it("reads a 60 KiB file in chunks under the tool output cap", async () => {
   let joined = "";
   let calls = 0;
   for (;;) {
-    const out = await tool.execute(
-      { name: "big", path: "references/big.md", offset },
-      identity,
-      signal(),
+    const out = contentText(
+      await tool.execute(
+        { name: "big", path: "references/big.md", offset },
+        identity,
+        signal(),
+      ),
     );
     expect(out.length).toBeLessThan(32_000);
     const parsed = JSON.parse(out) as {
@@ -70,10 +73,12 @@ it("reads a 60 KiB file in chunks under the tool output cap", async () => {
   expect(joined).toBe(text);
   expect(calls).toBeGreaterThan(3);
   const small = JSON.parse(
-    await tool.execute(
-      { name: "big", path: "references/big.md", limit: 10 },
-      identity,
-      signal(),
+    contentText(
+      await tool.execute(
+        { name: "big", path: "references/big.md", limit: 10 },
+        identity,
+        signal(),
+      ),
     ),
   ) as { content: string; nextOffset: number };
   expect(small).toMatchObject({ content: text.slice(0, 10), nextOffset: 10 });
@@ -89,10 +94,12 @@ it("shrinks chunks of escape-heavy content and never splits surrogates", async (
   let offset = 0;
   let joined = "";
   for (;;) {
-    const out = await tool.execute(
-      { name: "heavy", path: "a.txt", offset },
-      identity,
-      signal(),
+    const out = contentText(
+      await tool.execute(
+        { name: "heavy", path: "a.txt", offset },
+        identity,
+        signal(),
+      ),
     );
     expect(out.length).toBeLessThan(32_000);
     const parsed = JSON.parse(out) as { content: string; nextOffset?: number };
@@ -288,7 +295,7 @@ it("loads Codex/ChatGPT layouts with agents/openai.yaml and assets", async () =>
   const tool = catalog.tools[0];
   if (!tool) throw new Error("tool");
   const out = JSON.parse(
-    await tool.execute({ name: "codex" }, identity, signal()),
+    contentText(await tool.execute({ name: "codex" }, identity, signal())),
   ) as { resources: string[] };
   expect(out.resources).toEqual([
     "agents/openai.yaml",

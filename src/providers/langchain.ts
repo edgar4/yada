@@ -9,16 +9,30 @@ import {
 } from "@langchain/core/messages";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { z } from "zod";
+import { contentText } from "../core/content.js";
 import type {
+  Content,
+  ContentPart,
   ProviderAdapter,
   ProviderRequest,
   ProviderResult,
   Turn,
 } from "../core/contracts.js";
+const blocks = (content: Content) =>
+  typeof content === "string"
+    ? content
+    : content.map((part) =>
+        part.type === "text"
+          ? part
+          : {
+              type: "image_url",
+              image_url: { url: `data:${part.mimeType};base64,${part.data}` },
+            },
+      );
 function toMessage(turn: Turn, provider: string): BaseMessage {
   switch (turn.role) {
     case "user":
-      return new HumanMessage(turn.content);
+      return new HumanMessage({ content: blocks(turn.content) });
     case "assistant": {
       if (turn.providerMetadata && turn.providerMetadata.provider !== provider)
         throw new Error("Provider metadata mismatch");
@@ -41,11 +55,28 @@ function toMessage(turn: Turn, provider: string): BaseMessage {
     }
     case "tool":
       return new ToolMessage({
-        content: turn.content,
+        content: contentText(turn.content),
         tool_call_id: turn.toolCallId,
         name: turn.name,
       });
   }
+}
+function toMessages(turns: readonly Turn[], provider: string) {
+  const messages: BaseMessage[] = [];
+  let images: ContentPart[] = [];
+  const flush = () => {
+    if (images.length)
+      messages.push(new HumanMessage({ content: blocks(images) }));
+    images = [];
+  };
+  for (const turn of turns) {
+    if (turn.role !== "tool") flush();
+    messages.push(toMessage(turn, provider));
+    if (turn.role === "tool" && typeof turn.content !== "string")
+      images.push(...turn.content.filter((part) => part.type === "image"));
+  }
+  flush();
+  return messages;
 }
 const refusalReasons = new Set([
   "refusal",
@@ -162,6 +193,7 @@ function toResult(
 export function chatModelAdapter(
   name: string,
   model: BaseChatModel,
+  vision = false,
 ): ProviderAdapter {
   const prepare = (request: ProviderRequest) => {
     request.signal.throwIfAborted();
@@ -179,13 +211,16 @@ export function chatModelAdapter(
       bound,
       messages: [
         new SystemMessage(request.system),
-        ...request.messages.map((turn) => toMessage(turn, name)),
+        ...toMessages(request.messages, name),
       ],
     };
   };
   return {
     name,
-    capabilities: { toolCalling: typeof model.bindTools === "function" },
+    capabilities: {
+      toolCalling: typeof model.bindTools === "function",
+      vision,
+    },
     async complete(request) {
       const { bound, messages } = prepare(request);
       const message = await bound.invoke(messages, { signal: request.signal });

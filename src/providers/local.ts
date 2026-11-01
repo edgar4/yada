@@ -6,6 +6,7 @@ export const localOptions = z
     provider: z.enum(["ollama", "llamacpp", "openai-compatible"]),
     model: z.string().trim().min(1),
     apiKey: z.string().trim().min(1).optional(),
+    vision: z.boolean().optional(),
     ...tuning,
   })
   .refine((value) => value.provider !== "openai-compatible" || value.baseUrl);

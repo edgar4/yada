@@ -2,6 +2,7 @@ import { compactOldest, limitsSchema, type RunLimits } from "./limits.js";
 import type { ActionExecutor } from "./action.js";
 import type { AgentEvent, RunHooks } from "./hooks.js";
 import { abortable } from "./abort.js";
+import { contentText, hasImages, mapText } from "./content.js";
 import { InvalidArguments } from "./tool.js";
 import {
   checkpointSchema,
@@ -9,6 +10,7 @@ import {
   type RunCheckpoint,
 } from "./checkpoint.js";
 import type {
+  Content,
   Identity,
   ProviderAdapter,
   ProviderRequest,
@@ -25,7 +27,7 @@ type RunOptions = {
   provider: ProviderAdapter;
   tools: readonly Tool[];
   identity: Identity;
-  input: string;
+  input: Content;
   system: string;
   signal: AbortSignal;
   history?: readonly Turn[];
@@ -54,7 +56,7 @@ type Loop = {
   emit: (event: AgentEvent) => void;
 };
 type ToolOutcome =
-  | { content: string; failed: boolean }
+  | { content: Content; failed: boolean }
   | { stop: RunResult }
   | { terminal: TerminalResult };
 export async function run(options: RunOptions): Promise<RunResult> {
@@ -145,6 +147,11 @@ export async function run(options: RunOptions): Promise<RunResult> {
     for (;;) {
       if ((state.failures ?? 0) >= limits.maxFailures)
         return await finish({ status: "failed", code: "dependency_failed" });
+      if (
+        !provider.capabilities.vision &&
+        state.messages.some((turn) => hasImages(turn.content))
+      )
+        return await finish({ status: "failed", code: "unsupported" });
       const stopped = await executePending(loop);
       if (stopped) return stopped;
       const exceeded = await checkLimits(loop);
@@ -224,11 +231,20 @@ async function executeGroup(
           continue;
         }
         let { content } = outcome;
-        const redacted = await loop.options.hooks?.afterTool?.(call, content);
-        if (typeof redacted === "string") content = redacted;
+        const hook = loop.options.hooks?.afterTool;
+        if (hook)
+          content = await mapText(
+            content,
+            async (text) => (await hook(call, text)) ?? text,
+          );
         inner.signal.throwIfAborted();
-        if (content.length > limits.maxToolOutput)
-          content = `${content.slice(0, limits.maxToolOutput)}…[truncated ${String(content.length - limits.maxToolOutput)} chars]`;
+        content = await mapText(content, (text) =>
+          text.length > limits.maxToolOutput
+            ? `${text.slice(0, limits.maxToolOutput)}…[truncated ${String(text.length - limits.maxToolOutput)} chars]`
+            : text,
+        );
+        if (!loop.options.provider.capabilities.vision)
+          content = contentText(content);
         slot.resolve({ content, failed: outcome.failed });
       } catch (error) {
         slot.reject(error);
@@ -254,7 +270,12 @@ async function executeGroup(
       state.failures = failed ? (state.failures ?? 0) + 1 : 0;
       state.pending.shift();
       await loop.save();
-      loop.emit({ type: "tool_finished", call, content, failed });
+      loop.emit({
+        type: "tool_finished",
+        call,
+        content: contentText(content),
+        failed,
+      });
       if (state.failures >= limits.maxFailures)
         return await loop.finish({
           status: "failed",

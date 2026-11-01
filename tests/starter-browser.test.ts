@@ -1,3 +1,4 @@
+import { contentText } from "../src/core/content.js";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
 import { chromium, type Browser } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
@@ -102,7 +103,7 @@ const server = createNodeServer(async (request) => {
         status: "completed",
         cancelRequested: false,
         history: [],
-        outcome: { status: "completed", text: input.input },
+        outcome: { status: "completed", text: contentText(input.input) },
         events: [
           { version: 1, sequence: 1, type: "queued", at: 1 },
           {
@@ -110,7 +111,7 @@ const server = createNodeServer(async (request) => {
             sequence: 2,
             type: "completed",
             at: 1,
-            text: input.input,
+            text: contentText(input.input),
           },
         ],
       };

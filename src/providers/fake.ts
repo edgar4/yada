@@ -13,7 +13,7 @@ export function createFakeProvider(
   const requests: ProviderRequest[] = [];
   return {
     name: "fake",
-    capabilities: { toolCalling: true },
+    capabilities: { toolCalling: true, vision: true },
     requests,
     async complete(request) {
       requests.push(request);

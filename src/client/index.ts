@@ -150,7 +150,7 @@ export class BrowserClient {
 
   createInput(
     profileId: string,
-    input: string,
+    input: JobInput["input"],
     id: string = crypto.randomUUID(),
   ): JobInput {
     return jobInputSchema.parse({ id, profileId, input });

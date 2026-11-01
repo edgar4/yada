@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { contentText } from "../src/core/content.js";
 import { createFakeProvider, readTool, run } from "../src/index.js";
 const tool = readTool({
   name: "catalog_lookup",
@@ -15,7 +16,7 @@ const provider = createFakeProvider((request, call) =>
         finishReason: "tool_calls",
       }
     : {
-        content: request.messages.at(-1)?.content ?? "",
+        content: contentText(request.messages.at(-1)?.content ?? ""),
         toolCalls: [],
         finishReason: "stop",
       },

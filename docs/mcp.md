@@ -95,7 +95,7 @@ Discovery follows pagination with bounded page/tool counts and rejects duplicate
 
 Inputs are validated against the advertised JSON Schema before transmission. Draft 7 and draft 2020-12 schemas are supported; external references are not fetched and asynchronous schema extensions are rejected. Tool arguments and rendered results are bounded to 32,000 UTF-8 bytes. Structured read results become JSON text; text blocks are joined in order. A read tool that returns `isError: true` yields `{"error":"tool_failed","message":...}` (message bounded to 4,000 characters) so the model can react; write-path errors still fail. Non-text blocks render as placeholders: `[image: mime]`, `[audio: mime]`, `[resource: uri]`, `[resource_link: uri name]`. Declared output schemas are validated against the discovered schema, including tools from earlier discovery pages.
 
-Connection setup defaults to the server's `timeoutMs`, which can be overridden with the third `connectMcp` argument. Discovery and calls use `timeoutMs` as the request timeout and honor cancellation signals. Always close connections after use. External tool content remains untrusted data.
+Connection setup defaults to the server's `timeoutMs`, which can be overridden with the third `connectMcp` argument. Discovery and calls use `timeoutMs` as the request timeout and honor cancellation signals. Always close connections after use. Image blocks in read results become image parts when they are png, jpeg, webp or gif, within 5 MB, and at most 4 per result; otherwise (and for audio) they render as `[image: mime]` placeholders. External tool content remains untrusted data.
 
 ## Approved writes
 

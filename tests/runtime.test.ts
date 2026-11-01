@@ -1,3 +1,4 @@
+import { contentText } from "../src/core/content.js";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createFakeProvider, readTool, run } from "../src/index.js";
@@ -65,7 +66,9 @@ describe("standalone runtime", () => {
     s.authorize.mockResolvedValue(false);
     expect(await run(s.options)).toEqual({ status: "completed", text: "Done" });
     expect(
-      JSON.parse(s.provider.requests[1]?.messages.at(-1)?.content ?? ""),
+      JSON.parse(
+        contentText(s.provider.requests[1]?.messages.at(-1)?.content ?? ""),
+      ),
     ).toMatchObject({ error: "unknown_tool" });
     expect(s.provider.requests[0]?.tools).toEqual([]);
     expect(s.execute).not.toHaveBeenCalled();
@@ -91,7 +94,7 @@ describe("standalone runtime", () => {
       });
       const message = s.provider.requests[1]?.messages.at(-1);
       expect(message).toMatchObject({ role: "tool", toolCallId: "1" });
-      expect(JSON.parse(message?.content ?? "")).toMatchObject({
+      expect(JSON.parse(contentText(message?.content ?? ""))).toMatchObject({
         error: "invalid_arguments",
       });
       expect(message?.content).not.toContain("other");
@@ -104,14 +107,18 @@ describe("standalone runtime", () => {
     ]);
     expect(await run(s.options)).toEqual({ status: "completed", text: "Done" });
     expect(
-      JSON.parse(s.provider.requests[1]?.messages.at(-1)?.content ?? ""),
+      JSON.parse(
+        contentText(s.provider.requests[1]?.messages.at(-1)?.content ?? ""),
+      ),
     ).toMatchObject({ error: "unknown_tool" });
   });
   it("returns a generic message for tool failures", async () => {
     const s = setup();
     s.execute.mockRejectedValue(new Error("secret"));
     expect(await run(s.options)).toEqual({ status: "completed", text: "Done" });
-    const content = s.provider.requests[1]?.messages.at(-1)?.content ?? "";
+    const content = contentText(
+      s.provider.requests[1]?.messages.at(-1)?.content ?? "",
+    );
     expect(JSON.parse(content)).toMatchObject({ error: "tool_failed" });
     expect(content).not.toContain("secret");
   });
@@ -265,7 +272,9 @@ describe("standalone runtime", () => {
     const s = setup();
     s.execute.mockResolvedValue("x".repeat(32005));
     expect(await run(s.options)).toEqual({ status: "completed", text: "Done" });
-    const content = s.provider.requests[1]?.messages.at(-1)?.content ?? "";
+    const content = contentText(
+      s.provider.requests[1]?.messages.at(-1)?.content ?? "",
+    );
     expect(content).toBe(`${"x".repeat(32000)}…[truncated 5 chars]`);
   });
   it("completes with earlier assistant text when the final text is empty", async () => {

@@ -11,6 +11,7 @@ export function openAIChat(
     maxTokens?: number | undefined;
     temperature?: number | undefined;
     maxRetries: number;
+    vision?: boolean | undefined;
   },
   extra: Record<string, unknown> = {},
 ) {
@@ -31,13 +32,14 @@ export function openAIChat(
       useResponsesApi: false,
       ...extra,
     }),
+    options.vision,
   );
 }
 export function createOpenAIProvider(config: ModelOptions) {
   const options = modelOptions.parse(config);
   return openAIChat(
     "openai",
-    { ...options, model: options.model ?? "gpt-6-luna" },
+    { ...options, model: options.model ?? "gpt-6-luna", vision: true },
     options.model ? {} : { modelKwargs: { reasoning_effort: "none" } },
   );
 }

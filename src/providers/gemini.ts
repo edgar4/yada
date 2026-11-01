@@ -16,5 +16,6 @@ export function createGeminiProvider(config: ModelOptions) {
         customHeaders: options.headers,
       }),
     }),
+    true,
   );
 }
