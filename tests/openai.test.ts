@@ -1,6 +1,4 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { ChatOpenAI } from "@langchain/openai";
-import { AIMessageChunk } from "@langchain/core/messages";
 import {
   createProvider,
   providerConfigFromEnv,
@@ -8,16 +6,12 @@ import {
   run,
 } from "../src/index.js";
 import { z } from "zod";
-afterEach(() => vi.restoreAllMocks());
+import { chatReply, stubFetch } from "./helpers/http.js";
+afterEach(() => vi.unstubAllGlobals());
 it.each([undefined, "custom-model"])(
   "selects OpenAI and its model %s",
   async (model) => {
-    const invoke = vi.spyOn(ChatOpenAI.prototype, "invoke").mockResolvedValue(
-      new AIMessageChunk({
-        content: "Hello",
-        response_metadata: { finish_reason: "stop" },
-      }),
-    );
+    const calls = stubFetch(() => chatReply({ content: "Hello" }));
     const provider = createProvider(
       providerConfigFromEnv({
         YADA_LLM_PROVIDER: "openai",
@@ -33,33 +27,27 @@ it.each([undefined, "custom-model"])(
         signal: new AbortController().signal,
       }),
     ).toEqual({ content: "Hello", toolCalls: [], finishReason: "stop" });
-    expect(invoke.mock.instances[0]).toHaveProperty(
-      "model",
-      model ?? "gpt-6-luna",
-    );
+    expect(calls[0]?.body).toMatchObject({ model: model ?? "gpt-6-luna" });
   },
 );
 it("completes a tool round trip with OpenAI", async () => {
-  vi.spyOn(ChatOpenAI.prototype, "bindTools").mockImplementation(function (
-    this: ChatOpenAI,
-  ) {
-    return this;
-  });
-  const invoke = vi
-    .spyOn(ChatOpenAI.prototype, "invoke")
-    .mockResolvedValueOnce(
-      new AIMessageChunk({
-        content: "",
-        tool_calls: [{ id: "call_1", name: "lookup", args: { id: "a" } }],
-        response_metadata: { finish_reason: "tool_calls" },
-      }),
-    )
-    .mockResolvedValueOnce(
-      new AIMessageChunk({
-        content: "Available",
-        response_metadata: { finish_reason: "stop" },
-      }),
-    );
+  const calls = stubFetch((call) =>
+    call === 1
+      ? chatReply(
+          {
+            content: null,
+            tool_calls: [
+              {
+                id: "call_1",
+                type: "function",
+                function: { name: "lookup", arguments: '{"id":"a"}' },
+              },
+            ],
+          },
+          "tool_calls",
+        )
+      : chatReply({ content: "Available" }),
+  );
   const execute = vi.fn(() => Promise.resolve("Available"));
   const result = await run({
     provider: createProvider({ provider: "openai", apiKey: "key" }),
@@ -79,7 +67,7 @@ it("completes a tool round trip with OpenAI", async () => {
   });
   expect(result).toEqual({ status: "completed", text: "Available" });
   expect(execute).toHaveBeenCalledOnce();
-  expect(invoke.mock.calls[1]?.[0]).toEqual(
+  expect(calls[1]?.body["messages"]).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ tool_call_id: "call_1", content: "Available" }),
     ]),

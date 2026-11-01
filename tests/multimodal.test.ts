@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { ChatAnthropic } from "@langchain/anthropic";
-import { ChatOpenAI } from "@langchain/openai";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { AIMessageChunk } from "@langchain/core/messages";
 import {
@@ -17,6 +15,7 @@ import { checkpointSchema } from "../src/core/checkpoint.js";
 import { maxImageChars } from "../src/core/content.js";
 import { readResult } from "../src/connectors/mcp/rpc.js";
 import { jobInputSchema } from "../src/service/contracts.js";
+import { chatReply, claudeReply, stubFetch } from "./helpers/http.js";
 import { storageFixture } from "./helpers/storage.js";
 import { createHandler } from "../src/service/http.js";
 const identity = { actorId: "a", tenantId: "t" };
@@ -33,7 +32,10 @@ const base = (provider: ReturnType<typeof createFakeProvider>) => ({
   system: "Help",
   signal: new AbortController().signal,
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 describe("content schema", () => {
   const turns = (content: Content): unknown => ({
     version: 1,
@@ -86,37 +88,66 @@ describe("providers", () => {
   };
   const reply = new AIMessageChunk({
     content: "ok",
-    response_metadata: { finishReason: "STOP", stop_reason: "end_turn" },
+    response_metadata: { finishReason: "STOP" },
   });
-  const sent = (spy: { mock: { calls: unknown[][] } }) =>
-    (spy.mock.calls[0]?.[0] as { content: unknown }[])[1]?.content;
-  const expected = [
-    { type: "text", text: "look" },
-    {
-      type: "image_url",
-      image_url: { url: "data:image/png;base64,aGVsbG8=" },
-    },
-  ];
-  it.each([
-    ["anthropic", ChatAnthropic],
-    ["openai", ChatOpenAI],
-    ["gemini", ChatGoogleGenerativeAI],
-  ] as const)("maps images for %s", async (provider, model) => {
-    const invoke = vi
-      .spyOn(model.prototype as unknown as { invoke: () => unknown }, "invoke")
-      .mockResolvedValue(reply);
-    const adapter = createProvider({ provider, apiKey: "key" });
+  const png = "data:image/png;base64,aGVsbG8=";
+  it("maps images for anthropic", async () => {
+    const calls = stubFetch(() => claudeReply());
+    const adapter = createProvider({ provider: "anthropic", apiKey: "key" });
     expect(adapter.capabilities.vision).toBe(true);
     await adapter.complete(request);
-    expect(sent(invoke as never)).toEqual(expected);
+    expect(calls[0]?.body["messages"]).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "look" },
+          {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: "image/png",
+              data: "aGVsbG8=",
+            },
+          },
+        ],
+      },
+    ]);
   });
-  it("sends tool images in a following user message", async () => {
+  it("maps images for openai", async () => {
+    const calls = stubFetch(() => chatReply());
+    const adapter = createProvider({ provider: "openai", apiKey: "key" });
+    expect(adapter.capabilities.vision).toBe(true);
+    await adapter.complete(request);
+    expect((calls[0]?.body["messages"] as unknown[])[1]).toEqual({
+      role: "user",
+      content: [
+        { type: "text", text: "look" },
+        { type: "image_url", image_url: { url: png } },
+      ],
+    });
+  });
+  it("maps images for gemini", async () => {
     const invoke = vi
       .spyOn(
-        ChatOpenAI.prototype as unknown as { invoke: () => unknown },
+        ChatGoogleGenerativeAI.prototype as unknown as {
+          invoke: (messages: unknown) => unknown;
+        },
         "invoke",
       )
       .mockResolvedValue(reply);
+    const adapter = createProvider({ provider: "gemini", apiKey: "key" });
+    expect(adapter.capabilities.vision).toBe(true);
+    await adapter.complete(request);
+    expect(
+      (invoke.mock.calls[0]?.[0] as { content: unknown }[] | undefined)?.[1]
+        ?.content,
+    ).toEqual([
+      { type: "text", text: "look" },
+      { type: "image_url", image_url: { url: png } },
+    ]);
+  });
+  it("sends tool images in a following user message", async () => {
+    const calls = stubFetch(() => chatReply());
     await createProvider({ provider: "openai", apiKey: "key" }).complete({
       ...request,
       messages: [
@@ -134,10 +165,11 @@ describe("providers", () => {
         },
       ],
     });
-    const messages = (invoke as never as { mock: { calls: unknown[][] } }).mock
-      .calls[0]?.[0] as { content: unknown; type?: string }[];
+    const messages = calls[0]?.body["messages"] as { content: unknown }[];
     expect(messages.at(-2)?.content).toBe("taken\n[image: image/png]");
-    expect(messages.at(-1)?.content).toEqual([expected[1]]);
+    expect(messages.at(-1)?.content).toEqual([
+      { type: "image_url", image_url: { url: png } },
+    ]);
   });
   it("defaults vision off for deepseek and local, on by option", () => {
     expect(

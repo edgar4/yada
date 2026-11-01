@@ -1,19 +1,11 @@
 import { expect, it, vi, afterEach } from "vitest";
-import { ChatAnthropic } from "@langchain/anthropic";
-import { AIMessageChunk } from "@langchain/core/messages";
 import { createProvider, providerConfigFromEnv } from "../src/index.js";
-afterEach(() => vi.restoreAllMocks());
+import { claudeReply, stubFetch } from "./helpers/http.js";
+afterEach(() => vi.unstubAllGlobals());
 it.each([undefined, "custom-model"])(
   "defaults or overrides model %s",
   async (model) => {
-    const invoke = vi
-      .spyOn(ChatAnthropic.prototype, "invoke")
-      .mockResolvedValue(
-        new AIMessageChunk({
-          content: "Hello",
-          response_metadata: { stop_reason: "end_turn" },
-        }),
-      );
+    const calls = stubFetch(() => claudeReply());
     const provider = createProvider({
       provider: "anthropic",
       apiKey: "secret",
@@ -25,10 +17,9 @@ it.each([undefined, "custom-model"])(
       tools: [],
       signal: new AbortController().signal,
     });
-    expect(invoke.mock.instances[0]).toHaveProperty(
-      "model",
-      model ?? "claude-opus-5-5",
-    );
+    expect(calls[0]?.body).toMatchObject({
+      model: model ?? "claude-opus-5-5",
+    });
   },
 );
 it("reads common names and ignores unrelated environment", () => {
