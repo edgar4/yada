@@ -144,7 +144,7 @@ for (const driver of drivers)
       const stopped = createWorker({
         storage: s.storage,
         profiles: { v1: { provider: pending, tools: [], system: "Help" } },
-        leaseMs: 100,
+        leaseMs: 5000,
         pollMs: 10,
       });
       stopped.start();
