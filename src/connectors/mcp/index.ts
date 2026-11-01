@@ -11,6 +11,7 @@ import type { Tool } from "../../core/contracts.js";
 import { coordinateOAuthTransport } from "./oauth-transport.js";
 export type { McpConfig, McpReadConfig, McpWriteMapping } from "./config.js";
 export type { McpAccess, McpConnection } from "./session.js";
+export type { McpPrompt } from "./resources.js";
 export function connectMcp(
   config: McpReadConfig,
   access: McpAccess,

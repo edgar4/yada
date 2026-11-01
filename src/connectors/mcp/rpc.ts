@@ -108,7 +108,7 @@ export function mcpInvoker(
   ) => invoke(name, args, identity, signal, undefined, true);
   return { call, read, validate };
 }
-function renderBlock(block: CallToolResult["content"][number]): string {
+export function renderBlock(block: CallToolResult["content"][number]): string {
   switch (block.type) {
     case "text":
       return block.text;

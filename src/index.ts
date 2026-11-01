@@ -24,6 +24,7 @@ export type {
   McpReadConfig,
   McpWriteMapping,
   McpAccess,
+  McpPrompt,
   McpConnection,
 } from "./connectors/mcp/index.js";
 export { createMcpOAuth } from "./connectors/mcp/oauth.js";
