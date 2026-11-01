@@ -65,19 +65,21 @@ export interface ReadTool {
   ): Promise<Content>;
 }
 export type Tool = ReadTool | WriteTool;
+export const failureCodes = [
+  "limit",
+  "unsupported",
+  "invalid_response",
+  "tool_denied",
+  "dependency_failed",
+  "refused",
+  "timeout",
+  "retry_exhausted",
+] as const;
 export type RunResult = TerminalResult | Suspension;
 export type TerminalResult =
   | Readonly<{ status: "completed"; text: string }>
   | Readonly<{
       status: "failed";
-      code:
-        | "limit"
-        | "unsupported"
-        | "invalid_response"
-        | "tool_denied"
-        | "dependency_failed"
-        | "refused"
-        | "timeout"
-        | "retry_exhausted";
+      code: (typeof failureCodes)[number];
     }>
   | Readonly<{ status: "cancelled" }>;

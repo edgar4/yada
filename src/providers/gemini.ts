@@ -1,6 +1,7 @@
 import { chatModelAdapter } from "./langchain.js";
 import { optionalImport } from "../optional.js";
 import { defined, modelOptions, type ModelOptions } from "./options.js";
+const supportsVision = true;
 export function createGeminiProvider(config: ModelOptions) {
   const options = modelOptions.parse(config);
   return chatModelAdapter(
@@ -23,6 +24,6 @@ export function createGeminiProvider(config: ModelOptions) {
         }),
       });
     },
-    true,
+    supportsVision,
   );
 }

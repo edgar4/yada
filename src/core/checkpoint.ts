@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { failureCodes } from "./contracts.js";
 import { contentSchema } from "./content.js";
 const call = z.object({
   id: z.string().min(1),
@@ -33,16 +34,7 @@ export const runResultSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("completed"), text: z.string() }),
   z.object({
     status: z.literal("failed"),
-    code: z.enum([
-      "limit",
-      "unsupported",
-      "invalid_response",
-      "tool_denied",
-      "dependency_failed",
-      "refused",
-      "timeout",
-      "retry_exhausted",
-    ]),
+    code: z.enum(failureCodes),
   }),
   z.object({ status: z.literal("cancelled") }),
 ]);

@@ -8,9 +8,9 @@ import type { BaseChatModel } from "@langchain/core/language_models/chat_models"
 import { z } from "zod";
 import { optionalImport } from "../optional.js";
 import { contentText } from "../core/content.js";
+import { imageUrlParts, withTrailingImages } from "./shared.js";
 import type {
   Content,
-  ContentPart,
   ProviderAdapter,
   ProviderRequest,
   ProviderResult,
@@ -24,16 +24,7 @@ const loadMessages = () =>
     "LangChain-based providers",
   );
 const blocks = (content: Content) =>
-  typeof content === "string"
-    ? content
-    : content.map((part) =>
-        part.type === "text"
-          ? part
-          : {
-              type: "image_url",
-              image_url: { url: `data:${part.mimeType};base64,${part.data}` },
-            },
-      );
+  typeof content === "string" ? content : imageUrlParts(content);
 function toMessage(
   { AIMessage, HumanMessage, ToolMessage }: Messages,
   turn: Turn,
@@ -75,22 +66,11 @@ function toMessages(
   turns: readonly Turn[],
   provider: string,
 ) {
-  const { HumanMessage } = messagesModule;
-  const messages: BaseMessage[] = [];
-  let images: ContentPart[] = [];
-  const flush = () => {
-    if (images.length)
-      messages.push(new HumanMessage({ content: blocks(images) }));
-    images = [];
-  };
-  for (const turn of turns) {
-    if (turn.role !== "tool") flush();
-    messages.push(toMessage(messagesModule, turn, provider));
-    if (turn.role === "tool" && typeof turn.content !== "string")
-      images.push(...turn.content.filter((part) => part.type === "image"));
-  }
-  flush();
-  return messages;
+  return withTrailingImages<BaseMessage>(
+    turns,
+    (turn) => toMessage(messagesModule, turn, provider),
+    (images) => new messagesModule.HumanMessage({ content: blocks(images) }),
+  );
 }
 const refusalReasons = new Set([
   "refusal",

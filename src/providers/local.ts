@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { nativeOpenAIAdapter } from "./native/openai.js";
-import { tuning } from "./options.js";
+import { defaultMaxRetries, tuning } from "./options.js";
 export const localOptions = z
   .strictObject({
     provider: z.enum(["ollama", "llamacpp", "openai-compatible"]),
@@ -10,17 +10,20 @@ export const localOptions = z
     ...tuning,
   })
   .refine((value) => value.provider !== "openai-compatible" || value.baseUrl);
-const defaultUrls = {
+const defaultUrls: Record<
+  z.infer<typeof localOptions>["provider"],
+  string | undefined
+> = {
   ollama: "http://localhost:11434/v1",
   llamacpp: "http://localhost:8080/v1",
+  "openai-compatible": undefined,
 };
 export function createLocalProvider(config: z.input<typeof localOptions>) {
   const { provider, ...options } = localOptions.parse(config);
   return nativeOpenAIAdapter({
     ...options,
     name: provider,
-    maxRetries: options.maxRetries ?? 2,
-    baseUrl:
-      options.baseUrl ?? defaultUrls[provider as keyof typeof defaultUrls],
+    maxRetries: options.maxRetries ?? defaultMaxRetries,
+    baseUrl: options.baseUrl ?? defaultUrls[provider],
   });
 }

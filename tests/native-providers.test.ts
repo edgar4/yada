@@ -27,6 +27,20 @@ const openai = (extra: object = {}) =>
   createProvider({ provider: "openai", apiKey: "k", model: "m", ...extra });
 
 describe("anthropic", () => {
+  it("completes with a large max_tokens through streaming", async () => {
+    const calls = stubFetch(() => claudeReply());
+    const provider = createProvider({
+      provider: "anthropic",
+      apiKey: "k",
+      model: "m",
+      maxTokens: 64000,
+    });
+    expect(await provider.complete(request())).toMatchObject({
+      content: "ok",
+    });
+    expect(calls[0]?.body).toMatchObject({ max_tokens: 64000, stream: true });
+  });
+
   it("sends tools, system prompt and merges tool results into one user message", async () => {
     const calls = stubFetch(() => claudeReply());
     await anthropic().complete(
@@ -333,6 +347,28 @@ describe("openai-compatible", () => {
     expect(await openai().complete(request())).toMatchObject({
       finishReason: "length",
       toolCalls: [],
+    });
+  });
+
+  it("reports tool_calls when finish_reason is stop with tool calls", async () => {
+    stubFetch(() =>
+      chatReply(
+        {
+          content: null,
+          tool_calls: [
+            {
+              id: "c",
+              type: "function",
+              function: { name: "lookup", arguments: "{}" },
+            },
+          ],
+        },
+        "stop",
+      ),
+    );
+    expect(await openai().complete(request())).toMatchObject({
+      finishReason: "tool_calls",
+      toolCalls: [{ id: "c" }],
     });
   });
 

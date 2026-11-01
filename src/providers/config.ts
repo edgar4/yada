@@ -4,7 +4,7 @@ import { createOpenAIProvider } from "./openai.js";
 import { createGeminiProvider } from "./gemini.js";
 import { createDeepSeekProvider } from "./deepseek.js";
 import { createLocalProvider, localOptions } from "./local.js";
-import { effort, modelFields, thinkingDisplay } from "./options.js";
+import { defined, effort, modelFields, thinkingDisplay } from "./options.js";
 const factories = {
   anthropic: createAnthropicProvider,
   openai: createOpenAIProvider,
@@ -25,7 +25,8 @@ const cloudConfig = z
   );
 const providerConfig = z.union([cloudConfig, localOptions]);
 export type ProviderConfig = z.input<typeof providerConfig>;
-export function createProvider(config: ProviderConfig) {
+export function createProvider(input: ProviderConfig) {
+  const config = defined(input) as ProviderConfig;
   const cloud = cloudConfig.safeParse(config);
   if (cloud.success) {
     const { provider, ...options } = cloud.data;

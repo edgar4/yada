@@ -6,6 +6,7 @@ import {
   readTool,
   run,
 } from "../src/index.js";
+import { claudeReply } from "./helpers/http.js";
 afterEach(() => vi.unstubAllGlobals());
 const env = { YADA_LLM_PROVIDER: "openai", YADA_LLM_API_KEY: "key" };
 it("reads tuning and endpoint settings for hosted providers", () => {
@@ -240,28 +241,24 @@ it("round trips Claude 5 thinking blocks and sends effort through a tool loop", 
       urls.push(url);
       bodies.push(JSON.parse(init.body as string) as Record<string, unknown>);
       const first = bodies.length === 1;
-      return json({
-        id: "msg",
-        type: "message",
-        role: "assistant",
-        model: "m",
-        stop_reason: first ? "tool_use" : "end_turn",
-        stop_sequence: null,
-        usage: { input_tokens: 1, output_tokens: 1 },
-        content: first
-          ? [
-              thinking,
-              redacted,
-              { type: "text", text: "Checking" },
-              {
-                type: "tool_use",
-                id: "toolu_1",
-                name: "lookup",
-                input: { id: "a" },
-              },
-            ]
-          : [{ type: "text", text: "Available" }],
-      });
+      return Promise.resolve(
+        claudeReply(
+          first
+            ? [
+                thinking,
+                redacted,
+                { type: "text", text: "Checking" },
+                {
+                  type: "tool_use",
+                  id: "toolu_1",
+                  name: "lookup",
+                  input: { id: "a" },
+                },
+              ]
+            : [{ type: "text", text: "Available" }],
+          first ? "tool_use" : "end_turn",
+        ),
+      );
     }),
   );
   const result = await runWith(
