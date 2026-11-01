@@ -50,6 +50,8 @@ When switching providers, replace all three values: provider, its model ID, and 
 | `llamacpp`          | Select the served model alias | Optional server API key       |
 | `openai-compatible` | Required; also set `baseUrl`  | Optional gateway API key      |
 
+Gemini and `chatModelAdapter` are built on LangChain, which is an optional peer dependency: run `npm install @langchain/core @langchain/google-genai` before selecting `gemini`. The other providers use their native SDKs, which ship with Yada. Without the packages, the first Gemini request fails with an error naming them.
+
 Local and OpenAI-compatible providers do not accept images unless the config sets `vision: true`.
 
 For OpenAI:

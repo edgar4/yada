@@ -18,7 +18,9 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 
 Set `YADA_STORAGE_KEY` to that 64-character hex value. Keep the same key across restarts and application instances. Losing it makes stored records unreadable. Do not regenerate it on startup.
 
-SQLite requires only the key:
+Database drivers are optional peer dependencies. Install the one you use: `better-sqlite3` for SQLite, `pg` for PostgreSQL, `mysql2` for MySQL. Opening storage without it fails with an error naming the package.
+
+SQLite requires only the key and `better-sqlite3`:
 
 ```dotenv
 YADA_STORAGE_KEY=your-64-character-hex-key

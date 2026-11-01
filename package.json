@@ -22,29 +22,28 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.129.0",
-    "@langchain/anthropic": "1.6.0",
-    "@langchain/core": "1.3.2",
-    "@langchain/google-genai": "2.3.4",
-    "@langchain/openai": "1.8.0",
     "@modelcontextprotocol/sdk": "1.32.2",
     "ajv": "8.20.0",
-    "better-sqlite3": "13.0.3",
     "knex": "3.3.0",
-    "mysql2": "3.24.6",
     "openai": "7.45.1",
-    "pg": "8.23.1",
     "yaml": "2.9.1",
     "zod": "4.6.7"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
     "@eslint/js": "10.0.1",
+    "@langchain/anthropic": "1.6.0",
+    "@langchain/core": "1.3.2",
+    "@langchain/google-genai": "2.3.4",
     "@playwright/test": "1.64.1",
     "@types/better-sqlite3": "9.6.0",
     "@types/node": "26.6.6",
     "@vitest/coverage-v8": "5.0.5",
+    "better-sqlite3": "13.0.3",
     "esbuild": "0.28.2",
     "eslint": "10.14.0",
+    "mysql2": "3.24.6",
+    "pg": "8.23.1",
     "prettier": "3.9.10",
     "tsx": "4.23.15",
     "typescript": "6.0.3",
@@ -68,6 +67,26 @@
     "./widget": {
       "types": "./dist/widget/index.d.ts",
       "import": "./dist/widget/index.js"
+    },
+    "./providers": {
+      "types": "./dist/entries/providers.d.ts",
+      "import": "./dist/entries/providers.js"
+    },
+    "./storage": {
+      "types": "./dist/entries/storage.d.ts",
+      "import": "./dist/entries/storage.js"
+    },
+    "./mcp": {
+      "types": "./dist/entries/mcp.d.ts",
+      "import": "./dist/entries/mcp.js"
+    },
+    "./skills": {
+      "types": "./dist/skills/index.d.ts",
+      "import": "./dist/skills/index.js"
+    },
+    "./service": {
+      "types": "./dist/entries/service.d.ts",
+      "import": "./dist/entries/service.js"
     }
   },
   "files": [
@@ -117,5 +136,29 @@
   },
   "bin": {
     "yada": "./dist/cli/index.js"
+  },
+  "peerDependencies": {
+    "@langchain/core": "^1.3.2",
+    "@langchain/google-genai": "^2.3.4",
+    "better-sqlite3": "^13.0.3",
+    "mysql2": "^3.24.6",
+    "pg": "^8.23.1"
+  },
+  "peerDependenciesMeta": {
+    "@langchain/core": {
+      "optional": true
+    },
+    "@langchain/google-genai": {
+      "optional": true
+    },
+    "better-sqlite3": {
+      "optional": true
+    },
+    "mysql2": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    }
   }
 }

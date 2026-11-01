@@ -1,14 +1,10 @@
 import knex, { type Knex } from "knex";
+import { knexClient } from "../optional.js";
 import { storageConfig, type StorageConfig } from "./config.js";
 export async function openDatabase(config: StorageConfig): Promise<Knex> {
   const options = storageConfig.parse(config);
   const db = knex({
-    client:
-      options.driver === "sqlite"
-        ? "better-sqlite3"
-        : options.driver === "postgres"
-          ? "pg"
-          : "mysql2",
+    client: knexClient(options.driver),
     connection:
       options.driver === "sqlite"
         ? { filename: options.filename }

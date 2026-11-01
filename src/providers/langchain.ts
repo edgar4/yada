@@ -1,14 +1,12 @@
-import {
+import type {
   AIMessage,
   AIMessageChunk,
-  HumanMessage,
-  SystemMessage,
-  ToolMessage,
-  type BaseMessage,
-  type ContentBlock,
+  BaseMessage,
+  ContentBlock,
 } from "@langchain/core/messages";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { z } from "zod";
+import { optionalImport } from "../optional.js";
 import { contentText } from "../core/content.js";
 import type {
   Content,
@@ -18,6 +16,13 @@ import type {
   ProviderResult,
   Turn,
 } from "../core/contracts.js";
+type Messages = typeof import("@langchain/core/messages");
+const loadMessages = () =>
+  optionalImport(
+    () => import("@langchain/core/messages"),
+    "@langchain/core",
+    "LangChain-based providers",
+  );
 const blocks = (content: Content) =>
   typeof content === "string"
     ? content
@@ -29,7 +34,11 @@ const blocks = (content: Content) =>
               image_url: { url: `data:${part.mimeType};base64,${part.data}` },
             },
       );
-function toMessage(turn: Turn, provider: string): BaseMessage {
+function toMessage(
+  { AIMessage, HumanMessage, ToolMessage }: Messages,
+  turn: Turn,
+  provider: string,
+): BaseMessage {
   switch (turn.role) {
     case "user":
       return new HumanMessage({ content: blocks(turn.content) });
@@ -61,7 +70,12 @@ function toMessage(turn: Turn, provider: string): BaseMessage {
       });
   }
 }
-function toMessages(turns: readonly Turn[], provider: string) {
+function toMessages(
+  messagesModule: Messages,
+  turns: readonly Turn[],
+  provider: string,
+) {
+  const { HumanMessage } = messagesModule;
   const messages: BaseMessage[] = [];
   let images: ContentPart[] = [];
   const flush = () => {
@@ -71,7 +85,7 @@ function toMessages(turns: readonly Turn[], provider: string) {
   };
   for (const turn of turns) {
     if (turn.role !== "tool") flush();
-    messages.push(toMessage(turn, provider));
+    messages.push(toMessage(messagesModule, turn, provider));
     if (turn.role === "tool" && typeof turn.content !== "string")
       images.push(...turn.content.filter((part) => part.type === "image"));
   }
@@ -192,11 +206,18 @@ function toResult(
 }
 export function chatModelAdapter(
   name: string,
-  model: BaseChatModel,
+  source: BaseChatModel | (() => Promise<BaseChatModel>),
   vision = false,
 ): ProviderAdapter {
-  const prepare = (request: ProviderRequest) => {
+  let loaded: Promise<readonly [Messages, BaseChatModel]> | undefined;
+  const load = () =>
+    (loaded ??= (async () => {
+      const model = typeof source === "function" ? await source() : source;
+      return [await loadMessages(), model] as const;
+    })());
+  const prepare = async (request: ProviderRequest) => {
     request.signal.throwIfAborted();
+    const [messages, model] = await load();
     const tools = request.tools.map((tool) => ({
       type: "function" as const,
       function: {
@@ -210,25 +231,26 @@ export function chatModelAdapter(
     return {
       bound,
       messages: [
-        new SystemMessage(request.system),
-        ...toMessages(request.messages, name),
+        new messages.SystemMessage(request.system),
+        ...toMessages(messages, request.messages, name),
       ],
     };
   };
   return {
     name,
     capabilities: {
-      toolCalling: typeof model.bindTools === "function",
+      toolCalling:
+        typeof source === "function" || typeof source.bindTools === "function",
       vision,
     },
     async complete(request) {
-      const { bound, messages } = prepare(request);
+      const { bound, messages } = await prepare(request);
       const message = await bound.invoke(messages, { signal: request.signal });
       request.signal.throwIfAborted();
       return toResult(message, name);
     },
     async *stream(request) {
-      const { bound, messages } = prepare(request);
+      const { bound, messages } = await prepare(request);
       let message: AIMessageChunk | undefined;
       let started = 0;
       for await (const chunk of await bound.stream(messages, {
