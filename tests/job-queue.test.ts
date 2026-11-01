@@ -257,9 +257,12 @@ for (const driver of drivers)
         );
       let running = 0;
       let peak = 0;
+      let release = () => {};
+      const full = new Promise<void>((resolve) => (release = resolve));
       const provider = createFakeProvider(async () => {
         peak = Math.max(peak, ++running);
-        await delay(40);
+        if (running === 3) release();
+        await Promise.race([full, delay(2000)]);
         running--;
         return { content: "Done", toolCalls: [], finishReason: "stop" };
       });
