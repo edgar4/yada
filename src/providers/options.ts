@@ -1,5 +1,6 @@
 import { z } from "zod";
-export const baseUrl = z.url().refine((value) => {
+export const defaultMaxRetries = 2;
+const baseUrl = z.url().refine((value) => {
   const url = new URL(value);
   return (
     ["http:", "https:"].includes(url.protocol) &&
@@ -28,7 +29,7 @@ export const thinkingDisplay = z.enum(["summarized", "omitted"]).optional();
 export const modelOptions = z.strictObject({
   ...modelFields,
   maxTokens: z.number().int().positive().default(8192),
-  maxRetries: z.number().int().min(0).max(10).default(2),
+  maxRetries: z.number().int().min(0).max(10).default(defaultMaxRetries),
 });
 export type ModelOptions = z.input<typeof modelOptions>;
 export function defined<T extends object>(value: T) {

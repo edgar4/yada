@@ -6,9 +6,9 @@ import type {
 } from "openai/resources/chat/completions";
 import { z } from "zod";
 import { contentText } from "../../core/content.js";
+import { imageUrlParts, withTrailingImages } from "../shared.js";
 import type {
   Content,
-  ContentPart,
   ProviderAdapter,
   ProviderRequest,
   ProviderResult,
@@ -29,66 +29,51 @@ export type OpenAISettings = Readonly<{
   extraBody?: Record<string, unknown>;
 }>;
 
-const partsOf = (parts: readonly ContentPart[]): ChatCompletionContentPart[] =>
-  parts.map((part) =>
-    part.type === "text"
-      ? part
-      : {
-          type: "image_url",
-          image_url: { url: `data:${part.mimeType};base64,${part.data}` },
-        },
-  );
+const contentOf = (content: Content): string | ChatCompletionContentPart[] =>
+  typeof content === "string" ? content : imageUrlParts(content);
 
-const contentOf = (content: Content) =>
-  typeof content === "string" ? content : partsOf(content);
-
-function toMessages(system: string, turns: readonly Turn[], name: string) {
-  const messages: ChatCompletionMessageParam[] = [
-    { role: "system", content: system },
-  ];
-  let images: ContentPart[] = [];
-  const flush = () => {
-    if (images.length)
-      messages.push({ role: "user", content: partsOf(images) });
-    images = [];
-  };
-  for (const turn of turns) {
-    if (turn.role !== "tool") flush();
-    switch (turn.role) {
-      case "user":
-        messages.push({ role: "user", content: contentOf(turn.content) });
-        break;
-      case "assistant":
-        if (turn.providerMetadata && turn.providerMetadata.provider !== name)
-          throw new Error("Provider metadata mismatch");
-        messages.push({
-          role: "assistant",
-          content: turn.content || (turn.toolCalls.length ? null : ""),
-          ...(turn.toolCalls.length && {
-            tool_calls: turn.toolCalls.map((call) => ({
-              id: call.id,
-              type: "function" as const,
-              function: {
-                name: call.name,
-                arguments: JSON.stringify(call.args),
-              },
-            })),
-          }),
-        });
-        break;
-      case "tool":
-        messages.push({
-          role: "tool",
-          tool_call_id: turn.toolCallId,
-          content: contentText(turn.content),
-        });
-        if (typeof turn.content !== "string")
-          images.push(...turn.content.filter((part) => part.type === "image"));
-    }
+function toMessage(turn: Turn, name: string): ChatCompletionMessageParam {
+  switch (turn.role) {
+    case "user":
+      return { role: "user", content: contentOf(turn.content) };
+    case "assistant":
+      if (turn.providerMetadata && turn.providerMetadata.provider !== name)
+        throw new Error("Provider metadata mismatch");
+      return {
+        role: "assistant",
+        content: turn.content || (turn.toolCalls.length ? null : ""),
+        ...(turn.toolCalls.length && {
+          tool_calls: turn.toolCalls.map((call) => ({
+            id: call.id,
+            type: "function" as const,
+            function: {
+              name: call.name,
+              arguments: JSON.stringify(call.args),
+            },
+          })),
+        }),
+      };
+    case "tool":
+      return {
+        role: "tool",
+        tool_call_id: turn.toolCallId,
+        content: contentText(turn.content),
+      };
   }
-  flush();
-  return messages;
 }
+
+const toMessages = (
+  system: string,
+  turns: readonly Turn[],
+  name: string,
+): ChatCompletionMessageParam[] => [
+  { role: "system", content: system },
+  ...withTrailingImages<ChatCompletionMessageParam>(
+    turns,
+    (turn) => toMessage(turn, name),
+    (images) => ({ role: "user", content: imageUrlParts(images) }),
+  ),
+];
 
 type Completion = Readonly<{
   content: string;
@@ -130,8 +115,10 @@ function toResult(completion: Completion): ProviderResult {
     toolCalls,
     finishReason: completion.refused
       ? "refusal"
-      : (finishReasons[completion.finish ?? ""] ??
-        (toolCalls.length ? "tool_calls" : "other")),
+      : toolCalls.length && completion.finish === "stop"
+        ? "tool_calls"
+        : (finishReasons[completion.finish ?? ""] ??
+          (toolCalls.length ? "tool_calls" : "other")),
   };
 }
 

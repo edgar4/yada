@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { nativeAnthropicAdapter } from "./native/anthropic.js";
 import { effort, modelOptions, thinkingDisplay } from "./options.js";
-export const anthropicOptions = modelOptions
+const anthropicOptions = modelOptions
   .omit({ temperature: true })
   .extend({ effort, thinkingDisplay });
 export function createAnthropicProvider(
