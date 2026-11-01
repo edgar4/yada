@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Identity } from "../core/contracts.js";
 import type { YadaStorage } from "../storage/index.js";
+import { ActionConflict } from "../storage/actions.js";
 import { JobConflict } from "../storage/jobs.js";
 import { contentText } from "../core/content.js";
 import {
@@ -132,9 +133,12 @@ export function createHandler(options: {
             decided,
             decision.remember,
           );
-        await options.storage.jobs.update(identity, conversationId, id, {
-          type: "queued",
-        });
+        await options.storage.jobs.resume(
+          identity,
+          conversationId,
+          id,
+          approvalId,
+        );
         return json({ accepted: true }, 202);
       }
       if (match[3] === "cancel" && request.method === "POST") {
@@ -192,7 +196,7 @@ export function createHandler(options: {
           wake = done;
           signal.addEventListener("abort", done);
         });
-      let authenticatedAt = 0;
+      let authenticatedAt = Date.now();
       let loadedAt = 0;
       headers.set("content-type", "application/x-ndjson; charset=utf-8");
       return new Response(
@@ -268,7 +272,7 @@ export function createHandler(options: {
         { headers },
       );
     } catch (error) {
-      if (error instanceof JobConflict)
+      if (error instanceof JobConflict || error instanceof ActionConflict)
         return json({ error: error.message }, 409);
       if (
         error instanceof z.ZodError ||

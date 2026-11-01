@@ -20,6 +20,7 @@ export const approvalSchema = z.strictObject({
     "executing",
     "completed",
     "expired",
+    "unknown",
   ]),
   expiresAt: z.number(),
 });
@@ -247,7 +248,8 @@ export class BrowserClient {
     let cursor = options.after ?? 0;
     if (!Number.isSafeInteger(cursor) || cursor < 0)
       throw new ClientError("Invalid event cursor");
-    for (let attempt = 0; ; attempt++) {
+    let attempt = 0;
+    for (;;) {
       try {
         const response = await this.request(
           `${this.path(conversationId, runId)}/events?after=${String(cursor)}`,
@@ -268,6 +270,7 @@ export class BrowserClient {
           } catch {
             throw new ClientError("Invalid run event");
           }
+          attempt = 0;
           if (event.type !== "text_delta") {
             if (event.sequence <= cursor) continue;
             if (event.sequence !== cursor + 1)
@@ -284,6 +287,7 @@ export class BrowserClient {
         throw new ClientError("Event stream disconnected; reconnect to resume");
       options.onReconnect?.(attempt + 1);
       await wait(this.delay(attempt), options.signal);
+      attempt++;
     }
   }
 
