@@ -14,6 +14,8 @@ Service profiles optionally set `historyChars` (default 128,000). The worker ret
 
 For an optional per-run spending reservation, set both `limits.maxCostMicros` and `limits.costPerCallMicros`. One million micros is one unit of your accounting currency. The host supplies a conservative maximum cost per call based on its configured model, output limit, context bound and billing rules. Each model attempt reserves that amount durably before dispatch, including attempts interrupted by a crash. Reservations are not refunded automatically. A request that would exceed the configured reservation budget is blocked.
 
+To bound spending by what the provider reports instead, set `limits.pricing` (`inputMicrosPer1k`, `outputMicrosPer1k`) with `maxCostMicros`; `costPerCallMicros` is then optional. Before each model request the run's accumulated reported usage is priced, and the run ends with `limit` once the cost reaches `maxCostMicros`. Calls whose provider reports no usage count as zero, so keep `costPerCallMicros` as a backstop for such providers.
+
 This does not discover provider pricing or guarantee the provider's final invoice. Configure provider-side account limits as well. Actual reported input/output token usage is retained in checkpoints when the provider supplies it; absent usage stays unknown rather than being reported as zero. Profile versions bind these limits for recovery.
 
 ## Backup, restore and encryption keys
@@ -38,7 +40,9 @@ Backups and external backend operation receipts have independent retention polic
 
 ## Telemetry and recovery
 
-Worker `trace` callbacks report lifecycle outcomes, attempt number, failure code and elapsed milliseconds without prompts, tokens, actor IDs, or arguments. Send these to your metrics system; use host-owned request correlation if needed. Protect detailed checkpoint inspection as privileged access.
+Worker `trace` callbacks report lifecycle outcomes, attempt number, failure code, elapsed milliseconds, rounds, tool call count and reported input/output token totals without prompts, actor IDs, or arguments.
+
+For per-run tracing, pass `hooks: tracingHooks(tracer, { provider, model })` to `run` (or a profile). `tracer` is any object with `startSpan(name, attributes?, parent?)` returning `{ setAttribute, setStatus, end }`, so an OpenTelemetry adapter is a few lines and Yada adds no dependency. Create one instance per run. It emits a `yada.run` span (`run.status`, `run.code`) with child `yada.model` spans (`model.provider`, `model.name`, `model.finish_reason`, token usage) and `yada.tool` spans (`tool.name`, `tool.effect`, `tool.outcome`: `ok`, `denied`, `invalid_arguments`, `unknown_tool`, `tool_failed`). Arguments, tool output and model text are never recorded. Use `composeHooks(tracing, yourHooks)` to combine with other hooks. Send these to your metrics system; use host-owned request correlation if needed. Protect detailed checkpoint inspection as privileged access.
 
 Workers discover jobs through a small `job_queue` index of conversations with unfinished jobs, so polling cost scales with active conversations, not total history. A missing index (for example in a database from an earlier version) is rebuilt automatically from a single full scan, and stale entries are dropped on read. Backups include the index.
 

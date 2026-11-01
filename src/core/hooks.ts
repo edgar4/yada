@@ -35,3 +35,32 @@ export type RunHooks = Readonly<{
   ): Promise<string | undefined> | string | undefined;
   onEvent?(event: AgentEvent): Promise<void> | undefined;
 }>;
+export function composeHooks(...hooks: readonly RunHooks[]): RunHooks {
+  return {
+    async beforeModel(request) {
+      let current = request;
+      for (const hook of hooks)
+        current = (await hook.beforeModel?.(current)) ?? current;
+      return current === request ? undefined : current;
+    },
+    async afterModel(result) {
+      for (const hook of hooks) await hook.afterModel?.(result);
+    },
+    async beforeTool(call, tool) {
+      for (const hook of hooks) {
+        const verdict = await hook.beforeTool?.(call, tool);
+        if (verdict?.deny !== undefined) return verdict;
+      }
+      return undefined;
+    },
+    async afterTool(call, content) {
+      let current = content;
+      for (const hook of hooks)
+        current = (await hook.afterTool?.(call, current)) ?? current;
+      return current === content ? undefined : current;
+    },
+    async onEvent(event) {
+      for (const hook of hooks) await hook.onEvent?.(event);
+    },
+  };
+}

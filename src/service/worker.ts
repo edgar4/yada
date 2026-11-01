@@ -31,6 +31,10 @@ export type Trace = Readonly<{
   elapsedMs: number;
   attempt?: number;
   code?: string;
+  rounds?: number;
+  toolCalls?: number;
+  inputTokens?: number;
+  outputTokens?: number;
 }>;
 export function createWorker(options: {
   storage: YadaStorage;
@@ -103,6 +107,16 @@ export function createWorker(options: {
         profile.historyToolChars,
       );
       const runs = options.storage.runs;
+      const counters = async (): Promise<Partial<Trace>> => {
+        const saved = (await runs.load(identity, runId))?.checkpoint;
+        return saved
+          ? {
+              rounds: saved.rounds,
+              toolCalls: saved.calls,
+              ...(saved.usage ?? {}),
+            }
+          : {};
+      };
       const eligible = async () => {
         const current = await options.storage.jobs.load(
           identity,
@@ -227,6 +241,7 @@ export function createWorker(options: {
           elapsedMs: Date.now() - started,
           attempt: job.attempts + 1,
           ...(final.status === "failed" ? { code: final.code } : {}),
+          ...(await counters()),
         });
         return;
       }
@@ -235,6 +250,7 @@ export function createWorker(options: {
         status: result.status,
         elapsedMs: Date.now() - started,
         attempt: job.attempts + 1,
+        ...(await counters()),
       });
     } catch (error) {
       if (error instanceof RunLeaseError || shutdown.signal.aborted) return;

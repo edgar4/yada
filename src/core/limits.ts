@@ -10,12 +10,25 @@ export const limitsSchema = z
     maxToolOutput: z.number().int().positive().default(32_000),
     maxCostMicros: z.number().int().nonnegative().optional(),
     costPerCallMicros: z.number().int().positive().optional(),
+    pricing: z
+      .strictObject({
+        inputMicrosPer1k: z.number().nonnegative(),
+        outputMicrosPer1k: z.number().nonnegative(),
+      })
+      .optional(),
   })
   .refine(
     (value) =>
-      (value.maxCostMicros === undefined) ===
-      (value.costPerCallMicros === undefined),
-    "Set both cost limit and per-call reservation",
+      value.costPerCallMicros === undefined ||
+      value.maxCostMicros !== undefined,
+    "Per-call reservation needs a cost limit",
+  )
+  .refine(
+    (value) =>
+      value.maxCostMicros === undefined ||
+      value.costPerCallMicros !== undefined ||
+      value.pricing !== undefined,
+    "Cost limit needs a per-call reservation or pricing",
   );
 export type RunLimits = z.input<typeof limitsSchema>;
 const compactedNote = (turn: Extract<Turn, { role: "tool" }>) =>
