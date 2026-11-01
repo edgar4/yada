@@ -141,6 +141,34 @@ for (const driver of drivers)
       ).toEqual({ status: "completed", text: "Recovered" });
       await resumed.stop();
     });
+
+    it("resumes only the awaited approval", async () => {
+      const s = await storageFixture(driver);
+      const input = { id: "one", profileId: "v1", input: "Hello" };
+      await s.storage.jobs.submit(s.identity, "chat", input);
+      await s.storage.jobs.update(s.identity, "chat", "one", {
+        type: "awaiting_approval",
+        approvalId: "a1",
+      });
+      expect(await s.storage.jobs.resume(s.identity, "chat", "one", "a2")).toBe(
+        false,
+      );
+      expect(
+        (await s.storage.jobs.load(s.identity, "chat", "one"))?.status,
+      ).toBe("awaiting_approval");
+      expect(await s.storage.jobs.resume(s.identity, "chat", "one", "a1")).toBe(
+        true,
+      );
+      await s.storage.jobs.update(s.identity, "chat", "one", {
+        type: "running",
+      });
+      expect(await s.storage.jobs.resume(s.identity, "chat", "one", "a1")).toBe(
+        false,
+      );
+      expect(
+        (await s.storage.jobs.load(s.identity, "chat", "one"))?.status,
+      ).toBe("running");
+    });
   });
 it("retries storage outages and refuses a second scheduler", async () => {
   const s = await storageFixture("sqlite");

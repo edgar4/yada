@@ -448,4 +448,97 @@ for (const driver of drivers)
       expect(job?.availableAt).toBeGreaterThan(Date.now() + 50_000);
       expect(job?.availableAt).toBeLessThanOrEqual(Date.now() + 60_000);
     });
+
+    it("picks up new jobs while a long run is in flight", async () => {
+      const s = await storageFixture(driver);
+      let release = () => {};
+      const blocked = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let calls = 0;
+      const provider = createFakeProvider(async () => {
+        if (calls++ === 0) await blocked;
+        return { content: "Done", toolCalls: [], finishReason: "stop" };
+      });
+      const worker = createWorker({
+        storage: s.storage,
+        profiles: { v1: { provider, tools: [], system: "Help" } },
+        pollMs: 10,
+        concurrency: 2,
+      });
+      const until = async (check: () => Promise<boolean>) => {
+        for (let index = 0; index < 200; index++) {
+          if (await check()) return;
+          await delay(10);
+        }
+        throw new Error("Timed out");
+      };
+      const status = async (conversation: string) =>
+        (await s.storage.jobs.load(s.identity, conversation, "one"))?.status;
+      worker.start();
+      try {
+        await s.storage.jobs.submit(s.identity, "a", input("one"));
+        await until(() => Promise.resolve(calls === 1));
+        await s.storage.jobs.submit(s.identity, "b", input("one"));
+        await until(async () => (await status("b")) === "completed");
+        expect(await status("a")).not.toBe("completed");
+        release();
+        await until(async () => (await status("a")) === "completed");
+      } finally {
+        release();
+        await worker.stop();
+      }
+    });
+
+    it("finds jobs sorting before the previous page in one tick", async () => {
+      const s = await storageFixture(driver);
+      const worker = createWorker({
+        storage: s.storage,
+        profiles: { v1: { provider: done(), tools: [], system: "Help" } },
+      });
+      await s.storage.jobs.submit(s.identity, "z", input("one"));
+      await worker.tick();
+      await s.storage.jobs.submit(s.identity, "a", input("one"));
+      await worker.tick();
+      await worker.stop();
+      expect((await s.storage.jobs.load(s.identity, "a", "one"))?.status).toBe(
+        "completed",
+      );
+    });
+
+    it("does not fail a healthy run when cancellation checks error", async () => {
+      const s = await storageFixture(driver);
+      let failing = false;
+      const worker = createWorker({
+        storage: {
+          ...s.storage,
+          jobs: {
+            ...s.storage.jobs,
+            load: (...args) =>
+              failing
+                ? Promise.reject(new Error("transient"))
+                : s.storage.jobs.load(...args),
+          },
+        },
+        profiles: {
+          v1: {
+            provider: createFakeProvider(async () => {
+              failing = true;
+              await delay(400);
+              failing = false;
+              return { content: "Done", toolCalls: [], finishReason: "stop" };
+            }),
+            tools: [],
+            system: "Help",
+          },
+        },
+        leaseMs: 300,
+      });
+      await s.storage.jobs.submit(s.identity, "chat", input("one"));
+      await worker.tick();
+      await worker.stop();
+      expect(
+        (await s.storage.jobs.load(s.identity, "chat", "one"))?.status,
+      ).toBe("completed");
+    });
   });
