@@ -69,6 +69,8 @@ See [operations](docs/operations.md) for context and usage controls, backup/rest
 
 See [packaging and deployment](docs/deployment.md) for installable tarballs, release artifacts and a local Docker example.
 
+See [evals](docs/evals.md) for fixture-based agent scenarios that run in CI and against live models.
+
 ## Development
 
 ```sh
