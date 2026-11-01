@@ -9,6 +9,7 @@ import { createFakeProvider } from "../src/providers/fake.js";
 import { RunLeaseError } from "../src/storage/runs.js";
 import { openDatabase } from "../src/storage/database.js";
 import { recordStore } from "../src/storage/records.js";
+import { createJobStore } from "../src/storage/jobs.js";
 
 const done = () =>
   createFakeProvider(() => ({
@@ -323,5 +324,104 @@ for (const driver of drivers)
       expect(page.jobs.map((item) => item.conversationId)).toEqual(["a"]);
       expect(await queued(s.config)).toMatchObject({ complete: true });
       expect((await queued(s.config))?.keys).toHaveLength(1);
+    });
+    it("writes the job and its queue entry atomically", async () => {
+      const s = await storageFixture(driver);
+      const db = await openDatabase(s.config);
+      try {
+        const records = recordStore(db, s.config.encryptionKey);
+        const broken = createJobStore({
+          ...records,
+          transaction: (operation) =>
+            records.transaction((tx) =>
+              operation({
+                ...tx,
+                write: (key, value, revision) =>
+                  key === queueKey
+                    ? Promise.reject(new Error("crash"))
+                    : tx.write(key, value, revision),
+              }),
+            ),
+        });
+        await expect(
+          broken.submit(s.identity, "chat", input("one")),
+        ).rejects.toThrow("crash");
+        expect(await s.storage.jobs.load(s.identity, "chat", "one")).toBe(
+          undefined,
+        );
+        await s.storage.jobs.pending();
+        await s.storage.jobs.submit(s.identity, "chat", input("one"));
+        expect(
+          (await s.storage.jobs.pending()).jobs.map((item) => item.job.id),
+        ).toEqual(["one"]);
+      } finally {
+        await db.destroy();
+      }
+    });
+
+    it("leaves a job alone when another worker holds a live lease", async () => {
+      const s = await storageFixture(driver);
+      await s.storage.jobs.submit(s.identity, "chat", input("one"));
+      const runId = JSON.stringify(["chat", "one"]);
+      await s.storage.runs.claim(
+        s.identity,
+        runId,
+        {
+          input: "Hello",
+          history: [],
+          system: "Help",
+          profileId: "v1",
+          provider: "fake",
+          tools: [],
+          maxRounds: 8,
+          maxToolCalls: 16,
+        },
+        60_000,
+      );
+      const worker = createWorker({
+        storage: failing(s.storage, new Error("db down")),
+        profiles: { v1: { provider: done(), tools: [], system: "Help" } },
+        maxAttempts: 1,
+      });
+      await worker.tick();
+      await worker.stop();
+      const job = await s.storage.jobs.load(s.identity, "chat", "one");
+      expect(job?.status).toBe("queued");
+      expect(job?.attempts).toBe(0);
+    });
+
+    it("wakes an approval wait after the configured ttl", async () => {
+      const s = await storageFixture(driver);
+      const tool = writeTool({
+        name: "change",
+        description: "Change",
+        version: "1",
+        input: z.strictObject({}),
+        authorize: () => Promise.resolve(true),
+        prepare: () => Promise.resolve({ preview: "Change", version: "1" }),
+        execute: () => Promise.resolve("ok"),
+      });
+      await s.storage.jobs.submit(s.identity, "chat", input("one"));
+      const worker = createWorker({
+        storage: s.storage,
+        profiles: {
+          v1: {
+            provider: createFakeProvider(() => ({
+              content: "",
+              toolCalls: [{ id: "call", name: "change", args: {} }],
+              finishReason: "tool_calls",
+            })),
+            tools: [tool],
+            system: "Help",
+            approvalTtlMs: 60_000,
+          },
+        },
+      });
+      await worker.tick();
+      await worker.stop();
+      const job = await s.storage.jobs.load(s.identity, "chat", "one");
+      expect(job?.status).toBe("awaiting_approval");
+      expect(job?.availableAt).toBeGreaterThan(Date.now() + 50_000);
+      expect(job?.availableAt).toBeLessThanOrEqual(Date.now() + 60_000);
     });
   });

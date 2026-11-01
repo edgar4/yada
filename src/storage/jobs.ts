@@ -81,18 +81,18 @@ export function createJobStore(
     !Array.isArray(value) &&
     value !== undefined &&
     stateSchema.parse(value).jobs.some((job) => !isTerminal(job.status));
-  const track = (key: string) =>
-    records.mutate(queueKey, (value) => {
-      const queue = value
-        ? queueSchema.parse(value)
-        : { complete: false, keys: [] };
-      return {
-        value: queue.keys.includes(key)
-          ? queue
-          : { ...queue, keys: [...queue.keys, key] },
-        result: undefined,
-      };
-    });
+  async function enqueue(tx: ReturnType<typeof recordStore>, key: string) {
+    const row = await tx.read(queueKey);
+    const queue = row
+      ? queueSchema.parse(row.value)
+      : { complete: false, keys: [] };
+    if (queue.keys.includes(key)) return;
+    await tx.write(
+      queueKey,
+      { ...queue, keys: [...queue.keys, key] },
+      row?.revision ?? 0,
+    );
+  }
   async function untrack(key: string) {
     for (let attempt = 0; attempt < 20; attempt++) {
       try {
@@ -144,12 +144,9 @@ export function createJobStore(
     if (!activity) {
       job.status = event.type as Job["status"];
       job.availableAt =
-        Date.now() +
-        (event.type === "awaiting_approval"
-          ? 600_000
-          : event.type === "reconciling"
-            ? 5000
-            : 0);
+        event.type === "awaiting_approval"
+          ? (event.expiresAt ?? Date.now() + 600_000)
+          : Date.now() + (event.type === "reconciling" ? 5000 : 0);
     }
     if (
       !activity &&
@@ -231,38 +228,48 @@ export function createJobStore(
     submit: async (identity, conversationId, input) => {
       const parsed = jobInputSchema.parse(input);
       const key = conversationKey(identity, conversationId);
-      const job = await records.mutate(key, (value) => {
-        const state = stateFrom(value, identity, conversationId);
-        if (state.deleted) throw new Error("Conversation erased");
-        if (state.retiredRuns.includes(parsed.id)) throw new JobConflict();
-        const existing = state.jobs.find((job) => job.id === parsed.id);
-        if (existing) {
-          if (
-            JSON.stringify(existing.input) !== JSON.stringify(parsed.input) ||
-            existing.profileId !== parsed.profileId
-          )
-            throw new JobConflict();
-          return { value: state, result: existing };
+      for (let attempt = 0; attempt < 20; attempt++) {
+        try {
+          return await records.transaction(async (tx) => {
+            const record = await tx.read(key);
+            const state = stateFrom(record?.value, identity, conversationId);
+            if (state.deleted) throw new Error("Conversation erased");
+            if (state.retiredRuns.includes(parsed.id)) throw new JobConflict();
+            const existing = state.jobs.find((job) => job.id === parsed.id);
+            if (existing) {
+              if (
+                JSON.stringify(existing.input) !==
+                  JSON.stringify(parsed.input) ||
+                existing.profileId !== parsed.profileId
+              )
+                throw new JobConflict();
+              if (!isTerminal(existing.status)) await enqueue(tx, key);
+              return existing;
+            }
+            if (state.jobs.some((job) => !isTerminal(job.status)))
+              throw new JobConflict();
+            const job: Job = {
+              ...parsed,
+              availableAt: 0,
+              attempts: 0,
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+              status: "queued",
+              cancelRequested: false,
+              history: state.messages,
+              events: [],
+            };
+            append(job, { type: "queued" });
+            state.jobs.push(job);
+            await tx.write(key, state, record?.revision ?? 0);
+            await enqueue(tx, key);
+            return job;
+          });
+        } catch (error) {
+          if (!(error instanceof StorageConflict)) throw error;
         }
-        if (state.jobs.some((job) => !isTerminal(job.status)))
-          throw new JobConflict();
-        const job: Job = {
-          ...parsed,
-          availableAt: 0,
-          attempts: 0,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          status: "queued",
-          cancelRequested: false,
-          history: state.messages,
-          events: [],
-        };
-        append(job, { type: "queued" });
-        state.jobs.push(job);
-        return { value: state, result: job };
-      });
-      if (!isTerminal(job.status)) await track(key);
-      return job;
+      }
+      throw new StorageConflict();
     },
     async load(identity, conversationId, id) {
       const record = await records.read(

@@ -107,6 +107,12 @@ export function createHandler(options: {
             remember: z.enum(["run", "conversation"]).optional(),
           })
           .parse(await readJson(request));
+        if (
+          job.status !== "awaiting_approval" ||
+          job.events.filter((item) => item.type === "awaiting_approval").at(-1)
+            ?.approvalId !== approvalId
+        )
+          return json({ error: "Run is not awaiting this approval" }, 409);
         const decided = await options.storage.actions.decide(
           identity,
           approvalId,

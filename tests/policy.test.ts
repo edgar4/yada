@@ -199,6 +199,14 @@ for (const driver of drivers)
       });
       const first = executor(s.identity, "chat/a");
       await first(tool, { ...call, id: "c1" }, signal());
+      await s.storage.jobs.update(s.identity, "chat", "a", {
+        type: "awaiting_approval",
+        approvalId: operationId(
+          s.identity,
+          JSON.stringify(["chat", "a"]),
+          "c1",
+        ),
+      });
       expect((await decide({ approved: true, remember: "bad" })).status).toBe(
         400,
       );

@@ -42,6 +42,7 @@ export const eventSchema = z.strictObject({
   text: z.string().optional(),
   code: z.string().optional(),
   approvalId: z.string().optional(),
+  expiresAt: z.number().optional(),
   tool: z.string().optional(),
   failed: z.boolean().optional(),
   inputTokens: z.number().int().nonnegative().optional(),
