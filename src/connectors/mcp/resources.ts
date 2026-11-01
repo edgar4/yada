@@ -46,17 +46,23 @@ export function resourceTools(server: string, options: Options): ReadTool[] {
           .catch(() => {
             throw failed();
           });
-        return JSON.stringify({
-          resources: page.resources.map(
-            ({ uri, name, description, mimeType }) => ({
-              uri,
-              name,
-              description,
-              mimeType,
-            }),
-          ),
-          nextCursor: page.nextCursor,
-        });
+        const resources = page.resources.map(
+          ({ uri, name, description, mimeType }) => ({
+            uri,
+            name,
+            description,
+            mimeType,
+          }),
+        );
+        const render = (count: number) =>
+          JSON.stringify({
+            resources: resources.slice(0, count),
+            nextCursor: page.nextCursor,
+            ...(count < resources.length ? { truncated: true } : {}),
+          });
+        let count = resources.length;
+        while (count > 0 && render(count).length > limit) count--;
+        return render(count);
       },
     ),
     define(

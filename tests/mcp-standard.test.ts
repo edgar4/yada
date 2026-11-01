@@ -197,6 +197,25 @@ it("bounds resource tools and renders text only", async () => {
     ),
   ).toBe(false);
 });
+it("keeps resource listings valid JSON within the limit", async () => {
+  const f = fixture();
+  for (let i = 0; i < 400; i++)
+    f.server.registerResource(
+      `r${String(i)}`,
+      `file:///r${String(i)}`,
+      { description: "d".repeat(100) },
+      (uri) => ({ contents: [{ uri: uri.href, text: "x" }] }),
+    );
+  const connection = await f.connect({ resources: true });
+  const list = find(connection, "list_resources");
+  if (list.effect !== "read") throw new Error("expected read");
+  const text = contentText(await list.execute({}, identity, signal()));
+  expect(text.length).toBeLessThanOrEqual(32_000);
+  const page = JSON.parse(text) as { resources: unknown[]; truncated?: true };
+  expect(page.truncated).toBe(true);
+  expect(page.resources.length).toBeGreaterThan(0);
+  expect(page.resources.length).toBeLessThan(402);
+});
 it("lists prompts and renders them as text", async () => {
   const connection = await fixture().connect({});
   expect(await connection.prompts?.()).toEqual([
