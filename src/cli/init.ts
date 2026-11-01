@@ -67,7 +67,8 @@ export async function createStarter(directory: string) {
     await copyFile(join(packageRoot, "LICENSE"), join(destination, "LICENSE"));
     await cp(join(packageRoot, "examples/starter"), destination, {
       recursive: true,
-      filter: (source) => !/^\.env|\.(?:sqlite|db)/.test(basename(source)),
+      filter: (source) =>
+        !/^\.env|\.(?:sqlite|db)(?:-.*)?$/.test(basename(source)),
     });
     await rename(
       join(destination, "gitignore"),

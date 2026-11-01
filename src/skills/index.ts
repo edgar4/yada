@@ -52,7 +52,9 @@ async function scan(directories: readonly string[]): Promise<Snapshot> {
     for (const path of await skillDirectories(directory)) {
       const name = basename(path);
       const files = await skillFiles(path);
-      const source = files.get("SKILL.md") as string;
+      const source = files.get("SKILL.md");
+      if (source === undefined)
+        throw new Error(`Skill ${name}: missing SKILL.md`);
       if (skills.has(name)) throw new Error(`Duplicate skill name: ${name}`);
       if (skills.size >= 50)
         throw new Error("At most 50 skills may be loaded per profile");

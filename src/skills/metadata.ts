@@ -41,7 +41,7 @@ export function parseSkill(source: string, directoryName: string) {
       ? (allowed.match(/[^\s,(]+(?:\([^)]*\))?/g) ?? [])
       : (allowed ?? []);
   const unsupported = Object.keys(parsed.data).filter(
-    (key) => !(key in metadata.shape),
+    (key) => !Object.hasOwn(metadata.shape, key),
   );
   return {
     name,

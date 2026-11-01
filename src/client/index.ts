@@ -270,12 +270,12 @@ export class BrowserClient {
           } catch {
             throw new ClientError("Invalid run event");
           }
-          attempt = 0;
           if (event.type !== "text_delta") {
             if (event.sequence <= cursor) continue;
             if (event.sequence !== cursor + 1)
               throw new ClientError("Event sequence gap");
             cursor = event.sequence;
+            attempt = 0;
           }
           yield event;
           if (terminal(event)) return;
