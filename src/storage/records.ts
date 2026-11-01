@@ -78,5 +78,17 @@ export function recordStore(db: Knex, encryptionKey: string) {
   ): Promise<T> {
     return db.transaction((tx) => operation(recordStore(tx, encryptionKey)));
   }
-  return { read, write, mutate, scan, remove, transaction };
+  async function transact<T>(
+    operation: (records: ReturnType<typeof recordStore>) => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 0; attempt < 20; attempt++) {
+      try {
+        return await transaction(operation);
+      } catch (error) {
+        if (!(error instanceof StorageConflict)) throw error;
+      }
+    }
+    throw new StorageConflict();
+  }
+  return { read, write, mutate, scan, remove, transaction, transact };
 }

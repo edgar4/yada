@@ -38,15 +38,21 @@ export const operationId = (
 export type RememberScope = "run" | "conversation";
 export const unknownOutcome =
   "Action outcome unknown; it may or may not have been applied. Do not retry automatically.";
+export class ActionConflict extends Error {
+  constructor() {
+    super("Action decision conflict");
+  }
+}
 const conversationOf = (runId: string) => {
+  let parsed: unknown;
   try {
-    const parsed: unknown = JSON.parse(runId);
-    if (Array.isArray(parsed) && typeof parsed[0] === "string")
-      return parsed[0];
+    parsed = JSON.parse(runId);
   } catch {
     return runId;
   }
-  return runId;
+  return Array.isArray(parsed) && typeof parsed[0] === "string"
+    ? parsed[0]
+    : runId;
 };
 export interface ActionStore {
   load(identity: Identity, id: string): Promise<Action | undefined>;
@@ -127,7 +133,7 @@ export function createActionStore(
                 ? "approved"
                 : "declined";
         else if (state.status !== (approved ? "approved" : "declined"))
-          throw new Error("Action decision conflict");
+          throw new ActionConflict();
         return { value: state, result: state };
       }),
     begin: (identity, id, ownership) => {

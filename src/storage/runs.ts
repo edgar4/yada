@@ -49,7 +49,7 @@ export function withRunLease<T>(
     assertOwned: () => void,
   ) => Promise<T>,
 ): Promise<T> {
-  return records.transaction(async (tx) => {
+  return records.transact(async (tx) => {
     const key = JSON.stringify([
       "run",
       identity.tenantId,
