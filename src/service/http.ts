@@ -1,9 +1,9 @@
-import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import type { Identity } from "../core/contracts.js";
 import type { YadaStorage } from "../storage/index.js";
 import { JobConflict } from "../storage/jobs.js";
-import { isTerminal, jobInputSchema } from "./contracts.js";
+import { isTerminal, jobInputSchema, type RunEvent } from "./contracts.js";
+import { eventKey, type EventBus } from "./events.js";
 export async function readJson(
   request: Request,
   maximum = 65_536,
@@ -30,7 +30,9 @@ export function createHandler(options: {
   origins: readonly string[];
   authenticate: (request: Request) => Promise<Identity | undefined>;
   authorizeProfile: (identity: Identity, profileId: string) => Promise<boolean>;
+  bus?: EventBus;
 }) {
+  const pollMs = options.bus ? 500 : 100;
   return async (request: Request): Promise<Response> => {
     const origin = request.headers.get("origin");
     const headers = new Headers({
@@ -141,46 +143,103 @@ export function createHandler(options: {
       const stopped = new AbortController();
       const signal = AbortSignal.any([request.signal, stopped.signal]);
       const encoder = new TextEncoder();
+      const pending: RunEvent[] = [];
+      let wake: (() => void) | undefined;
+      const unsubscribe = options.bus?.subscribe(
+        eventKey(identity, conversationId, id),
+        (event) => {
+          const last = pending.at(-1);
+          if (last && last.sequence === event.sequence)
+            pending[pending.length - 1] = {
+              ...last,
+              text: (last.text ?? "") + (event.text ?? ""),
+            };
+          else pending.push(event);
+          wake?.();
+        },
+      );
+      const idle = (ms: number) =>
+        new Promise<void>((resolve) => {
+          const done = () => {
+            clearTimeout(timer);
+            signal.removeEventListener("abort", done);
+            wake = undefined;
+            resolve();
+          };
+          const timer = setTimeout(done, ms);
+          wake = done;
+          signal.addEventListener("abort", done);
+        });
+      let authenticatedAt = 0;
+      let loadedAt = 0;
       headers.set("content-type", "application/x-ndjson; charset=utf-8");
       return new Response(
         new ReadableStream<Uint8Array>({
           async pull(controller) {
+            const send = (event: RunEvent) => {
+              controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+            };
             try {
               for (;;) {
                 signal.throwIfAborted();
-                const currentIdentity = await options.authenticate(request);
+                const live = pending.splice(0);
                 if (
-                  currentIdentity?.actorId !== identity.actorId ||
-                  currentIdentity.tenantId !== identity.tenantId
-                )
-                  throw new Error("Access revoked");
+                  Date.now() - loadedAt < pollMs &&
+                  live.every((event) => event.sequence <= cursor)
+                ) {
+                  for (const event of live) send(event);
+                  if (live.length) return;
+                  if (!pending.length)
+                    await idle(pollMs - (Date.now() - loadedAt));
+                  continue;
+                }
+                if (Date.now() - authenticatedAt >= 5000) {
+                  const currentIdentity = await options.authenticate(request);
+                  if (
+                    currentIdentity?.actorId !== identity.actorId ||
+                    currentIdentity.tenantId !== identity.tenantId
+                  )
+                    throw new Error("Access revoked");
+                  authenticatedAt = Date.now();
+                }
                 const current = await options.storage.jobs.load(
                   identity,
                   conversationId,
                   id,
                 );
+                loadedAt = Date.now();
                 if (!current) throw new Error("Run removed");
                 const events = current.events.filter(
                   (event) => event.sequence > cursor,
                 );
-                for (const event of events) {
-                  controller.enqueue(
-                    encoder.encode(JSON.stringify(event) + "\n"),
-                  );
-                  cursor = event.sequence;
+                const flush = (through: number) => {
+                  for (const event of events) {
+                    if (event.sequence > through || event.sequence <= cursor)
+                      continue;
+                    send(event);
+                    cursor = event.sequence;
+                  }
+                };
+                for (const event of live) {
+                  flush(event.sequence);
+                  send(event);
                 }
+                flush(Infinity);
                 if (isTerminal(current.status)) {
+                  unsubscribe?.();
                   controller.close();
                   return;
                 }
-                if (events.length) return;
-                await delay(100, undefined, { signal });
+                if (events.length || live.length) return;
+                if (!pending.length) await idle(pollMs);
               }
             } catch {
+              unsubscribe?.();
               controller.error(new Error("Event stream disconnected"));
             }
           },
           cancel() {
+            unsubscribe?.();
             stopped.abort();
           },
         }),

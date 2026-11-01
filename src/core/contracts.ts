@@ -36,10 +36,14 @@ export type ProviderResult = Readonly<{
   providerMetadata?: ProviderMetadata;
   finishReason: "stop" | "tool_calls" | "length" | "refusal" | "other";
 }>;
+export type ProviderDelta = Readonly<{ type: "text"; delta: string }>;
 export interface ProviderAdapter {
   readonly name: string;
   readonly capabilities: Readonly<{ toolCalling: boolean }>;
   complete(request: ProviderRequest): Promise<ProviderResult>;
+  stream?(
+    request: ProviderRequest,
+  ): AsyncGenerator<ProviderDelta, ProviderResult>;
 }
 export type Identity = Readonly<{ actorId: string; tenantId: string }>;
 export interface ReadTool {

@@ -361,10 +361,19 @@ async function callModel(loop: Loop): Promise<ProviderResult> {
   };
   const edited = await options.hooks?.beforeModel?.(request);
   if (edited) request = { ...edited, signal };
-  const result = await abortable(
-    () => options.provider.complete(request),
-    signal,
-  );
+  const { provider, hooks } = options;
+  let result: ProviderResult;
+  if (provider.stream && hooks?.onEvent) {
+    const chunks = provider.stream(request);
+    for (;;) {
+      const next = await abortable(() => chunks.next(), signal);
+      if (next.done) {
+        result = next.value;
+        break;
+      }
+      loop.emit({ type: "text_delta", delta: next.value.delta });
+    }
+  } else result = await abortable(() => provider.complete(request), signal);
   signal.throwIfAborted();
   if (result.usage)
     state.usage = {

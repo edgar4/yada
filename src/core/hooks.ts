@@ -7,6 +7,7 @@ import type {
 } from "./contracts.js";
 export type AgentEvent =
   | Readonly<{ type: "round_started"; round: number }>
+  | Readonly<{ type: "text_delta"; delta: string }>
   | Readonly<{ type: "tool_started"; call: ToolCall }>
   | Readonly<{
       type: "tool_finished";

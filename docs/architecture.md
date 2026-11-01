@@ -36,7 +36,9 @@ Termination: `stop` with text completes. `stop` with empty text after tool use c
 - `afterModel(result)` observes the provider result.
 - `beforeTool(call, tool)` may return `{ deny: reason }`; the call becomes a `denied` error tool result and counts as a failure.
 - `afterTool(call, content)` may return replacement content (redaction) before truncation.
-- `onEvent(event)` receives `AgentEvent`: `round_started`, `tool_started`, `tool_finished`, `model_finished` (with usage) and `run_finished`. It is fire-and-forget and its errors are ignored. Errors from other hooks fail the run with `dependency_failed`.
+- `onEvent(event)` receives `AgentEvent`: `round_started`, `tool_started`, `tool_finished`, `text_delta` (`delta`), `model_finished` (with usage) and `run_finished`. It is fire-and-forget and its errors are ignored. Errors from other hooks fail the run with `dependency_failed`.
+
+`ProviderAdapter` may implement `stream(request)`, an async generator that yields `{ type: "text", delta }` and returns the same `ProviderResult` that `complete` would. When the provider has `stream` and an `onEvent` hook is set, the runtime calls `stream` instead of `complete` and emits a `text_delta` event per delta; classification, usage and checkpoints use the returned result, so streaming never changes the outcome. The LangChain adapter implements `stream` with `.stream()` and aggregates chunks through the same conversion as `complete`, including usage, finish reason and `providerMetadata` (Anthropic thinking blocks, Gemini signatures). Provider metadata drops descriptive fields (`id`, `usage`, `finishReason`, `index` and similar) so both paths store identical data. `createFakeProvider(script, deltas)` streams scripted deltas.
 
 Cancellation returns promptly even when a dependency ignores its signal. It cannot stop underlying work in that dependency; handlers must honor `AbortSignal`. Callers supply a deadline signal.
 

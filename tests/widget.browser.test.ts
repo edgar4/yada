@@ -42,6 +42,7 @@ const waiting = {
 let decision: boolean | undefined;
 let cancelRequested = false;
 let reconnectOnce = false;
+let deltaMode = false;
 let createFailure = false;
 let decisionFailure = false;
 let cancelFailure = false;
@@ -133,7 +134,26 @@ const server = createServer((request, response) => {
         response.end(`${JSON.stringify(queued)}\n`);
         return;
       }
-      response.write(`${JSON.stringify(queued)}\n${JSON.stringify(waiting)}\n`);
+      if (deltaMode)
+        response.write(
+          [
+            queued,
+            { version: 1, sequence: 1, type: "text_delta", at: 1, text: "Hel" },
+            {
+              version: 1,
+              sequence: 1,
+              type: "text_delta",
+              at: 1,
+              text: "lo **there**",
+            },
+          ]
+            .map((event) => `${JSON.stringify(event)}\n`)
+            .join(""),
+        );
+      else
+        response.write(
+          `${JSON.stringify(queued)}\n${JSON.stringify(waiting)}\n`,
+        );
       streams.add(response);
       response.on("close", () => {
         closed++;
@@ -280,6 +300,7 @@ beforeEach(() => {
   heldOperation = heldRun = undefined;
   holdRun = false;
   redirectTargetHits = 0;
+  deltaMode = false;
   cancelRequested =
     reconnectOnce =
     createFailure =
@@ -291,6 +312,28 @@ beforeEach(() => {
 });
 
 describe("browser widget", () => {
+  it("renders streamed text and tool activity, then replaces it with the final answer", async () => {
+    deltaMode = true;
+    const page = await open();
+    const widget = await start(page);
+    const assistant = widget.locator(".assistant");
+    await expect.poll(() => assistant.textContent()).toBe("Hello there");
+    expect(await assistant.locator("strong").textContent()).toBe("there");
+    expect(await widget.locator(".typing").isHidden()).toBe(true);
+    for (const response of streams)
+      response.write(
+        `${JSON.stringify({ version: 1, sequence: 2, type: "tool_started", at: 1, tool: "lookup" })}\n`,
+      );
+    await expect
+      .poll(() => widget.getByRole("status").textContent())
+      .toBe("Running lookup");
+    expect(await assistant.count()).toBe(0);
+    finish("completed");
+    await expect.poll(() => assistant.count()).toBe(1);
+    expect(await assistant.locator("strong").first().textContent()).toBe(
+      "Done",
+    );
+  });
   it("isolates two host themes and passes accessibility checks before and during approval", async () => {
     const page = await open();
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);

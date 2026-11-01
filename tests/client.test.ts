@@ -41,6 +41,27 @@ const collect = async (events: AsyncGenerator<RunEvent>) => {
 };
 
 describe("browser client", () => {
+  it("yields live text deltas without moving the replay cursor", async () => {
+    const transport = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        stream(
+          event(1, "queued"),
+          { ...event(1, "text_delta"), text: "Hi" },
+          event(2, "tool_started"),
+          { ...event(1, "text_delta"), text: "!" },
+          event(3, "completed"),
+        ),
+      );
+    const events = await collect(setup(transport).events("chat", "run"));
+    expect(events.map((value) => value.type)).toEqual([
+      "queued",
+      "text_delta",
+      "tool_started",
+      "text_delta",
+      "completed",
+    ]);
+  });
   it("validates configuration and stable request input", () => {
     expect(() => new BrowserClient({ baseUrl: "file:///a" })).toThrow("HTTP");
     for (const baseUrl of [
