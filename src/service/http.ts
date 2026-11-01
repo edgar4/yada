@@ -111,8 +111,16 @@ export function createHandler(options: {
           job.status !== "awaiting_approval" ||
           job.events.filter((item) => item.type === "awaiting_approval").at(-1)
             ?.approvalId !== approvalId
-        )
+        ) {
+          const applied =
+            action.status === "declined"
+              ? !decision.approved
+              : ["approved", "executing", "completed", "unknown"].includes(
+                  action.status,
+                ) && decision.approved;
+          if (applied) return json({ accepted: true }, 202);
           return json({ error: "Run is not awaiting this approval" }, 409);
+        }
         const decided = await options.storage.actions.decide(
           identity,
           approvalId,

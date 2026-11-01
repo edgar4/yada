@@ -6,6 +6,7 @@ import {
   readTool,
   run,
   tracingHooks,
+  writeTool,
 } from "../src/index.js";
 import type { ProviderResult, Span, Tracer } from "../src/index.js";
 type Recorded = {
@@ -126,6 +127,47 @@ describe("tracing hooks", () => {
     expect(spans.every((span) => span.ended)).toBe(true);
     expect(spans[0]?.attrs["run.code"]).toBe("dependency_failed");
     expect(spans[1]?.status).toBe("error");
+  });
+});
+describe("suspended runs", () => {
+  it("ends open spans when the run suspends", async () => {
+    const { spans, tracer } = memoryTracer();
+    const events: string[] = [];
+    const hooks = composeHooks(tracingHooks(tracer), {
+      onEvent: (event) => {
+        events.push(event.type);
+        return undefined;
+      },
+    });
+    const rename = writeTool({
+      name: "lookup",
+      description: "Rename",
+      version: "1",
+      input: z.strictObject({ id: z.string() }),
+      authorize: () => Promise.resolve(true),
+      prepare: () => Promise.resolve({ preview: "p", version: "1" }),
+      execute: () => Promise.resolve("done"),
+    });
+    const result = await run({
+      ...base,
+      provider: createFakeProvider(() => call),
+      tools: [rename],
+      executeWrite: () =>
+        Promise.resolve({ status: "awaiting_approval", approvalId: "x" }),
+      hooks,
+    });
+    await settle();
+    expect(result.status).toBe("awaiting_approval");
+    expect(events.filter((type) => type.startsWith("run_"))).toEqual([
+      "run_suspended",
+    ]);
+    expect(spans.map((span) => span.name)).toContain("yada.tool");
+    expect(spans.every((span) => span.ended && span.status === "ok")).toBe(
+      true,
+    );
+    expect(spans[0]?.attrs).toMatchObject({
+      "run.status": "awaiting_approval",
+    });
   });
 });
 describe("composeHooks", () => {

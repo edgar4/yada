@@ -1,3 +1,4 @@
+import type { Suspension } from "./action.js";
 import type {
   ProviderRequest,
   ProviderResult,
@@ -20,7 +21,8 @@ export type AgentEvent =
       usage?: ProviderResult["usage"];
       finishReason: ProviderResult["finishReason"];
     }>
-  | Readonly<{ type: "run_finished"; result: TerminalResult }>;
+  | Readonly<{ type: "run_finished"; result: TerminalResult }>
+  | Readonly<{ type: "run_suspended"; result: Suspension }>;
 export type RunHooks = Readonly<{
   beforeModel?(
     request: ProviderRequest,

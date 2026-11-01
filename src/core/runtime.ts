@@ -60,6 +60,14 @@ type ToolOutcome =
   | { stop: RunResult }
   | { terminal: TerminalResult };
 export async function run(options: RunOptions): Promise<RunResult> {
+  const result = await runLoop(options);
+  if (result.status === "awaiting_approval" || result.status === "reconciling")
+    void Promise.resolve()
+      .then(() => options.hooks?.onEvent?.({ type: "run_suspended", result }))
+      .catch(() => undefined);
+  return result;
+}
+async function runLoop(options: RunOptions): Promise<RunResult> {
   const { provider, signal, hooks } = options;
   const limits = limitsSchema.parse(options.limits ?? {});
   const rounds = options.maxRounds ?? limits.maxRounds;
