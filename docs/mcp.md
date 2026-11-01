@@ -174,7 +174,7 @@ With `resources: true`, the model gets `<server>__list_resources` (optional `cur
 
 `connection.prompts()` lists the server's prompts and `connection.getPrompt(name, args)` returns the rendered messages as text for the host to use as system or user input. Both are host calls (optional on the type, always present on `connectMcp` and `reconnectingMcp` connections) and fail with the stale error below when applicable.
 
-When the server sends `notifications/tools/list_changed`, Yada rediscovers the catalog and compares the tools it exposes (names, descriptions, schemas, annotations). If unchanged, the connection continues. Otherwise it is stale: `isConnected()` returns `false` and new calls fail with `MCP tool contract changed; reconnect required` until the host reconnects. `reconnectingMcp` does this automatically and accepts the new connection only if its contract matches the original.
+When the server sends `notifications/tools/list_changed`, Yada rediscovers the catalog and compares the tools it exposes (names, descriptions, schemas, annotations). If unchanged, the connection continues. Otherwise it is stale: `isConnected()` returns `false` and new calls fail with `MCP tool contract changed; reconnect required` until the host reconnects. `reconnectingMcp` does this automatically and accepts the new connection only if its contract matches the original. After a failed reconnect it rethrows the same error without reconnecting for 30 seconds.
 
 ## Optional environment configuration
 
