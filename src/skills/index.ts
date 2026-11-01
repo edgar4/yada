@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, realpath } from "node:fs/promises";
+import { lstat, readFile, realpath } from "node:fs/promises";
 import { basename, join, resolve, sep } from "node:path";
 import { z } from "zod";
 import { confirmTool } from "../core/policy.js";
@@ -188,6 +188,8 @@ async function loadCatalog(
             )
           )
             throw new Error("Unknown skill script");
+          if ((await readFile(file, "utf8")) !== skill.files.get(path))
+            throw new Error("Skill script changed; reload skills");
           const result = await runner({
             skill: { name: args.name, directory: skill.directory },
             path,
