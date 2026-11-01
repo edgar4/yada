@@ -44,7 +44,7 @@ All paths start with `/v1/conversations/{conversationId}/runs`. IDs are scoped t
 | GET    | `/{id}/events?after=0`                  | Stream versioned NDJSON events; replay from sequence cursor                                                                                                                                      |
 | POST   | `/{id}/cancel`                          | Persist a cancellation request                                                                                                                                                                   |
 | GET    | `/{id}/approvals/{approvalId}`          | Read preview, status and expiry                                                                                                                                                                  |
-| POST   | `/{id}/approvals/{approvalId}/decision` | Submit `{ approved, remember? }`; `remember` is `"run"` or `"conversation"`. Returns 409 unless the run is awaiting that approval                                                                |
+| POST   | `/{id}/approvals/{approvalId}/decision` | Submit `{ approved, remember? }`; `remember` is `"run"` or `"conversation"`. Returns 409 unless the run is awaiting that approval; repeating an already applied decision returns 202             |
 
 Generate a unique run ID before submission and reuse it when retrying that submission. Reusing it with changed input or profile returns 409. A conversation accepts one unfinished run at a time. Completed answers and conversation history are committed atomically, so recovery cannot append an answer twice. Network disconnection never cancels the run.
 

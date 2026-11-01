@@ -83,16 +83,20 @@ export function tracingHooks(
         );
         close(span, !event.failed);
         tools.delete(event.call.id);
-      } else if (event.type === "run_finished") {
-        if (model) close(model, false);
-        for (const span of tools.values()) close(span, false);
+      } else if (
+        event.type === "run_finished" ||
+        event.type === "run_suspended"
+      ) {
+        const ok = event.type === "run_suspended";
+        if (model) close(model, ok);
+        for (const span of tools.values()) close(span, ok);
         model = undefined;
         tools.clear();
         const span = root();
         span.setAttribute("run.status", event.result.status);
         if (event.result.status === "failed")
           span.setAttribute("run.code", event.result.code);
-        close(span, event.result.status === "completed");
+        close(span, ok || event.result.status === "completed");
         run = undefined;
       }
       return undefined;

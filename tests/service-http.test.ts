@@ -197,6 +197,14 @@ it("serves opaque approval previews and binds decisions to their run", async () 
     (
       await s.request("/a/approvals/approval/decision", {
         method: "POST",
+        body: JSON.stringify({ approved: true }),
+      })
+    ).status,
+  ).toBe(202);
+  expect(
+    (
+      await s.request("/a/approvals/approval/decision", {
+        method: "POST",
         body: JSON.stringify({ approved: false }),
       })
     ).status,
