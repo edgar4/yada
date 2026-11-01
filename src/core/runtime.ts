@@ -330,6 +330,14 @@ async function checkLimits(loop: Loop): Promise<RunResult | undefined> {
       contextSize - limits.maxContextChars,
     );
   if (contextSize > limits.maxContextChars) return exceeded();
+  if (limits.maxCostMicros !== undefined && limits.pricing && state.usage) {
+    const { inputMicrosPer1k, outputMicrosPer1k } = limits.pricing;
+    const spent =
+      (state.usage.inputTokens * inputMicrosPer1k +
+        state.usage.outputTokens * outputMicrosPer1k) /
+      1000;
+    if (spent >= limits.maxCostMicros) return exceeded();
+  }
   if (
     limits.maxCostMicros !== undefined &&
     limits.costPerCallMicros !== undefined
