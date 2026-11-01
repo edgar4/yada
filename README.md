@@ -1,20 +1,41 @@
 # Yada
 
-A standalone AI agent built in TypeScript, with typed tools and configurable model providers. Yada chooses tools, executes steps, and uses the results to continue helping the user.
+A plug-and-play AI agent harness for TypeScript backends. Bring any model, any MCP server and Agent Skills from Claude, Codex or Cursor; Yada runs the tool loop, asks before it acts, and picks up where it left off after a restart.
 
-Embed the agent runtime in your backend and add a chat interface for it to your website. Yada supports approved actions, durable conversations, and recovery after restarts.
+- **Any model:** Anthropic and OpenAI on their official SDKs, Gemini, DeepSeek, Ollama, llama.cpp or any OpenAI-compatible endpoint.
+- **Any tools:** typed tools, MCP servers (stdio or HTTP, OAuth), HTTP APIs, business databases and reusable `SKILL.md` skills.
+- **Safe actions:** writes need explicit approval, run at most once and keep durable receipts.
+- **Durable by default:** conversations, runs and approvals survive restarts on SQLite, PostgreSQL or MySQL.
+- **Ready for users:** streaming service API, browser client and an accessible chat widget.
 
-## Install
+## Used by
 
-Requires Node 24:
+[Talon](https://talonhr.eu) uses Yada. Talon is hiring software that gives employers and recruitment agencies one shared workspace for roles, candidates, interviews and offers. Using Yada in production? Open a pull request to add your project here.
+
+## Get started
+
+Two ways in, both on Node 24.
+
+### Start a new agent app
+
+Generate a complete app with storage, skills, typed tools and the chat widget:
+
+```sh
+npx @edgaralochi/yada init my-agent
+cd my-agent
+```
+
+Set your provider credentials in `.env.starter`, then run `npm start`. See the [starter guide](docs/starter.md).
+
+### Add Yada to an existing backend
 
 ```sh
 npm install @edgaralochi/yada
 ```
 
-Import the runtime from `@edgaralochi/yada`, the browser client from `@edgaralochi/yada/client`, and the widget from `@edgaralochi/yada/widget`. Narrower entry points are `/providers`, `/storage`, `/mcp`, `/skills` and `/service`; the root exports all of them.
+Import the runtime from `@edgaralochi/yada`, the browser client from `@edgaralochi/yada/client` and the widget from `@edgaralochi/yada/widget`. Narrower entry points are `/providers`, `/storage`, `/mcp`, `/skills` and `/service`; the root exports all of them.
 
-The core, the Anthropic and OpenAI-compatible providers and the fake provider need nothing else. Install only what you use:
+The core and the Anthropic and OpenAI-compatible providers need nothing else. Install only what you use:
 
 | Feature                    | Install                                               |
 | -------------------------- | ----------------------------------------------------- |
@@ -23,30 +44,24 @@ The core, the Anthropic and OpenAI-compatible providers and the fake provider ne
 | MySQL storage              | `npm install mysql2`                                  |
 | Gemini, `chatModelAdapter` | `npm install @langchain/core @langchain/google-genai` |
 
-Using a feature without its package fails with an error naming what to install. Released under the [MIT license](LICENSE).
+Using a feature without its package fails with an error naming what to install. See [provider configuration](docs/configuration.md) to choose a model.
 
-### Upgrading from 0.2
+## Documentation
 
-- `better-sqlite3`, `pg`, `mysql2` and the LangChain packages are optional peer dependencies; install the ones you use (see the table above).
-- `@langchain/anthropic` and `@langchain/openai` are no longer used; Anthropic and OpenAI-compatible providers run on the official SDKs.
-- `ReadTool.execute` returns `Content` (a string or an array of text and image parts) instead of `string`.
-- `temperature` is rejected for `anthropic`; use `effort` instead. See [configuration](docs/configuration.md).
-- `maxContextChars` defaults to 256,000 and service `historyChars` to 128,000.
-
-## Create an agent
-
-With Node 24, generate a standalone app and install its dependencies:
-
-```sh
-npx @edgaralochi/yada init my-agent
-cd my-agent
-```
-
-Set your provider credentials in `.env.starter`, then run `npm start`. The initializer provides SQLite storage, a skills folder, typed tools and the chat widget. See the [starter guide](docs/starter.md).
+| Topic                                         | Guide                                                                 |
+| --------------------------------------------- | --------------------------------------------------------------------- |
+| Runtime, limits and termination               | [Architecture](docs/architecture.md)                                  |
+| External tool servers                         | [MCP](docs/mcp.md), [MCP OAuth](docs/mcp-oauth.md)                    |
+| Reusable skills                               | [Skills](docs/skills.md)                                              |
+| HTTP APIs and databases                       | [Connectors](docs/connectors.md)                                      |
+| Approved write tools                          | [Actions](docs/actions.md)                                            |
+| Conversations and recovery                    | [Storage](docs/storage.md), [Durable runs](docs/recovery.md)          |
+| Service API, streaming and chat UI            | [Service](docs/service.md), [Browser SDK and widget](docs/browser.md) |
+| Context, cost, backups and retention          | [Operations](docs/operations.md)                                      |
+| Packaging and Docker                          | [Deployment](docs/deployment.md)                                      |
+| Agent scenarios in CI and against live models | [Evals](docs/evals.md)                                                |
 
 ## Develop from source
-
-Use Node 24:
 
 ```sh
 nvm use
@@ -54,13 +69,7 @@ npm ci
 npm run demo
 ```
 
-The demo runs a catalog lookup without an API key.
-
-For a complete agent with optional login, a real provider, durable storage, tools and a chat widget, run `npm run starter:init`, enter your provider credentials in `.env.starter`, then run `npm run starter`. See the [starter guide](docs/starter.md).
-
-## Connect your model provider
-
-Copy `.env.example` to `.env` and enter your provider credentials:
+The demo runs a catalog lookup without an API key. To run it against a live model, copy `.env.example` to `.env`, set your provider credentials and run `npm run demo:live`:
 
 ```dotenv
 YADA_LLM_PROVIDER=anthropic
@@ -68,29 +77,9 @@ YADA_LLM_MODEL=claude-opus-5-5
 YADA_LLM_API_KEY=your-anthropic-api-key
 ```
 
-Run the same catalog example with a live model:
+Live requests use your provider account and may incur charges; keep `.env` private. For the full starter, run `npm run starter:init`, add credentials to `.env.starter`, then `npm run starter`.
 
-```sh
-npm run demo:live
-```
-
-The key belongs to your selected provider. Live requests use your provider account and may incur usage charges. Keep `.env` private.
-
-See [provider configuration](docs/configuration.md) for supported providers, model selection, and server-side configuration. See [MCP connections](docs/mcp.md) to connect external tool servers and [runtime architecture](docs/architecture.md) for execution behavior.
-
-Extend workflows with reusable [skills](docs/skills.md), including standard `SKILL.md` folders from Claude, Cursor and Codex.
-
-Use [durable storage](docs/storage.md) to retain conversations and OAuth sessions across restarts, and [durable runs](docs/recovery.md) to resume interrupted execution. SQLite is the default; PostgreSQL and MySQL are also supported.
-
-Connect [HTTP APIs and business databases](docs/connectors.md), or build [approved write tools](docs/actions.md) with durable operation receipts. Use the [service API](docs/service.md) for scheduled runs and streaming events, and the [browser SDK and widget](docs/browser.md) for an accessible, themeable chat interface.
-
-See [operations](docs/operations.md) for context and usage controls, backup/restore, key rotation, and retention.
-
-See [packaging and deployment](docs/deployment.md) for installable tarballs, release artifacts and a local Docker example.
-
-See [evals](docs/evals.md) for fixture-based agent scenarios that run in CI and against live models.
-
-## Development
+Before opening a pull request:
 
 ```sh
 npx playwright install chromium
@@ -98,4 +87,16 @@ npm run check
 npm run test:package
 ```
 
-Runs formatting checks, linting, type checking, tests, and compilation. Automated tests require no provider credentials.
+Automated tests require no provider credentials.
+
+## Upgrading from 0.2
+
+- `better-sqlite3`, `pg`, `mysql2` and the LangChain packages are optional peer dependencies; install the ones you use.
+- `@langchain/anthropic` and `@langchain/openai` are no longer used; Anthropic and OpenAI-compatible providers run on the official SDKs.
+- `ReadTool.execute` returns `Content` (a string or an array of text and image parts) instead of `string`.
+- `temperature` is rejected for `anthropic`; use `effort` instead.
+- `maxContextChars` defaults to 256,000 and service `historyChars` to 128,000.
+
+## License
+
+[MIT](LICENSE)
