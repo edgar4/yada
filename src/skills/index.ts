@@ -150,7 +150,8 @@ async function loadCatalog(
       let end = Math.min(text.length, args.offset + args.limit);
       for (;;) {
         const code = text.charCodeAt(end - 1);
-        if (end < text.length && code >= 0xd800 && code < 0xdc00) end--;
+        if (end < text.length && code >= 0xd800 && code < 0xdc00)
+          end += end - 1 > args.offset ? -1 : 1;
         const out = render(end);
         if (out.length <= maxResponse || end - args.offset <= 1)
           return Promise.resolve(out);
