@@ -46,6 +46,10 @@ The runtime supports read tools, a scripted testing provider, and Anthropic, Ope
 
 `run` defaults to in-memory execution and accepts typed checkpoint hooks. `runDurable` adds encrypted checkpoints and renewable execution leases through the storage boundary. See [run recovery](recovery.md). `runConversation` adds durable full-turn conversation history (tool calls, results, provider metadata, failure markers) through the storage interface. OAuth sessions can use the same encrypted storage. See [durable storage](storage.md).
 
+## Sub-agents
+
+`agentTool({ name, description, provider, tools, system, limits?, maxRounds?, hooks? })` returns a read tool with input `{ task }` that runs a nested `run()` with the caller's identity and signal and returns the completed text. A failed or suspended sub-agent returns `{"error": "agent_failed", "message": "The sub-agent failed: <code>"}` as the tool result, so the parent model sees only the failure code. Cancellation propagates through the shared signal. Write tools are rejected at construction, and agent tools nest at most two deep (checked at construction). Sub-agent runs are in-memory with no checkpoint, so a resumed parent re-runs the sub-agent, which is safe because it is read-only.
+
 ## Development checks
 
 Use Node 24 (`nvm use`), install with `npm ci`, and run `npm run check`. This checks formatting, typed lint rules, strict TypeScript, tests with coverage thresholds, and compilation. `npm run demo` exercises a tool round trip without credentials.
