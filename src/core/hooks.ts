@@ -61,7 +61,10 @@ export function composeHooks(...hooks: readonly RunHooks[]): RunHooks {
       return current === content ? undefined : current;
     },
     async onEvent(event) {
-      for (const hook of hooks) await hook.onEvent?.(event);
+      for (const hook of hooks)
+        await Promise.resolve()
+          .then(() => hook.onEvent?.(event))
+          .catch(() => undefined);
     },
   };
 }

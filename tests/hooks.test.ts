@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { createFakeProvider, readTool, run } from "../src/index.js";
+import {
+  composeHooks,
+  createFakeProvider,
+  readTool,
+  run,
+} from "../src/index.js";
 import type {
   AgentEvent,
   ProviderResult,
@@ -120,6 +125,22 @@ describe("run hooks", () => {
       type: "run_finished",
       result: { status: "completed", text: "Done" },
     });
+  });
+  it("delivers events to every composed hook when one throws", async () => {
+    const s = setup();
+    const events: AgentEvent[] = [];
+    await run({
+      ...s.options,
+      hooks: composeHooks(
+        {
+          onEvent: () => {
+            throw new Error("boom");
+          },
+        },
+        { onEvent: (event) => void events.push(event) },
+      ),
+    });
+    expect(events.map((event) => event.type)).toContain("model_finished");
   });
   it("ignores onEvent failures but fails the run on other hook errors", async () => {
     const s = setup();
