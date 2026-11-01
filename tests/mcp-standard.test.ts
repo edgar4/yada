@@ -1,3 +1,4 @@
+import { contentText } from "../src/core/content.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -176,7 +177,7 @@ it("bounds resource tools and renders text only", async () => {
     throw new Error("expected reads");
   expect(
     (
-      JSON.parse(await list.execute({}, identity, signal())) as {
+      JSON.parse(contentText(await list.execute({}, identity, signal()))) as {
         resources: { uri: string }[];
       }
     ).resources.map((r) => r.uri),

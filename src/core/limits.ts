@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { contentSize } from "./content.js";
 import type { Turn } from "./contracts.js";
 export const limitsSchema = z
   .strictObject({
@@ -32,10 +33,12 @@ export const limitsSchema = z
   );
 export type RunLimits = z.input<typeof limitsSchema>;
 const compactedNote = (turn: Extract<Turn, { role: "tool" }>) =>
-  `[compacted: ${String(turn.content.length)} chars]`;
+  `[compacted: ${String(contentSize(turn.content))} chars]`;
 const compact = (turn: Extract<Turn, { role: "tool" }>): Turn => {
   const content = compactedNote(turn);
-  return content.length < turn.content.length ? { ...turn, content } : turn;
+  return content.length < contentSize(turn.content)
+    ? { ...turn, content }
+    : turn;
 };
 export function compactOldest(messages: Turn[], excess: number): number {
   const latest = messages.map((turn) => turn.role).lastIndexOf("assistant");
@@ -60,7 +63,7 @@ export function contextWindow(
   for (let index = turns.length - 1; index >= 0; index--) {
     const turn = turns[index];
     if (turn?.role !== "tool") continue;
-    toolSize += turn.content.length;
+    toolSize += contentSize(turn.content);
     if (toolSize > toolChars) turns[index] = compact(turn);
   }
   let start = turns.length;

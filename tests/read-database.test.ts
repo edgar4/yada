@@ -1,3 +1,4 @@
+import { contentText } from "../src/core/content.js";
 import { afterEach, expect, it } from "vitest";
 import { z } from "zod";
 import Database from "better-sqlite3";
@@ -53,7 +54,7 @@ it("uses parameterized constrained reads, tenant isolation, column projections, 
   ).toBe("[]");
   const all = database.tool({ ...options, values: () => ({}), limit: 1 });
   expect(
-    JSON.parse(await all.execute({ id: "a" }, identity, signal())),
+    JSON.parse(contentText(await all.execute({ id: "a" }, identity, signal()))),
   ).toHaveLength(1);
   await expect(
     database

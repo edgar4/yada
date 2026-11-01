@@ -6,7 +6,7 @@ import { createHandler } from "../src/service/http.js";
 import { createNodeServer } from "../src/service/node.js";
 import { createWorker } from "../src/service/worker.js";
 import { createFakeProvider } from "../src/providers/fake.js";
-import { eventSchema } from "../src/service/contracts.js";
+import { eventSchema, maxJobBodyBytes } from "../src/service/contracts.js";
 async function setup() {
   const s = await storageFixture("sqlite");
   const handler = createHandler({
@@ -60,7 +60,12 @@ it("enforces authentication, origin, profile and input boundaries", async () => 
   ).toBe(403);
   expect((await s.request("", { method: "POST", body: "{" })).status).toBe(400);
   expect(
-    (await s.request("", { method: "POST", body: "x".repeat(65537) })).status,
+    (
+      await s.request("", {
+        method: "POST",
+        body: "x".repeat(maxJobBodyBytes + 1),
+      })
+    ).status,
   ).toBe(413);
   expect((await s.request("missing")).status).toBe(404);
   expect((await s.request("", { method: "GET" })).status).toBe(405);

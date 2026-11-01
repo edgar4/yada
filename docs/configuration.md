@@ -50,6 +50,8 @@ When switching providers, replace all three values: provider, its model ID, and 
 | `llamacpp`          | Select the served model alias | Optional server API key       |
 | `openai-compatible` | Required; also set `baseUrl`  | Optional gateway API key      |
 
+Local and OpenAI-compatible providers do not accept images unless the config sets `vision: true`.
+
 For OpenAI:
 
 ```dotenv

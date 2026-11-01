@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Identity, ReadTool } from "./contracts.js";
+import type { Content, Identity, ReadTool } from "./contracts.js";
 export class InvalidArguments extends Error {}
 export function readTool<S extends z.ZodType>(options: {
   name: string;
@@ -10,7 +10,7 @@ export function readTool<S extends z.ZodType>(options: {
     args: z.output<S>,
     identity: Identity,
     signal: AbortSignal,
-  ) => Promise<string>;
+  ) => Promise<Content>;
 }): ReadTool {
   return {
     effect: "read",

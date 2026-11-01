@@ -1,3 +1,4 @@
+import { contentText } from "../core/content.js";
 import {
   BrowserClient,
   type Job,
@@ -301,8 +302,8 @@ export function defineYadaWidget(name = "yada-chat"): void {
         this.input = { id: job.id, profileId: job.profileId, input: job.input };
         for (const turn of job.history)
           if (turn.role === "user" || turn.role === "assistant")
-            this.appendMessage(turn.content, turn.role);
-        this.appendMessage(job.input, "user");
+            this.appendMessage(contentText(turn.content), turn.role);
+        this.appendMessage(contentText(job.input), "user");
         this.active = true;
         this.update();
         void this.start(false, job);

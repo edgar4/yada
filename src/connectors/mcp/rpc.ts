@@ -8,7 +8,8 @@ import { Ajv2020 } from "ajv/dist/2020.js";
 import { Ajv } from "ajv";
 import { z } from "zod";
 import { abortable } from "../../core/abort.js";
-import type { Identity } from "../../core/contracts.js";
+import { contentText, imagePartSchema, maxImages } from "../../core/content.js";
+import type { Content, ContentPart, Identity } from "../../core/contracts.js";
 
 export type McpInvoke = (
   name: string,
@@ -121,22 +122,36 @@ export function renderBlock(block: CallToolResult["content"][number]): string {
       return `[resource_link: ${block.uri} ${block.name}]`;
   }
 }
-export function readResult(result: CallToolResult): string {
+export function readResult(result: CallToolResult): Content {
   if (result.isError)
     return JSON.stringify({
       error: "tool_failed",
       message: result.content.map(renderBlock).join("\n").slice(0, 4000),
     });
-  return result.structuredContent
-    ? JSON.stringify(result.structuredContent)
-    : result.content.map(renderBlock).join("\n");
+  if (result.structuredContent) return JSON.stringify(result.structuredContent);
+  let images = 0;
+  const parts = result.content.map((block): ContentPart => {
+    if (block.type === "image" && images < maxImages) {
+      const image = imagePartSchema.safeParse({
+        type: "image",
+        mimeType: block.mimeType,
+        data: block.data,
+      });
+      if (image.success) {
+        images++;
+        return image.data;
+      }
+    }
+    return { type: "text", text: renderBlock(block) };
+  });
+  return images ? parts : result.content.map(renderBlock).join("\n");
 }
 export function structuredResult(
   result: CallToolResult,
 ): Record<string, unknown> {
   if (!result.structuredContent)
     throw new Error("MCP structured result required");
-  if (Buffer.byteLength(readResult(result)) > 32_000)
+  if (Buffer.byteLength(contentText(readResult(result))) > 32_000)
     throw new Error("MCP result too large");
   return result.structuredContent;
 }

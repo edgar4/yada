@@ -1,3 +1,4 @@
+import { contentText } from "../src/core/content.js";
 import { afterEach, expect, it } from "vitest";
 import { mkdtemp, mkdir, writeFile, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
@@ -40,8 +41,10 @@ it("discovers metadata and loads instructions and references only on request", a
   const tool = catalog.tools[0];
   if (!tool) throw new Error("Missing skill tool");
   expect(await tool.authorize(identity)).toBe(true);
-  const read = (args: unknown) =>
-    tool.execute(args, identity, new AbortController().signal);
+  const read = async (args: unknown) =>
+    contentText(
+      await tool.execute(args, identity, new AbortController().signal),
+    );
   expect(JSON.parse(await read({ name: "support" }))).toMatchObject({
     content: source,
     resources: ["references/policy.md"],

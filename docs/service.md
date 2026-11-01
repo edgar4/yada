@@ -37,14 +37,14 @@ On shutdown, stop accepting new requests, await `worker.stop()`, then close stor
 
 All paths start with `/v1/conversations/{conversationId}/runs`. IDs are scoped to the authenticated tenant and actor.
 
-| Method | Suffix                                  | Behavior                                                                    |
-| ------ | --------------------------------------- | --------------------------------------------------------------------------- |
-| POST   | `/`                                     | Submit `{ id, profileId, input }`; returns 202 after durable commit         |
-| GET    | `/{id}`                                 | Inspect the run                                                             |
-| GET    | `/{id}/events?after=0`                  | Stream versioned NDJSON events; replay from sequence cursor                 |
-| POST   | `/{id}/cancel`                          | Persist a cancellation request                                              |
-| GET    | `/{id}/approvals/{approvalId}`          | Read preview, status and expiry                                             |
-| POST   | `/{id}/approvals/{approvalId}/decision` | Submit `{ approved, remember? }`; `remember` is `"run"` or `"conversation"` |
+| Method | Suffix                                  | Behavior                                                                                                                                                                                         |
+| ------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| POST   | `/`                                     | Submit `{ id, profileId, input }`; `input` is text or parts (up to 4 images, 5 MB each, text up to 32,000 characters; body cap `maxJobBodyBytes`, about 28 MB); returns 202 after durable commit |
+| GET    | `/{id}`                                 | Inspect the run                                                                                                                                                                                  |
+| GET    | `/{id}/events?after=0`                  | Stream versioned NDJSON events; replay from sequence cursor                                                                                                                                      |
+| POST   | `/{id}/cancel`                          | Persist a cancellation request                                                                                                                                                                   |
+| GET    | `/{id}/approvals/{approvalId}`          | Read preview, status and expiry                                                                                                                                                                  |
+| POST   | `/{id}/approvals/{approvalId}/decision` | Submit `{ approved, remember? }`; `remember` is `"run"` or `"conversation"`                                                                                                                      |
 
 Generate a unique run ID before submission and reuse it when retrying that submission. Reusing it with changed input or profile returns 409. A conversation accepts one unfinished run at a time. Completed answers and conversation history are committed atomically, so recovery cannot append an answer twice. Network disconnection never cancels the run.
 

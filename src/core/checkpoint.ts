@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { contentSchema } from "./content.js";
 const call = z.object({
   id: z.string().min(1),
   name: z.string(),
@@ -9,7 +10,7 @@ const metadata = z.object({
   data: z.record(z.string(), z.unknown()),
 });
 export const turnSchema = z.discriminatedUnion("role", [
-  z.object({ role: z.literal("user"), content: z.string() }),
+  z.object({ role: z.literal("user"), content: contentSchema }),
   z
     .object({
       role: z.literal("assistant"),
@@ -25,7 +26,7 @@ export const turnSchema = z.discriminatedUnion("role", [
     role: z.literal("tool"),
     toolCallId: z.string(),
     name: z.string(),
-    content: z.string(),
+    content: contentSchema,
   }),
 ]);
 export const runResultSchema = z.discriminatedUnion("status", [

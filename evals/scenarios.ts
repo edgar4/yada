@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { contentText } from "../src/core/content.js";
 import {
   loadSkills,
   readTool,
@@ -39,7 +40,10 @@ const call = (id: string, name: string, args: unknown): ProviderResult => ({
   finishReason: "tool_calls",
 });
 const lastTool = (request: ProviderRequest) =>
-  request.messages.filter((turn) => turn.role === "tool").at(-1)?.content ?? "";
+  contentText(
+    request.messages.filter((turn) => turn.role === "tool").at(-1)?.content ??
+      "",
+  );
 
 const orders = readTool({
   name: "get_order",

@@ -238,7 +238,7 @@ export function createJobStore(
         const existing = state.jobs.find((job) => job.id === parsed.id);
         if (existing) {
           if (
-            existing.input !== parsed.input ||
+            JSON.stringify(existing.input) !== JSON.stringify(parsed.input) ||
             existing.profileId !== parsed.profileId
           )
             throw new JobConflict();

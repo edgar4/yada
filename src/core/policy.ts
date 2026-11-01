@@ -1,5 +1,6 @@
 import type { WriteTool } from "./action.js";
 import type { ReadTool, Tool } from "./contracts.js";
+import { contentText } from "./content.js";
 import { InvalidArguments } from "./tool.js";
 export type ToolPolicy = Readonly<Record<string, "allow" | "ask" | "deny">>;
 export function confirmTool(
@@ -24,7 +25,9 @@ export function confirmTool(
       }),
     execute: async (args, context) => {
       try {
-        return await tool.execute(args, context.identity, context.signal);
+        return contentText(
+          await tool.execute(args, context.identity, context.signal),
+        );
       } catch (error) {
         if (error instanceof InvalidArguments)
           return JSON.stringify({

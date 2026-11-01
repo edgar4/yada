@@ -1,11 +1,24 @@
 import { z } from "zod";
+import { contentSchema, maxImageChars, maxImages } from "../core/content.js";
 import { runResultSchema } from "../core/checkpoint.js";
 import { messageSchema } from "../storage/conversations.js";
 export const jobInputSchema = z.strictObject({
   id: z.string().min(1).max(128),
   profileId: z.string().min(1).max(128),
-  input: z.string().min(1).max(32_000),
+  input: contentSchema.refine(
+    (input) =>
+      typeof input === "string"
+        ? input.length > 0 && input.length <= 32_000
+        : input.length > 0 &&
+          input.reduce(
+            (total, part) =>
+              total + (part.type === "text" ? part.text.length : 0),
+            0,
+          ) <= 32_000,
+    "Invalid job input",
+  ),
 });
+export const maxJobBodyBytes = maxImages * (maxImageChars + 1_024) + 98_304;
 const statusSchema = z.enum([
   "queued",
   "running",
