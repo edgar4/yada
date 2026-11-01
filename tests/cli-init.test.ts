@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
-import { createStarter } from "../src/cli/init.js";
+import { assertNodeVersion, createStarter } from "../src/cli/init.js";
 
 it("copies every starter file except local data and renames gitignore", async () => {
   const root = await mkdtemp(join(tmpdir(), "yada-cli-"));
@@ -28,4 +28,13 @@ it("copies every starter file except local data and renames gitignore", async ()
     await rm(stray, { force: true });
     await rm(root, { recursive: true, force: true });
   }
+});
+
+it("derives the required Node major from engines", () => {
+  expect(() => {
+    assertNodeVersion(">=24.0.0 <25", "20.19.5");
+  }).toThrow("Yada requires Node 24.");
+  expect(() => {
+    assertNodeVersion(">=24.0.0 <25", "24.1.0");
+  }).not.toThrow();
 });

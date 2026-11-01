@@ -41,11 +41,18 @@ export async function runCommand(
   });
 }
 
+export function assertNodeVersion(range: string, version: string) {
+  const required = /\d+/.exec(range)?.[0];
+  if (required && version.split(".")[0] !== required)
+    throw new Error(`Yada requires Node ${required}.`);
+}
+
 export async function createStarter(directory: string) {
   const destination = resolve(directory);
   const manifest = manifestSchema.parse(
     JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8")),
   );
+  assertNodeVersion(manifest.engines.node, process.versions.node);
   try {
     await mkdir(destination, { mode: 0o700 });
   } catch (error) {
