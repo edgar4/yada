@@ -200,11 +200,19 @@ export function createWorker(options: {
         profileId: job.profileId,
         onSuspend: async (result, token) => {
           await recording;
+          const action =
+            result.status === "awaiting_approval"
+              ? await options.storage.actions.load(identity, result.approvalId)
+              : undefined;
           await options.storage.jobs.update(
             identity,
             conversationId,
             job.id,
-            { type: result.status, approvalId: result.approvalId },
+            {
+              type: result.status,
+              approvalId: result.approvalId,
+              ...(action ? { expiresAt: action.expiresAt } : {}),
+            },
             undefined,
             { runId, token },
           );
@@ -313,10 +321,18 @@ export function createWorker(options: {
       });
     } catch (error) {
       if (error instanceof RunLeaseError || shutdown.signal.aborted) return;
-      const attempt = job.attempts + 1;
+      const held = (await options.storage.runs.load(identity, runId))?.lease;
+      if (held && held.token !== token && held.expiresAt > Date.now()) return;
+      const latest = await options.storage.jobs.load(
+        identity,
+        conversationId,
+        job.id,
+      );
+      if (!latest || isTerminal(latest.status)) return;
+      const attempt = latest.attempts + 1;
       const exhausted =
         attempt >= (options.maxAttempts ?? 5) &&
-        job.status !== "reconciling" &&
+        latest.status !== "reconciling" &&
         !(await executing().catch(() => true));
       if (exhausted)
         await options.storage.jobs.update(

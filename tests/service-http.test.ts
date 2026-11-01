@@ -171,6 +171,10 @@ it("serves opaque approval previews and binds decisions to their run", async () 
     expiresAt: Date.now() + 60000,
     status: "pending",
   });
+  await s.storage.jobs.update(s.identity, "chat", "a", {
+    type: "awaiting_approval",
+    approvalId: "approval",
+  });
   const preview = await s.request("/a/approvals/approval");
   expect(preview.status).toBe(200);
   expect(await preview.text()).not.toContain("private");
@@ -196,7 +200,49 @@ it("serves opaque approval previews and binds decisions to their run", async () 
         body: JSON.stringify({ approved: false }),
       })
     ).status,
-  ).toBe(503);
+  ).toBe(409);
+});
+it("rejects approval decisions for runs that are terminal or not awaiting", async () => {
+  const s = await setup();
+  const runId = JSON.stringify(["chat", "a"]);
+  await s.storage.jobs.submit(s.identity, "chat", {
+    id: "a",
+    input: "Hi",
+    profileId: "v1",
+  });
+  await s.storage.actions.propose(s.identity, {
+    id: "approval",
+    runId,
+    callId: "call",
+    tool: "rename",
+    toolVersion: "v1",
+    args: {},
+    preview: "Rename record",
+    version: "1",
+    expiresAt: Date.now() + 60000,
+    status: "pending",
+  });
+  const decide = () =>
+    s.request("/a/approvals/approval/decision", {
+      method: "POST",
+      body: JSON.stringify({ approved: true, remember: "conversation" }),
+    });
+  expect((await decide()).status).toBe(409);
+  await s.storage.jobs.update(s.identity, "chat", "a", {
+    type: "awaiting_approval",
+    approvalId: "approval",
+  });
+  await s.storage.jobs.update(
+    s.identity,
+    "chat",
+    "a",
+    { type: "failed", code: "timeout" },
+    { status: "failed", code: "timeout" },
+  );
+  expect((await decide()).status).toBe(409);
+  expect((await s.storage.actions.load(s.identity, "approval"))?.status).toBe(
+    "pending",
+  );
 });
 it("terminates event streams when access is revoked and hides dependency errors", async () => {
   const s = await setup();
