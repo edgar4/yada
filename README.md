@@ -25,6 +25,14 @@ The core, the Anthropic and OpenAI-compatible providers and the fake provider ne
 
 Using a feature without its package fails with an error naming what to install. Released under the [MIT license](LICENSE).
 
+### Upgrading from 0.2
+
+- `better-sqlite3`, `pg`, `mysql2` and the LangChain packages are optional peer dependencies; install the ones you use (see the table above).
+- `@langchain/anthropic` and `@langchain/openai` are no longer used; Anthropic and OpenAI-compatible providers run on the official SDKs.
+- `ReadTool.execute` returns `Content` (a string or an array of text and image parts) instead of `string`.
+- `temperature` is rejected for `anthropic`; use `effort` instead. See [configuration](docs/configuration.md).
+- `maxContextChars` defaults to 256,000 and service `historyChars` to 128,000.
+
 ## Create an agent
 
 With Node 24, generate a standalone app and install its dependencies:
@@ -56,7 +64,7 @@ Copy `.env.example` to `.env` and enter your provider credentials:
 
 ```dotenv
 YADA_LLM_PROVIDER=anthropic
-YADA_LLM_MODEL=claude-sonnet-4-6
+YADA_LLM_MODEL=claude-opus-5-5
 YADA_LLM_API_KEY=your-anthropic-api-key
 ```
 
