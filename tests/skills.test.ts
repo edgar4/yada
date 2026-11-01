@@ -305,3 +305,24 @@ it("bounds skill counts and aggregate text memory", async () => {
   }
   await expect(f.load()).rejects.toThrow("catalog exceeds");
 });
+
+it("rejects an invalid directory name when frontmatter has no name", () => {
+  expect(() =>
+    parseSkill("---\ndescription: d\n---\nBody", "Bad_Name"),
+  ).toThrow("invalid name");
+});
+it("makes progress when the read limit lands inside a surrogate pair", async () => {
+  const f = await fixture();
+  await writeFile(join(f.directory, "references/emoji.md"), "😀😀");
+  const catalog = await f.load();
+  const tool = catalog.tools.find((t) => t.spec.name === "yada_read_skill");
+  const out = JSON.parse(
+    (await tool?.execute(
+      { name: "support", path: "references/emoji.md", offset: 0, limit: 1 },
+      identity,
+      AbortSignal.timeout(5000),
+    )) as string,
+  ) as { content: string; nextOffset: number };
+  expect(out.content).toBe("😀");
+  expect(out.nextOffset).toBe(2);
+});

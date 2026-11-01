@@ -145,15 +145,18 @@ it("fails closed when reconnect discovery changes and permits a later clean reco
     .mockResolvedValueOnce(changed)
     .mockRejectedValueOnce(new Error("offline"))
     .mockResolvedValueOnce(recovered);
+  vi.useFakeTimers({ toFake: ["Date"] });
   const resilient = await reconnectingMcp(connect);
   first.disconnect();
   await expect(
     (resilient.tools[0] as ReadTool).execute({}, identity, signal()),
   ).rejects.toThrow("changed");
+  vi.setSystemTime(Date.now() + 31_000);
   expect(changed.close).toHaveBeenCalledOnce();
   await expect(
     (resilient.tools[0] as ReadTool).authorize(identity),
   ).rejects.toThrow("offline");
+  vi.setSystemTime(Date.now() + 31_000);
   expect(
     await (resilient.tools[0] as ReadTool).execute(
       { id: "a" },
@@ -161,6 +164,27 @@ it("fails closed when reconnect discovery changes and permits a later clean reco
       signal(),
     ),
   ).toBe("ok");
+  vi.useRealTimers();
+  await resilient.close();
+});
+it("rethrows a failed reconnect without reconnecting until the backoff passes", async () => {
+  const first = connection();
+  const connect = vi
+    .fn()
+    .mockResolvedValueOnce(first)
+    .mockRejectedValueOnce(new Error("offline"))
+    .mockResolvedValueOnce(connection());
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const resilient = await reconnectingMcp(connect);
+  const tool = resilient.tools[0] as ReadTool;
+  first.disconnect();
+  for (let i = 0; i < 3; i++)
+    await expect(tool.authorize(identity)).rejects.toThrow("offline");
+  expect(connect).toHaveBeenCalledTimes(2);
+  vi.setSystemTime(Date.now() + 31_000);
+  expect(await tool.authorize(identity)).toBe(true);
+  expect(connect).toHaveBeenCalledTimes(3);
+  vi.useRealTimers();
   await resilient.close();
 });
 it("handles connections without liveness hooks", async () => {

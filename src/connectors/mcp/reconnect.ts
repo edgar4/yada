@@ -31,18 +31,26 @@ export async function reconnectingMcp(
   let closed = false;
   const isClosed = () => closed;
   let pending: Promise<void> | undefined;
+  let failure: { error: unknown; until: number } | undefined;
   async function ready(callSignal: AbortSignal) {
     callSignal.throwIfAborted();
     if (closed) throw new Error("MCP connection closed");
     if (current.isConnected?.() === false) {
+      if (failure && Date.now() < failure.until) throw failure.error;
       pending ??= (async () => {
-        await current.close();
-        const next = await connect(AbortSignal.timeout(10_000));
-        if (isClosed() || contract(next) !== expected) {
-          await next.close();
-          throw new Error("MCP discovery changed");
+        try {
+          await current.close();
+          const next = await connect(AbortSignal.timeout(10_000));
+          if (isClosed() || contract(next) !== expected) {
+            await next.close();
+            throw new Error("MCP discovery changed");
+          }
+          current = next;
+          failure = undefined;
+        } catch (error) {
+          failure = { error, until: Date.now() + 30_000 };
+          throw error;
         }
-        current = next;
       })().finally(() => {
         pending = undefined;
       });
