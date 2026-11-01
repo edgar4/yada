@@ -59,12 +59,15 @@ type ToolOutcome =
   | { content: Content; failed: boolean }
   | { stop: RunResult }
   | { terminal: TerminalResult };
+const emitTo = (hooks: RunHooks | undefined, event: AgentEvent) => {
+  void Promise.resolve()
+    .then(() => hooks?.onEvent?.(event))
+    .catch(() => undefined);
+};
 export async function run(options: RunOptions): Promise<RunResult> {
   const result = await runLoop(options);
   if (result.status === "awaiting_approval" || result.status === "reconciling")
-    void Promise.resolve()
-      .then(() => options.hooks?.onEvent?.({ type: "run_suspended", result }))
-      .catch(() => undefined);
+    emitTo(options.hooks, { type: "run_suspended", result });
   return result;
 }
 async function runLoop(options: RunOptions): Promise<RunResult> {
@@ -103,9 +106,7 @@ async function runLoop(options: RunOptions): Promise<RunResult> {
     }
   };
   const emit = (event: AgentEvent) => {
-    void Promise.resolve()
-      .then(() => hooks?.onEvent?.(event))
-      .catch(() => undefined);
+    emitTo(hooks, event);
   };
   const finish = async (result: TerminalResult): Promise<RunResult> => {
     try {
