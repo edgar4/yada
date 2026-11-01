@@ -13,6 +13,7 @@
     "demo": "node --import tsx examples/basic.ts",
     "demo:live": "node --env-file-if-exists=.env --import tsx examples/live.ts",
     "prepack": "npm run build",
+    "evals": "node --env-file-if-exists=.env --import tsx scripts/evals.mjs",
     "test:package": "node scripts/package-smoke.mjs",
     "test:deployment": "node scripts/deployment-smoke.mjs",
     "starter:init": "node examples/starter/init.mjs",
