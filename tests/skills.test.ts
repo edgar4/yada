@@ -147,7 +147,8 @@ it("supports multiline metadata and reports vendor extensions without granting c
     description: "Answer support questions",
     compatibility: "Needs order tools",
   });
-  expect(parsed.warnings).toHaveLength(2);
+  expect(parsed.allowedTools).toEqual(["Bash"]);
+  expect(parsed.warnings).toHaveLength(1);
 });
 
 it.each([
@@ -165,9 +166,11 @@ it.each([
 
 it("ignores absent roots and rejects duplicate skill names", async () => {
   const f = await fixture();
-  expect(
-    await loadSkills({ directories: [join(f.root, "absent")], authorize }),
-  ).toEqual({ system: "", tools: [], warnings: [] });
+  const empty = await loadSkills({
+    directories: [join(f.root, "absent")],
+    authorize,
+  });
+  expect([empty.system, empty.tools, empty.warnings]).toEqual(["", [], []]);
   await expect(
     loadSkills({ directories: [f.root, f.directory], authorize }),
   ).rejects.toThrow("Duplicate skill");
