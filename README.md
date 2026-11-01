@@ -12,9 +12,13 @@ A plug-and-play AI agent harness for TypeScript backends. Bring any model, any M
 
 [Talon](https://talonhr.eu) uses Yada. Talon is hiring software that gives employers and recruitment agencies one shared workspace for roles, candidates, interviews and offers. Using Yada in production? Open a pull request to add your project here.
 
-## Create an agent
+## Get started
 
-With Node 24, generate a complete app with storage, skills, typed tools and the chat widget:
+Two ways in, both on Node 24.
+
+### Start a new agent app
+
+Generate a complete app with storage, skills, typed tools and the chat widget:
 
 ```sh
 npx @edgaralochi/yada init my-agent
@@ -23,9 +27,7 @@ cd my-agent
 
 Set your provider credentials in `.env.starter`, then run `npm start`. See the [starter guide](docs/starter.md).
 
-## Install
-
-Requires Node 24:
+### Add Yada to an existing backend
 
 ```sh
 npm install @edgaralochi/yada
@@ -42,25 +44,7 @@ The core and the Anthropic and OpenAI-compatible providers need nothing else. In
 | MySQL storage              | `npm install mysql2`                                  |
 | Gemini, `chatModelAdapter` | `npm install @langchain/core @langchain/google-genai` |
 
-Using a feature without its package fails with an error naming what to install.
-
-## Connect your model provider
-
-Copy `.env.example` to `.env` and enter your provider credentials:
-
-```dotenv
-YADA_LLM_PROVIDER=anthropic
-YADA_LLM_MODEL=claude-opus-5-5
-YADA_LLM_API_KEY=your-anthropic-api-key
-```
-
-Run the catalog example with a live model:
-
-```sh
-npm run demo:live
-```
-
-The key belongs to your selected provider; live requests may incur usage charges. Keep `.env` private. See [provider configuration](docs/configuration.md).
+Using a feature without its package fails with an error naming what to install. See [provider configuration](docs/configuration.md) to choose a model.
 
 ## Documentation
 
@@ -85,7 +69,15 @@ npm ci
 npm run demo
 ```
 
-The demo runs a catalog lookup without an API key. For the full starter, run `npm run starter:init`, add credentials to `.env.starter`, then `npm run starter`.
+The demo runs a catalog lookup without an API key. To run it against a live model, copy `.env.example` to `.env`, set your provider credentials and run `npm run demo:live`:
+
+```dotenv
+YADA_LLM_PROVIDER=anthropic
+YADA_LLM_MODEL=claude-opus-5-5
+YADA_LLM_API_KEY=your-anthropic-api-key
+```
+
+Live requests use your provider account and may incur charges; keep `.env` private. For the full starter, run `npm run starter:init`, add credentials to `.env.starter`, then `npm run starter`.
 
 Before opening a pull request:
 
