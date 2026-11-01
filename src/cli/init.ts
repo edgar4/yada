@@ -11,6 +11,7 @@ const manifestSchema = z.object({
   engines: z.object({ node: z.string() }),
   files: z.array(z.string()),
   dependencies: z.object({ zod: z.string() }),
+  peerDependencies: z.object({ "better-sqlite3": z.string() }),
   devDependencies: z.object({ tsx: z.string(), esbuild: z.string() }),
 });
 
@@ -76,6 +77,7 @@ export async function createStarter(directory: string) {
           },
           dependencies: {
             [manifest.name]: manifest.version,
+            "better-sqlite3": manifest.peerDependencies["better-sqlite3"],
             zod: manifest.dependencies.zod,
           },
           devDependencies: {

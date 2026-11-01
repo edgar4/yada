@@ -12,7 +12,18 @@ Requires Node 24:
 npm install @edgaralochi/yada
 ```
 
-Import the runtime from `@edgaralochi/yada`, the browser client from `@edgaralochi/yada/client`, and the widget from `@edgaralochi/yada/widget`. Released under the [MIT license](LICENSE).
+Import the runtime from `@edgaralochi/yada`, the browser client from `@edgaralochi/yada/client`, and the widget from `@edgaralochi/yada/widget`. Narrower entry points are `/providers`, `/storage`, `/mcp`, `/skills` and `/service`; the root exports all of them.
+
+The core, the Anthropic and OpenAI-compatible providers and the fake provider need nothing else. Install only what you use:
+
+| Feature                    | Install                                               |
+| -------------------------- | ----------------------------------------------------- |
+| SQLite storage (default)   | `npm install better-sqlite3`                          |
+| PostgreSQL storage         | `npm install pg`                                      |
+| MySQL storage              | `npm install mysql2`                                  |
+| Gemini, `chatModelAdapter` | `npm install @langchain/core @langchain/google-genai` |
+
+Using a feature without its package fails with an error naming what to install. Released under the [MIT license](LICENSE).
 
 ## Create an agent
 

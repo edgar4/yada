@@ -1,5 +1,6 @@
 import knex from "knex";
 import { z } from "zod";
+import { knexClient } from "../optional.js";
 import { readTool } from "../core/tool.js";
 import { abortable } from "../core/abort.js";
 import type { Identity } from "../core/contracts.js";
@@ -25,12 +26,7 @@ export type ReadDatabaseConfig = z.infer<typeof configuration>;
 export function createReadDatabase(config: ReadDatabaseConfig) {
   const settings = configuration.parse(config);
   const db = knex({
-    client:
-      settings.driver === "sqlite"
-        ? "better-sqlite3"
-        : settings.driver === "postgres"
-          ? "pg"
-          : "mysql2",
+    client: knexClient(settings.driver),
     connection:
       settings.driver === "sqlite"
         ? { filename: settings.filename }
