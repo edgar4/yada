@@ -31,7 +31,7 @@ try {
     "index",
     "client/index",
     "widget/index",
-    "skills/index",
+    "entries/skills",
     "entries/providers",
     "entries/storage",
     "entries/mcp",
