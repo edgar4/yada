@@ -22,7 +22,7 @@ export type McpValidate = (
   name: string,
   args: unknown,
 ) => Record<string, unknown>;
-function requestFailure(error: unknown): Error {
+export function requestFailure(error: unknown): Error {
   return new Error(
     error instanceof Error && error.message === "MCP OAuth request failed"
       ? "MCP OAuth request failed"

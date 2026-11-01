@@ -51,7 +51,12 @@ it("closes a replacement created while shutdown is pending", async () => {
     isConnected: () => false,
     close: vi.fn(() => Promise.resolve()),
   };
-  const next = { tools: [tool], close: vi.fn(() => Promise.resolve()) };
+  const next = {
+    tools: [tool],
+    close: vi.fn(() => Promise.resolve()),
+    prompts: vi.fn(),
+    getPrompt: vi.fn(),
+  };
   let release: (connection: McpConnection) => void = () => undefined;
   const waiting = new Promise<McpConnection>((resolve) => {
     release = resolve;
@@ -94,6 +99,8 @@ function connection(description = "lookup") {
   });
   return {
     tools: [tool],
+    prompts: vi.fn(() => Promise.resolve([])),
+    getPrompt: vi.fn(() => Promise.resolve("")),
     isConnected: () => connected,
     disconnect() {
       connected = false;
@@ -189,7 +196,12 @@ it("rethrows a failed reconnect without reconnecting until the backoff passes", 
 });
 it("handles connections without liveness hooks", async () => {
   const original = connection();
-  const basic: McpConnection = { tools: original.tools, close: original.close };
+  const basic: McpConnection = {
+    tools: original.tools,
+    close: original.close,
+    prompts: original.prompts,
+    getPrompt: original.getPrompt,
+  };
   const connect = vi.fn(() => Promise.resolve(basic));
   const resilient = await reconnectingMcp(connect);
   expect(resilient.isConnected?.()).toBe(true);
@@ -201,5 +213,22 @@ it("handles connections without liveness hooks", async () => {
     ),
   ).toBe("ok");
   expect(connect).toHaveBeenCalledOnce();
+  await resilient.close();
+});
+it("reconnects with the connection's configured timeout", async () => {
+  const first = { ...connection(), timeoutMs: 50 };
+  const aborted: boolean[] = [];
+  const connect = vi.fn(async (signal: AbortSignal) => {
+    if (connect.mock.calls.length === 1) return first;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    aborted.push(signal.aborted);
+    return connection();
+  });
+  const resilient = await reconnectingMcp(connect);
+  first.disconnect();
+  const tool = resilient.tools[0];
+  if (tool?.effect !== "read") throw new Error("expected read");
+  await tool.execute({ id: "a" }, identity, AbortSignal.timeout(5000));
+  expect(aborted).toEqual([true]);
   await resilient.close();
 });

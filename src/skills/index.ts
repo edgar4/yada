@@ -52,9 +52,7 @@ async function scan(directories: readonly string[]): Promise<Snapshot> {
     for (const path of await skillDirectories(directory)) {
       const name = basename(path);
       const files = await skillFiles(path);
-      const source = files.get("SKILL.md");
-      if (source === undefined)
-        throw new Error(`Skill ${name}: missing instructions`);
+      const source = files.get("SKILL.md") as string;
       if (skills.has(name)) throw new Error(`Duplicate skill name: ${name}`);
       if (skills.size >= 50)
         throw new Error("At most 50 skills may be loaded per profile");
@@ -100,15 +98,14 @@ type SkillOptions = {
   authorize: (identity: Identity) => Promise<boolean>;
 };
 
-export const loadSkills = loadCatalog as {
-  (
-    options: SkillOptions & { runner: SkillScriptRunner },
-  ): Promise<SkillCatalog<Tool>>;
-  (options: SkillOptions & { runner?: undefined }): Promise<SkillCatalog>;
-};
-
-async function loadCatalog(
-  options: SkillOptions & { runner?: SkillScriptRunner },
+export function loadSkills(
+  options: SkillOptions & { runner: SkillScriptRunner },
+): Promise<SkillCatalog<Tool>>;
+export function loadSkills(
+  options: SkillOptions & { runner?: undefined },
+): Promise<SkillCatalog>;
+export async function loadSkills(
+  options: SkillOptions & { runner?: SkillScriptRunner | undefined },
 ): Promise<SkillCatalog<Tool>> {
   let state = await scan(options.directories);
   const { runner } = options;

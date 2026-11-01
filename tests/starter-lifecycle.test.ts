@@ -43,7 +43,12 @@ async function setup() {
 
 it("closes earlier MCP connections when a later connection fails during startup", async () => {
   const close = vi.fn(() => Promise.resolve());
-  const connection: McpConnection<Tool> = { tools: [], close };
+  const connection: McpConnection<Tool> = {
+    tools: [],
+    close,
+    prompts: vi.fn(),
+    getPrompt: vi.fn(),
+  };
   vi.mocked(connectMcp)
     .mockResolvedValueOnce(connection)
     .mockRejectedValueOnce(new Error("offline"));
@@ -55,8 +60,18 @@ it("closes every MCP connection even when worker shutdown or another close fails
   const first = vi.fn(() => Promise.reject(new Error("close failed")));
   const second = vi.fn(() => Promise.resolve());
   vi.mocked(connectMcp)
-    .mockResolvedValueOnce({ tools: [], close: first })
-    .mockResolvedValueOnce({ tools: [], close: second });
+    .mockResolvedValueOnce({
+      tools: [],
+      close: first,
+      prompts: vi.fn(),
+      getPrompt: vi.fn(),
+    })
+    .mockResolvedValueOnce({
+      tools: [],
+      close: second,
+      prompts: vi.fn(),
+      getPrompt: vi.fn(),
+    });
   const app = await createStarterApp(await setup());
   vi.spyOn(app.worker, "stop").mockRejectedValueOnce(
     new Error("storage offline"),

@@ -81,8 +81,8 @@
       "import": "./dist/entries/mcp.js"
     },
     "./skills": {
-      "types": "./dist/skills/index.d.ts",
-      "import": "./dist/skills/index.js"
+      "types": "./dist/entries/skills.d.ts",
+      "import": "./dist/entries/skills.js"
     },
     "./service": {
       "types": "./dist/entries/service.d.ts",
@@ -94,20 +94,11 @@
     "docs",
     "README.md",
     "LICENSE",
-    "examples/starter/README.md",
-    "examples/starter/app.ts",
-    "examples/starter/auth.ts",
-    "examples/starter/build.mjs",
-    "examples/starter/client.ts",
-    "examples/starter/config.ts",
-    "examples/starter/cookies.ts",
-    "examples/starter/gitignore",
-    "examples/starter/init.mjs",
-    "examples/starter/public/index.html",
-    "examples/starter/public/style.css",
-    "examples/starter/server.ts",
-    "examples/starter/skills/README.md",
-    "examples/starter/tools.ts"
+    "examples/starter",
+    "!examples/starter/**/.env*",
+    "!examples/starter/**/*.sqlite*",
+    "!examples/starter/**/*.db*",
+    "!examples/starter/data"
   ],
   "description": "TypeScript runtime for in-app AI agents, with typed tools, configurable providers, approvals, and durable conversations.",
   "license": "MIT",

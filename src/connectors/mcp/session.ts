@@ -7,7 +7,12 @@ import {
 import type { Identity, ReadTool, Tool } from "../../core/contracts.js";
 import { abortable } from "../../core/abort.js";
 import { confirmTool } from "../../core/policy.js";
-import { mcpConfig, type McpConfig, type McpReadConfig } from "./config.js";
+import {
+  mcpConfig,
+  type McpConfig,
+  type McpReadConfig,
+  type McpSettings,
+} from "./config.js";
 import { canonical, discoverMcpTools } from "./discovery.js";
 import { promptApi, resourceTools, type McpPrompt } from "./resources.js";
 import { mcpInvoker, readResult } from "./rpc.js";
@@ -20,13 +25,16 @@ export type McpConnection<T extends Tool = ReadTool> = Readonly<{
   tools: readonly T[];
   close: () => Promise<void>;
   isConnected?: () => boolean;
-  prompts?: (signal?: AbortSignal) => Promise<McpPrompt[]>;
-  getPrompt?: (
+  timeoutMs?: number;
+  prompts: (identity: Identity, signal?: AbortSignal) => Promise<McpPrompt[]>;
+  getPrompt: (
+    identity: Identity,
     name: string,
     args?: Record<string, string>,
     signal?: AbortSignal,
   ) => Promise<string>;
 }>;
+export const clientVersion = "0.2.0";
 export function connectMcpTransport(
   config: McpReadConfig,
   access: McpAccess,
@@ -45,9 +53,16 @@ export async function connectMcpTransport(
   transport: Transport,
   signal: AbortSignal,
 ): Promise<McpConnection<Tool>> {
-  const settings = mcpConfig.parse(config);
+  return connectParsed(mcpConfig.parse(config), access, transport, signal);
+}
+export async function connectParsed(
+  settings: McpSettings,
+  access: McpAccess,
+  transport: Transport,
+  signal: AbortSignal,
+): Promise<McpConnection<Tool>> {
   const owner = Object.freeze({ ...access.identity });
-  const client = new Client({ name: "yada", version: "0.2.0" });
+  const client = new Client({ name: "yada", version: clientVersion });
   let closed = false;
   let connected = false;
   client.onclose = () => {
@@ -201,6 +216,21 @@ export async function connectMcpTransport(
       ...reads.map(read),
       ...confirms.map((remote) => confirmTool(read(remote))),
     ];
+    const writeTools = [...writes].map(([name, mapping]) => {
+      const remote = required(name);
+      return mcpWriteTool({
+        config: settings,
+        mapping,
+        remote,
+        prepare: required(mapping.prepareTool),
+        receipt: required(mapping.receiptTool),
+        spec: spec(remote),
+        owner,
+        authorize,
+        invoke: rpc.call,
+        validate: rpc.validate,
+      });
+    });
     if (settings.resources) {
       const extra = resourceTools(settings.name, {
         client,
@@ -208,33 +238,25 @@ export async function connectMcpTransport(
         authorize,
         fresh,
       });
-      const names = new Set(tools.map((tool) => tool.spec.name));
+      const names = new Set(
+        [...tools, ...writeTools].map((tool) => tool.spec.name),
+      );
       if (extra.some((tool) => names.has(tool.spec.name)))
         throw new Error("MCP resource tool name conflicts with a remote tool");
       tools.push(...extra);
     }
-    for (const [name, mapping] of writes) {
-      const remote = required(name);
-      tools.push(
-        mcpWriteTool({
-          config: settings,
-          mapping,
-          remote,
-          prepare: required(mapping.prepareTool),
-          receipt: required(mapping.receiptTool),
-          spec: spec(remote),
-          owner,
-          authorize,
-          invoke: rpc.call,
-          validate: rpc.validate,
-        }),
-      );
-    }
+    tools.push(...writeTools);
     return {
       tools,
       close,
       isConnected: () => connected && !closed && !stale,
-      ...promptApi({ client, timeout: settings.timeoutMs, fresh }),
+      timeoutMs: settings.timeoutMs,
+      ...promptApi({
+        client,
+        timeout: settings.timeoutMs,
+        authorize,
+        fresh,
+      }),
     };
   } catch (error) {
     await close();

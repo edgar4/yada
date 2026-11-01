@@ -1,3 +1,6 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { createFakeProvider } from "../src/index.js";
 import { runScenario } from "../evals/run.js";
@@ -25,4 +28,26 @@ it("reports failed assertions", async () => {
   );
   expect(result.pass).toBe(false);
   expect(result.failures).toHaveLength(3);
+});
+
+it("fails when --scenario matches nothing", async () => {
+  const run = (name: string) =>
+    promisify(execFile)(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        fileURLToPath(new URL("../scripts/evals.mjs", import.meta.url)),
+        "--provider",
+        "fake",
+        "--scenario",
+        name,
+      ],
+      { encoding: "utf8" },
+    );
+  await expect(run("no such scenario")).rejects.toMatchObject({
+    code: 2,
+    stderr: expect.stringContaining("No scenario") as unknown,
+  });
+  await expect(run(scenarios[0]?.name ?? "")).resolves.toBeDefined();
 });

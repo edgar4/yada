@@ -11,7 +11,7 @@ const metadata = z.looseObject({
   description: z.string().trim().min(1).max(1024),
   license: z.string().optional(),
   compatibility: z.string().min(1).max(500).optional(),
-  metadata: z.record(z.string(), z.string()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   "allowed-tools": z.union([z.string(), z.array(z.string())]).optional(),
 });
 
@@ -41,15 +41,7 @@ export function parseSkill(source: string, directoryName: string) {
       ? (allowed.match(/[^\s,(]+(?:\([^)]*\))?/g) ?? [])
       : (allowed ?? []);
   const unsupported = Object.keys(parsed.data).filter(
-    (key) =>
-      ![
-        "name",
-        "description",
-        "license",
-        "compatibility",
-        "metadata",
-        "allowed-tools",
-      ].includes(key),
+    (key) => !(key in metadata.shape),
   );
   return {
     name,

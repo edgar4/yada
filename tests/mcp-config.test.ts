@@ -23,3 +23,11 @@ it.each([
     "Invalid YADA_MCP_SERVERS configuration",
   );
 });
+it("keeps the MCP client version in step with the package", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const manifest = JSON.parse(
+    await readFile(new URL("../package.json", import.meta.url), "utf8"),
+  ) as { version: string };
+  const { clientVersion } = await import("../src/connectors/mcp/session.js");
+  expect(clientVersion).toBe(manifest.version);
+});

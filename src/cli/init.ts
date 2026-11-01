@@ -1,5 +1,13 @@
-import { mkdir, readFile, copyFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import {
+  copyFile,
+  cp,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { z } from "zod";
@@ -9,7 +17,6 @@ const manifestSchema = z.object({
   name: z.literal("@edgaralochi/yada"),
   version: z.string().min(1),
   engines: z.object({ node: z.string() }),
-  files: z.array(z.string()),
   dependencies: z.object({ zod: z.string() }),
   peerDependencies: z.object({ "better-sqlite3": z.string() }),
   devDependencies: z.object({ tsx: z.string(), esbuild: z.string() }),
@@ -34,11 +41,18 @@ export async function runCommand(
   });
 }
 
+export function assertNodeVersion(range: string, version: string) {
+  const required = /\d+/.exec(range)?.[0];
+  if (required && version.split(".")[0] !== required)
+    throw new Error(`Yada requires Node ${required}.`);
+}
+
 export async function createStarter(directory: string) {
   const destination = resolve(directory);
   const manifest = manifestSchema.parse(
     JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8")),
   );
+  assertNodeVersion(manifest.engines.node, process.versions.node);
   try {
     await mkdir(destination, { mode: 0o700 });
   } catch (error) {
@@ -51,17 +65,14 @@ export async function createStarter(directory: string) {
   }
   try {
     await copyFile(join(packageRoot, "LICENSE"), join(destination, "LICENSE"));
-    for (const file of manifest.files.filter((file) =>
-      file.startsWith("examples/starter/"),
-    )) {
-      const relative = file.slice("examples/starter/".length);
-      const target = join(
-        destination,
-        relative === "gitignore" ? ".gitignore" : relative,
-      );
-      await mkdir(dirname(target), { recursive: true });
-      await copyFile(join(packageRoot, file), target);
-    }
+    await cp(join(packageRoot, "examples/starter"), destination, {
+      recursive: true,
+      filter: (source) => !/^\.env|\.(?:sqlite|db)/.test(basename(source)),
+    });
+    await rename(
+      join(destination, "gitignore"),
+      join(destination, ".gitignore"),
+    );
     await writeFile(
       join(destination, "package.json"),
       JSON.stringify(

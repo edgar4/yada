@@ -29,6 +29,7 @@ export async function reconnectingMcp(
   let current = await connect(signal);
   const expected = contract(current);
   let closed = false;
+  const deadline = () => AbortSignal.timeout(current.timeoutMs ?? 10_000);
   const isClosed = () => closed;
   let pending: Promise<void> | undefined;
   let failure: { error: unknown; until: number } | undefined;
@@ -40,7 +41,7 @@ export async function reconnectingMcp(
       pending ??= (async () => {
         try {
           await current.close();
-          const next = await connect(AbortSignal.timeout(10_000));
+          const next = await connect(deadline());
           if (isClosed() || contract(next) !== expected) {
             await next.close();
             throw new Error("MCP discovery changed");
@@ -69,7 +70,7 @@ export async function reconnectingMcp(
     };
     const authorize = async (identity: Identity) => {
       if (closed) return false;
-      await ready(AbortSignal.timeout(10_000));
+      await ready(deadline());
       return find().authorize(identity);
     };
     async function invoke<T>(
@@ -126,14 +127,13 @@ export async function reconnectingMcp(
   return {
     tools,
     isConnected: () => !closed && (current.isConnected?.() ?? true),
-    prompts: async (callSignal) => {
-      await ready(callSignal ?? AbortSignal.timeout(10_000));
-      return current.prompts?.(callSignal) ?? [];
+    prompts: async (identity, callSignal) => {
+      await ready(callSignal ?? deadline());
+      return current.prompts(identity, callSignal);
     },
-    getPrompt: async (name, args, callSignal) => {
-      await ready(callSignal ?? AbortSignal.timeout(10_000));
-      if (!current.getPrompt) throw new Error("MCP prompts unavailable");
-      return current.getPrompt(name, args, callSignal);
+    getPrompt: async (identity, name, args, callSignal) => {
+      await ready(callSignal ?? deadline());
+      return current.getPrompt(identity, name, args, callSignal);
     },
     async close() {
       closed = true;

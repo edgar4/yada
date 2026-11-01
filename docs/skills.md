@@ -95,7 +95,7 @@ Inspect `skills.warnings` when composing your host; the starter prints them at s
 
 Load only skills reviewed by the host developer. Catalog descriptions are visible to every user of that profile; use separate profiles/catalogs for private tenant-specific skills. The authorization callback gates resource reads, not catalog visibility. Skill reads use existing tool-call, context and cancellation limits; skills cannot add permissions, bypass write approvals, or create new tools.
 
-The loader reads trusted local directories, not uploaded archives or remote repositories. It rejects symlinks within discovered roots, malformed metadata, invalid UTF-8 and oversized text. Limits are 50 skills, eight directory levels, 256 entries per skill, 64 KiB per text file, 2 MiB of text per skill and 8 MiB per catalog. Hidden files are excluded. Supported text extensions are `.md`, `.txt`, `.json`, `.yaml`, `.yml`, `.csv`, `.py`, `.sh`, `.js`, `.mjs`, `.ts`, `.html`, `.css` and `.svg`.
+The loader reads trusted local directories, not uploaded archives or remote repositories. It rejects symlinks within discovered roots, malformed metadata, invalid UTF-8 and oversized text. Limits are 50 skills, eight directory levels, 256 directory entries per skill (including hidden and non-text files), 64 KiB per text file, 2 MiB of text per skill and 8 MiB per catalog. Hidden files are excluded. Supported text extensions are `.md`, `.txt`, `.json`, `.yaml`, `.yml`, `.csv`, `.py`, `.sh`, `.js`, `.mjs`, `.ts`, `.html`, `.css` and `.svg`.
 
 ## Chunked reads
 
