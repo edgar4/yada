@@ -17,7 +17,7 @@ import {
 } from "./conversations.js";
 import { StorageConflict, type recordStore } from "./records.js";
 import { withRunLease, RunLeaseError, type RunOwnership } from "./runs.js";
-const stateSchema = z.object({
+export const conversationStateSchema = z.object({
   identity: identitySchema,
   id: z.string(),
   messages: z.array(messageSchema),
@@ -58,6 +58,12 @@ export interface JobStore {
     lease?: RunOwnership,
     turns?: readonly Turn[],
   ): Promise<Job>;
+  resume(
+    identity: Identity,
+    conversationId: string,
+    id: string,
+    approvalId: string,
+  ): Promise<boolean>;
   retry(identity: Identity, conversationId: string, id: string): Promise<Job>;
   cancel(identity: Identity, conversationId: string, id: string): Promise<void>;
   pending(after?: string): Promise<{
@@ -75,12 +81,30 @@ export function createJobStore(
 ): JobStore {
   const stateFrom = (value: unknown, identity: Identity, id: string) =>
     value === undefined || Array.isArray(value)
-      ? stateSchema.parse({ identity, id, messages: value ?? [], jobs: [] })
-      : stateSchema.parse(value);
+      ? conversationStateSchema.parse({
+          identity,
+          id,
+          messages: value ?? [],
+          jobs: [],
+        })
+      : conversationStateSchema.parse(value);
+  const jobIn = (
+    value: unknown,
+    identity: Identity,
+    conversationId: string,
+    id: string,
+  ) => {
+    const state = stateFrom(value, identity, conversationId);
+    const job = state.jobs.find((item) => item.id === id);
+    if (!job) throw new Error("Run not found");
+    return { state, job };
+  };
   const hasActive = (value: unknown) =>
     !Array.isArray(value) &&
     value !== undefined &&
-    stateSchema.parse(value).jobs.some((job) => !isTerminal(job.status));
+    conversationStateSchema
+      .parse(value)
+      .jobs.some((job) => !isTerminal(job.status));
   async function enqueue(tx: ReturnType<typeof recordStore>, key: string) {
     const row = await tx.read(queueKey);
     const queue = row
@@ -93,27 +117,23 @@ export function createJobStore(
       row?.revision ?? 0,
     );
   }
-  async function untrack(key: string) {
-    for (let attempt = 0; attempt < 20; attempt++) {
-      try {
-        await records.transaction(async (tx) => {
-          const row = await tx.read(queueKey);
-          if (!row) return;
-          const queue = queueSchema.parse(row.value);
-          if (!queue.keys.includes(key)) return;
-          if (hasActive((await tx.read(key))?.value)) return;
-          await tx.write(
-            queueKey,
-            { ...queue, keys: queue.keys.filter((item) => item !== key) },
-            row.revision,
-          );
-        });
-        return;
-      } catch (error) {
+  const untrack = (key: string) =>
+    records
+      .transact(async (tx) => {
+        const row = await tx.read(queueKey);
+        if (!row) return;
+        const queue = queueSchema.parse(row.value);
+        if (!queue.keys.includes(key)) return;
+        if (hasActive((await tx.read(key))?.value)) return;
+        await tx.write(
+          queueKey,
+          { ...queue, keys: queue.keys.filter((item) => item !== key) },
+          row.revision,
+        );
+      })
+      .catch((error: unknown) => {
         if (!(error instanceof StorageConflict)) throw error;
-      }
-    }
-  }
+      });
   async function backfill() {
     const keys: string[] = [];
     for (let after = ""; ;) {
@@ -122,7 +142,7 @@ export function createJobStore(
       after = rows[rows.length - 1]?.id ?? "";
       for (const row of rows)
         if (hasActive(row.value)) {
-          const state = stateSchema.parse(row.value);
+          const state = conversationStateSchema.parse(row.value);
           keys.push(conversationKey(state.identity, state.id));
         }
     }
@@ -184,9 +204,7 @@ export function createJobStore(
   ) => {
     const key = conversationKey(identity, conversationId);
     const change = (value: unknown) => {
-      const state = stateFrom(value, identity, conversationId);
-      const job = state.jobs.find((item) => item.id === id);
-      if (!job) throw new Error("Run not found");
+      const { state, job } = jobIn(value, identity, conversationId, id);
       if (isTerminal(job.status)) return { value: state, result: job };
       append(job, event);
       if (outcome) {
@@ -228,48 +246,40 @@ export function createJobStore(
     submit: async (identity, conversationId, input) => {
       const parsed = jobInputSchema.parse(input);
       const key = conversationKey(identity, conversationId);
-      for (let attempt = 0; attempt < 20; attempt++) {
-        try {
-          return await records.transaction(async (tx) => {
-            const record = await tx.read(key);
-            const state = stateFrom(record?.value, identity, conversationId);
-            if (state.deleted) throw new Error("Conversation erased");
-            if (state.retiredRuns.includes(parsed.id)) throw new JobConflict();
-            const existing = state.jobs.find((job) => job.id === parsed.id);
-            if (existing) {
-              if (
-                JSON.stringify(existing.input) !==
-                  JSON.stringify(parsed.input) ||
-                existing.profileId !== parsed.profileId
-              )
-                throw new JobConflict();
-              if (!isTerminal(existing.status)) await enqueue(tx, key);
-              return existing;
-            }
-            if (state.jobs.some((job) => !isTerminal(job.status)))
-              throw new JobConflict();
-            const job: Job = {
-              ...parsed,
-              availableAt: 0,
-              attempts: 0,
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
-              status: "queued",
-              cancelRequested: false,
-              history: state.messages,
-              events: [],
-            };
-            append(job, { type: "queued" });
-            state.jobs.push(job);
-            await tx.write(key, state, record?.revision ?? 0);
-            await enqueue(tx, key);
-            return job;
-          });
-        } catch (error) {
-          if (!(error instanceof StorageConflict)) throw error;
+      return records.transact(async (tx) => {
+        const record = await tx.read(key);
+        const state = stateFrom(record?.value, identity, conversationId);
+        if (state.deleted) throw new Error("Conversation erased");
+        if (state.retiredRuns.includes(parsed.id)) throw new JobConflict();
+        const existing = state.jobs.find((job) => job.id === parsed.id);
+        if (existing) {
+          if (
+            JSON.stringify(existing.input) !== JSON.stringify(parsed.input) ||
+            existing.profileId !== parsed.profileId
+          )
+            throw new JobConflict();
+          if (!isTerminal(existing.status)) await enqueue(tx, key);
+          return existing;
         }
-      }
-      throw new StorageConflict();
+        if (state.jobs.some((job) => !isTerminal(job.status)))
+          throw new JobConflict();
+        const job: Job = {
+          ...parsed,
+          availableAt: 0,
+          attempts: 0,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          status: "queued",
+          cancelRequested: false,
+          history: state.messages,
+          events: [],
+        };
+        append(job, { type: "queued" });
+        state.jobs.push(job);
+        await tx.write(key, state, record?.revision ?? 0);
+        await enqueue(tx, key);
+        return job;
+      });
     },
     async load(identity, conversationId, id) {
       const record = await records.read(
@@ -307,9 +317,7 @@ export function createJobStore(
     },
     retry: (identity, conversationId, id) =>
       records.mutate(conversationKey(identity, conversationId), (value) => {
-        const state = stateFrom(value, identity, conversationId);
-        const job = state.jobs.find((item) => item.id === id);
-        if (!job) throw new Error("Run not found");
+        const { state, job } = jobIn(value, identity, conversationId, id);
         if (!isTerminal(job.status)) {
           job.attempts += 1;
           job.availableAt =
@@ -319,13 +327,22 @@ export function createJobStore(
         }
         return { value: state, result: job };
       }),
+    resume: (identity, conversationId, id, approvalId) =>
+      records.mutate(conversationKey(identity, conversationId), (value) => {
+        const { state, job } = jobIn(value, identity, conversationId, id);
+        const waiting =
+          job.status === "awaiting_approval" &&
+          job.events
+            .filter((event) => event.type === "awaiting_approval")
+            .at(-1)?.approvalId === approvalId;
+        if (waiting) append(job, { type: "queued" });
+        return { value: state, result: waiting };
+      }),
     async cancel(identity, conversationId, id) {
       await records.mutate(
         conversationKey(identity, conversationId),
         (value) => {
-          const state = stateFrom(value, identity, conversationId);
-          const job = state.jobs.find((item) => item.id === id);
-          if (!job) throw new Error("Run not found");
+          const { state, job } = jobIn(value, identity, conversationId, id);
           if (!isTerminal(job.status)) job.cancelRequested = true;
           return { value: state, result: undefined };
         },
@@ -353,7 +370,7 @@ export function createJobStore(
           await untrack(key);
           continue;
         }
-        const state = stateSchema.parse(record?.value);
+        const state = conversationStateSchema.parse(record?.value);
         for (const job of state.jobs)
           if (
             !isTerminal(job.status) &&
@@ -366,7 +383,7 @@ export function createJobStore(
             });
       }
       return {
-        cursor: keys.at(-1) ?? "",
+        cursor: keys.length < 100 ? "" : (keys.at(-1) ?? ""),
         jobs,
       };
     },

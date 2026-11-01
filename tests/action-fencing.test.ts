@@ -157,7 +157,6 @@ for (const driver of drivers)
         await s.storage.jobs.update(s.identity, "chat", "one", {
           type: "queued",
         });
-        await first.tick();
         const oldTick = first.tick();
         await ready.waiting;
         const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 2000);

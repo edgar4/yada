@@ -1,18 +1,22 @@
 import { z } from "zod";
 import type { Identity } from "../core/contracts.js";
-import { isTerminal, jobSchema } from "../service/contracts.js";
+import { isTerminal } from "../service/contracts.js";
+import { conversationStateSchema } from "./jobs.js";
 import { conversationKey } from "./conversations.js";
 import { actionSchema, operationId } from "./actions.js";
 import type { recordStore } from "./records.js";
 import { checkpointSchema } from "../core/checkpoint.js";
 export function createRetention(records: ReturnType<typeof recordStore>) {
-  const stateSchema = z.object({
-    jobs: z.array(jobSchema).default([]),
-    purgeRuns: z.array(z.string()).default([]),
-    retiredRuns: z.array(z.string()).default([]),
+  const stateSchema = conversationStateSchema.pick({
+    jobs: true,
+    purgeRuns: true,
+    retiredRuns: true,
   });
   const stateFrom = (value: unknown) =>
-    stateSchema.parse(Array.isArray(value) || value === undefined ? {} : value);
+    stateSchema.parse({
+      jobs: [],
+      ...(Array.isArray(value) || value === undefined ? {} : value),
+    });
   const runsFrom = (state: z.infer<typeof stateSchema>, id: string) => [
     ...state.purgeRuns,
     ...state.retiredRuns.map((runId) => JSON.stringify([id, runId])),

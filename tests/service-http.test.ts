@@ -210,6 +210,39 @@ it("serves opaque approval previews and binds decisions to their run", async () 
     ).status,
   ).toBe(409);
 });
+it("answers contradictory concurrent decisions with 409", async () => {
+  const s = await setup();
+  await s.storage.jobs.submit(s.identity, "chat", {
+    id: "a",
+    profileId: "v1",
+    input: "Hi",
+  });
+  await s.storage.jobs.update(s.identity, "chat", "a", {
+    type: "awaiting_approval",
+    approvalId: "approval",
+  });
+  await s.storage.actions.propose(s.identity, {
+    id: "approval",
+    runId: JSON.stringify(["chat", "a"]),
+    callId: "call",
+    tool: "rename",
+    toolVersion: "v1",
+    args: {},
+    preview: "Rename record",
+    version: "1",
+    expiresAt: Date.now() + 60000,
+    status: "pending",
+  });
+  await s.storage.actions.decide(s.identity, "approval", true);
+  expect(
+    (
+      await s.request("/a/approvals/approval/decision", {
+        method: "POST",
+        body: JSON.stringify({ approved: false }),
+      })
+    ).status,
+  ).toBe(409);
+});
 it("rejects approval decisions for runs that are terminal or not awaiting", async () => {
   const s = await setup();
   const runId = JSON.stringify(["chat", "a"]);
