@@ -64,3 +64,21 @@ it("rejects blank SDK keys", () => {
     "Invalid provider configuration",
   );
 });
+
+it("ignores explicitly undefined options", () => {
+  expect(() =>
+    createProvider({
+      provider: "anthropic",
+      apiKey: "k",
+      temperature: undefined,
+    }),
+  ).not.toThrow();
+  expect(() =>
+    createProvider({
+      provider: "openai",
+      apiKey: "k",
+      effort: undefined,
+      thinkingDisplay: undefined,
+    }),
+  ).not.toThrow();
+});
