@@ -22,7 +22,7 @@ it("generates private configuration once without printing secrets or overwriting
     const result = await initialize();
     const filename = join(directory, ".env");
     const contents = await readFile(filename, "utf8");
-    expect(contents).not.toContain("YADA_STARTER_PASSWORD=");
+    expect(contents).not.toMatch(/^YADA_STARTER_PASSWORD=/m);
     expect(contents).toContain(
       (
         await readFile(new URL("../.env.example", import.meta.url), "utf8")

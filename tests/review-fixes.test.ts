@@ -175,6 +175,42 @@ describe("agentTool", () => {
     });
     expect(remaining).toBe(900);
   });
+  it("splits the remaining cost across parallel calls", async () => {
+    const seen: (number | undefined)[] = [];
+    const probe = readTool({
+      name: "probe",
+      description: "d",
+      input: z.strictObject({}),
+      authorize: () => Promise.resolve(true),
+      execute: (_a, _i, _s, toolRun) => {
+        seen.push(toolRun?.remainingCostMicros);
+        return Promise.resolve("ok");
+      },
+    });
+    const provider = createFakeProvider((_r, n) =>
+      n === 1
+        ? {
+            content: "",
+            toolCalls: [
+              { id: "a", name: "probe", args: {} },
+              { id: "b", name: "probe", args: {} },
+            ],
+            finishReason: "tool_calls",
+            usage: { inputTokens: 100, outputTokens: 0 },
+          }
+        : say("done"),
+    );
+    await run({
+      ...input,
+      provider,
+      tools: [probe],
+      limits: {
+        maxCostMicros: 1000,
+        pricing: { inputMicrosPer1k: 1000, outputMicrosPer1k: 1000 },
+      },
+    });
+    expect(seen).toEqual([450, 450]);
+  });
 });
 
 describe("providers", () => {

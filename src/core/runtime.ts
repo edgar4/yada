@@ -76,6 +76,7 @@ type Loop = {
   options: RunOptions;
   system: string;
   cause?: string | undefined;
+  costShare?: number;
   signal: AbortSignal;
   identity: Identity;
   limits: ReturnType<typeof limitsSchema.parse>;
@@ -334,7 +335,14 @@ async function executeGroup(
     abort.abort(loop.signal.reason);
   };
   loop.signal.addEventListener("abort", forward);
-  const inner = group.length > 1 ? { ...loop, signal: abort.signal } : loop;
+  const inner =
+    group.length > 1
+      ? {
+          ...loop,
+          signal: abort.signal,
+          costShare: Math.min(concurrency, group.length),
+        }
+      : loop;
   const slots = group.map(() => {
     const slot = {} as {
       promise: Promise<ToolOutcome>;
@@ -524,7 +532,7 @@ async function checkLimits(loop: Loop): Promise<RunResult | undefined> {
   if (contextSize > limits.maxContextChars) return exceeded();
   return reserveCost(loop);
 }
-function remainingCost({ state, limits }: Loop) {
+function remainingCost({ state, limits, costShare }: Loop) {
   if (limits.maxCostMicros === undefined) return undefined;
   const spent =
     limits.pricing && state.usage
@@ -532,7 +540,10 @@ function remainingCost({ state, limits }: Loop) {
       : 0;
   return Math.max(
     0,
-    Math.floor(limits.maxCostMicros - spent - (state.reservedCostMicros ?? 0)),
+    Math.floor(
+      (limits.maxCostMicros - spent - (state.reservedCostMicros ?? 0)) /
+        (costShare ?? 1),
+    ),
   );
 }
 function reserveCost(loop: Loop): Promise<RunResult> | undefined {

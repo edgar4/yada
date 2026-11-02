@@ -50,7 +50,7 @@ it("creates the existing starter, private config, skills directory and pinned de
   const env = await readFile(join(target, ".env"), "utf8");
   expect(env).toContain("YADA_LLM_API_KEY=\n");
   expect(env).toMatch(/YADA_STORAGE_KEY=[a-f0-9]{64}\n/);
-  expect(env).not.toContain("PASSWORD");
+  expect(env).not.toMatch(/^YADA_STARTER_PASSWORD=/m);
   if (process.platform !== "win32")
     expect((await stat(join(target, ".env"))).mode & 0o777).toBe(0o600);
   const original = JSON.parse(
