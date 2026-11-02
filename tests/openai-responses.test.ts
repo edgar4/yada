@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createProvider, providerConfigFromEnv } from "../src/index.js";
+import { z } from "zod";
+import {
+  createProvider,
+  providerConfigFromEnv,
+  readTool,
+  run,
+} from "../src/index.js";
 import type { ProviderRequest, Turn } from "../src/index.js";
 import {
   chatReply,
@@ -298,5 +304,155 @@ describe("openai responses", () => {
         c.url.replace(/^.*\/(chat\/completions|responses)$/, "$1"),
       ),
     ).toEqual(["chat/completions", "responses", "chat/completions"]);
+  });
+
+  describe("server tools", () => {
+    const webCall = {
+      type: "web_search_call",
+      id: "ws_1",
+      status: "completed",
+      action: { type: "search", query: "yada" },
+    };
+    const codeCall = {
+      type: "code_interpreter_call",
+      id: "ci_1",
+      status: "completed",
+      code: "print(1)",
+      container_id: "cntr_1",
+      outputs: [{ type: "logs", logs: "1" }],
+    };
+    const cited = (url: string, title: string) => ({
+      type: "url_citation",
+      url,
+      title,
+      start_index: 0,
+      end_index: 1,
+    });
+    const answer = {
+      type: "message",
+      id: "m",
+      role: "assistant",
+      status: "completed",
+      content: [
+        {
+          type: "output_text",
+          text: "Answer",
+          annotations: [
+            cited("https://a.example", "A"),
+            cited("https://a.example", "A again"),
+            cited("https://b.example", "B"),
+          ],
+        },
+      ],
+    };
+    const withTools = () =>
+      openai({
+        serverTools: ["web_search", "code_execution"],
+        webSearch: { maxUses: 3, allowedDomains: ["a.example"] },
+      });
+
+    it("declares tools and normalizes sources and call counts", async () => {
+      const calls = stubFetch(() =>
+        responsesReply([webCall, codeCall, answer]),
+      );
+      const result = await withTools().complete(request());
+      expect(calls[0]?.body).toMatchObject({
+        tools: [
+          { type: "function", name: "lookup" },
+          {
+            type: "web_search",
+            filters: { allowed_domains: ["a.example"] },
+          },
+          { type: "code_interpreter", container: { type: "auto" } },
+        ],
+        include: [
+          "reasoning.encrypted_content",
+          "code_interpreter_call.outputs",
+        ],
+        max_tool_calls: 3,
+      });
+      expect(result).toMatchObject({
+        content: "Answer",
+        toolCalls: [],
+        finishReason: "stop",
+        usage: { serverToolCalls: 2 },
+        providerMetadata: {
+          data: {
+            serverItems: [webCall, codeCall],
+            sources: [
+              { url: "https://a.example", title: "A" },
+              { url: "https://b.example", title: "B" },
+            ],
+          },
+        },
+      });
+    });
+
+    it("replays server items after reasoning", async () => {
+      const calls = stubFetch((n) =>
+        responsesReply(n === 1 ? [reasoning, webCall, answer] : undefined),
+      );
+      const first = await withTools().complete(request());
+      await withTools().complete(
+        request([
+          { role: "user", content: "Hi" },
+          {
+            role: "assistant",
+            content: first.content,
+            toolCalls: [],
+            ...(first.providerMetadata && {
+              providerMetadata: first.providerMetadata,
+            }),
+          },
+        ]),
+      );
+      expect(calls[1]?.body["input"]).toEqual([
+        { role: "user", content: "Hi" },
+        reasoning,
+        webCall,
+        { role: "assistant", content: "Answer" },
+      ]);
+    });
+
+    it("does not count toward tool-call limits", async () => {
+      const calls = stubFetch((n) =>
+        responsesReply(n === 1 ? [webCall, codeCall, call] : undefined),
+      );
+      const execute = vi.fn(() => Promise.resolve("A"));
+      const result = await run({
+        provider: withTools(),
+        tools: [
+          readTool({
+            name: "lookup",
+            description: "Lookup",
+            input: z.strictObject({ id: z.string() }),
+            authorize: () => Promise.resolve(true),
+            execute,
+          }),
+        ],
+        identity: { actorId: "a", tenantId: "t" },
+        input: "Find",
+        system: "Help",
+        limits: { maxToolCalls: 1 },
+        signal: AbortSignal.timeout(5000),
+      });
+      expect(result).toEqual({ status: "completed", text: "ok" });
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(calls).toHaveLength(2);
+    });
+
+    it("rejects chat mode and other providers", () => {
+      expect(() =>
+        openai({ api: "chat", serverTools: ["web_search"] }),
+      ).toThrow();
+      expect(() =>
+        createProvider({
+          provider: "openai-compatible",
+          model: "m",
+          baseUrl: "http://localhost:1/v1",
+          serverTools: ["web_search"],
+        } as never),
+      ).toThrow();
+    });
   });
 });
