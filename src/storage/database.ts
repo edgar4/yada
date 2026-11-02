@@ -5,15 +5,19 @@ import { knexClient } from "../optional.js";
 import { isTerminal } from "../service/contracts.js";
 import { storageConfig, type StorageConfig } from "./config.js";
 import { storageCipher } from "./crypto.js";
+import { conversationKey } from "./conversations.js";
 import { conversationStateSchema } from "./jobs.js";
+import { scopeFor } from "./records.js";
 const rowSchema = z.array(
   z.object({
     id: z.string(),
     value: z.string(),
     revision: z.number(),
     kind: z.string().nullable(),
+    scope: z.string().nullable().optional(),
   }),
 );
+const retiredSchema = z.object({ key: z.string() });
 export async function backfillRecords(db: Knex, config: StorageConfig) {
   const options = storageConfig.parse(config);
   const cipher = storageCipher(
@@ -25,6 +29,11 @@ export async function backfillRecords(db: Knex, config: StorageConfig) {
       await db("yada_records")
         .whereNull("kind")
         .orWhere({ kind: "conversation", active: null })
+        .orWhere((query) => {
+          void query
+            .whereIn("kind", ["conversation", "retired"])
+            .whereNull("scope");
+        })
         .orderBy("id")
         .limit(100),
     );
@@ -34,10 +43,17 @@ export async function backfillRecords(db: Knex, config: StorageConfig) {
       const state = conversationStateSchema.safeParse(value);
       const conversation =
         row.kind === "conversation" || Array.isArray(value) || state.success;
+      const kind = row.kind ?? (conversation ? "conversation" : "legacy");
+      const key = state.success
+        ? conversationKey(state.data.identity, state.data.id)
+        : retiredSchema.safeParse(value).data?.key;
       await db("yada_records")
         .where({ id: row.id, revision: row.revision })
         .update({
-          kind: row.kind ?? (conversation ? "conversation" : "legacy"),
+          kind,
+          ...(kind === "conversation" || kind === "retired"
+            ? { scope: (key && scopeFor(key)) ?? "" }
+            : {}),
           active:
             state.success &&
             state.data.jobs.some((job) => !isTerminal(job.status)),
@@ -75,11 +91,23 @@ export async function openDatabase(
     await db.migrate.latest({
       migrationSource: {
         getMigrations: () =>
-          Promise.resolve(["001_records", "002_discovery", "003_active"]),
+          Promise.resolve([
+            "001_records",
+            "002_discovery",
+            "003_active",
+            "004_scope",
+          ]),
         getMigrationName: (name) => String(name),
         getMigration: (name) =>
           Promise.resolve({
             up: async (tx: Knex) => {
+              if (name === "004_scope") {
+                await tx.schema.alterTable("yada_records", (table) => {
+                  table.string("scope", 64);
+                  table.index(["scope", "id"]);
+                });
+                return;
+              }
               if (name === "003_active") {
                 await tx.schema.alterTable("yada_records", (table) => {
                   table.boolean("active");
@@ -100,6 +128,13 @@ export async function openDatabase(
               });
             },
             down: async (tx: Knex) => {
+              if (name === "004_scope") {
+                await tx.schema.alterTable("yada_records", (table) => {
+                  table.dropIndex(["scope", "id"]);
+                  table.dropColumn("scope");
+                });
+                return;
+              }
               if (name === "003_active") {
                 await tx.schema.alterTable("yada_records", (table) => {
                   table.dropIndex(["active", "id"]);

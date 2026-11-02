@@ -48,7 +48,7 @@ The conformance suite verifies encrypted backup/restore and key rotation on SQLi
 
 ## Retention and erasure
 
-`storage.jobs.prune(identity, conversationId, beforeTimestamp)` removes terminal job/event listings older than the cutoff. It retains conversation history and internal references needed for later full erasure. Retired run IDs cannot be reused.
+`storage.jobs.prune(identity, conversationId, beforeTimestamp)` removes terminal job/event listings older than the cutoff. It retains conversation history and a `retired` record per run needed for later full erasure. Retired run IDs cannot be reused. Terminal jobs beyond the latest 20 per conversation are retired automatically.
 
 `storage.retention.eraseConversation(identity, conversationId)` removes conversation content, completed run checkpoints, and associated action records. Cancel or reconcile unfinished runs first. Erasure leaves an empty tombstone to prevent the same conversation ID from being recreated accidentally. Interrupted erasure can be retried; its pending cleanup references remain durable. OAuth grants belong to connections and are managed separately through disconnect/revocation.
 

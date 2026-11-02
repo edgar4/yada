@@ -14,6 +14,7 @@ import {
 } from "../service/contracts.js";
 import {
   conversationKey,
+  retiredKey,
   identitySchema,
   messageSchema,
   type ConversationMessage,
@@ -132,11 +133,23 @@ export function createJobStore(
       history: job.history ?? state.messages.slice(0, historyLength),
     };
   };
-  const finish = <T>(state: ConversationState, result: T) => ({
+  const finish = <T>(
+    state: ConversationState,
+    result: T,
+    retired: readonly string[] = [],
+  ) => ({
     value: state,
     result,
     active: state.jobs.some((job) => !isTerminal(job.status)),
+    retired,
   });
+  const retire = (state: ConversationState, removed: readonly StoredJob[]) => {
+    if (!removed.length) return [];
+    const ids = [...state.retiredRuns, ...removed.map((job) => job.id)];
+    state.retiredRuns = [];
+    state.jobs = state.jobs.filter((job) => !removed.includes(job));
+    return ids;
+  };
   const append = (
     job: StoredJob,
     event: Omit<RunEvent, "version" | "sequence" | "at">,
@@ -176,28 +189,32 @@ export function createJobStore(
       at: job.updatedAt,
     });
   };
-  const mutateJob = (
+  const mutateJob = <T>(
     identity: Identity,
     conversationId: string,
     id: string,
     lease: RunOwnership | undefined,
-    change: (value: unknown) => {
-      value: unknown;
-      result: Job;
-      active: boolean;
-    },
+    change: (value: unknown) => ReturnType<typeof finish<T>>,
   ) => {
     const key = conversationKey(identity, conversationId);
-    if (!lease) return records.mutate(key, change);
-    if (lease.runId !== JSON.stringify([conversationId, id]))
-      return Promise.reject(new RunLeaseError());
-    return withRunLease(records, identity, lease, async (tx, assertOwned) => {
+    const run = async (
+      tx: ReturnType<typeof recordStore>,
+      assertOwned = () => {},
+    ) => {
       const conversation = await tx.read(key);
       const next = change(conversation?.value);
       assertOwned();
       await tx.write(key, next.value, conversation?.revision ?? 0, next.active);
+      for (const runId of next.retired) {
+        const tombstone = retiredKey(identity, conversationId, runId);
+        await tx.write(tombstone, { key: tombstone }, 0);
+      }
       return next.result;
-    });
+    };
+    if (!lease) return records.transact((tx) => run(tx));
+    if (lease.runId !== JSON.stringify([conversationId, id]))
+      return Promise.reject(new RunLeaseError());
+    return withRunLease(records, identity, lease, run);
   };
   const apply: JobStore["update"] = (
     identity,
@@ -212,6 +229,7 @@ export function createJobStore(
     mutateJob(identity, conversationId, id, lease, (value) => {
       const { state, job } = jobIn(value, identity, conversationId, id);
       if (isTerminal(job.status)) return finish(state, view(state, job));
+      let retired: string[] = [];
       append(job, event);
       if (outcome) {
         if (outcome.status !== event.type)
@@ -237,15 +255,14 @@ export function createJobStore(
           for (const item of state.jobs)
             item.history ??= state.messages.slice(0, item.historyLength ?? 0);
         state.messages = [...withSummary(state.messages, summary), ...added];
-        for (const old of state.jobs
-          .filter((item) => isTerminal(item.status))
-          .slice(0, -keptTerminalJobs)) {
-          old.events = [];
-          old.steering = [];
-          old.history = [];
-        }
+        retired = retire(
+          state,
+          state.jobs
+            .filter((item) => isTerminal(item.status))
+            .slice(0, -keptTerminalJobs),
+        );
       }
-      return finish(state, view(state, job));
+      return finish(state, view(state, job), retired);
     });
   return {
     submit: async (identity, conversationId, input) => {
@@ -255,7 +272,11 @@ export function createJobStore(
         const record = await tx.read(key);
         const state = stateFrom(record?.value, identity, conversationId);
         if (state.deleted) throw new HttpError(410, "Conversation erased");
-        if (state.retiredRuns.includes(parsed.id)) throw new JobConflict();
+        if (
+          state.retiredRuns.includes(parsed.id) ||
+          (await tx.read(retiredKey(identity, conversationId, parsed.id)))
+        )
+          throw new JobConflict();
         const existing = state.jobs.find((job) => job.id === parsed.id);
         if (existing) {
           if (
@@ -379,16 +400,15 @@ export function createJobStore(
       };
     },
     prune: (identity, conversationId, before) =>
-      records.mutate(conversationKey(identity, conversationId), (value) => {
+      mutateJob(identity, conversationId, "", undefined, (value) => {
         const state = stateFrom(value, identity, conversationId);
         const removed = state.jobs.filter(
           (job) => isTerminal(job.status) && job.updatedAt < before,
         );
-        state.jobs = state.jobs.filter((job) => !removed.includes(job));
-        state.retiredRuns.push(...removed.map((job) => job.id));
         return finish(
           state,
           removed.map((job) => job.id),
+          retire(state, removed),
         );
       }),
   };

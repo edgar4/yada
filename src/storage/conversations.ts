@@ -108,6 +108,18 @@ export const conversationKey = (identity: Identity, id: string) =>
     identity.actorId,
     z.string().min(1).parse(id),
   ]);
+export const retiredKey = (
+  identity: Identity,
+  conversationId: string,
+  runId: string,
+) =>
+  JSON.stringify([
+    "retired",
+    identity.tenantId,
+    identity.actorId,
+    conversationId,
+    runId,
+  ]);
 export const messagesFrom = (value: unknown) =>
   z
     .array(messageSchema)
@@ -133,17 +145,17 @@ export function createConversationStore(
       const conversations: ConversationOverview[] = [];
       let cursor = after;
       for (;;) {
-        const rows = await records.scan("conversation", cursor);
+        const rows = await records.scan(
+          "conversation",
+          cursor,
+          100,
+          undefined,
+          conversationKey(identity, "-"),
+        );
         for (const row of rows) {
           cursor = row.id;
           const state = overviewSchema.safeParse(row.value).data;
-          if (
-            !state ||
-            state.deleted ||
-            state.identity.tenantId !== identity.tenantId ||
-            state.identity.actorId !== identity.actorId
-          )
-            continue;
+          if (!state || state.deleted) continue;
           const last = state.jobs.at(-1);
           conversations.push({
             id: state.id,
