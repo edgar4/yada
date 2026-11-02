@@ -116,11 +116,11 @@ export async function reconnectingMcp(
       effect: "read",
       spec: original.spec,
       authorize,
-      execute: (args, identity, callSignal) =>
+      execute: (args, identity, callSignal, run) =>
         invoke(identity, callSignal, () => {
           const tool = find();
           if (tool.effect !== "read") throw new Error("MCP tool changed");
-          return tool.execute(args, identity, callSignal);
+          return tool.execute(args, identity, callSignal, run);
         }),
     };
   });
