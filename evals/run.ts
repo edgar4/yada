@@ -89,3 +89,44 @@ export async function runScenario(
     ),
   };
 }
+
+export type Pricing = { inputMicrosPer1k: number; outputMicrosPer1k: number };
+export type EvalSummary = {
+  scenario: string;
+  runs: number;
+  passes: number;
+  passRate: number;
+  inputTokens: number;
+  outputTokens: number;
+  costMicros?: number;
+  failures: string[];
+};
+
+export function summarize(
+  results: EvalResult[],
+  pricing?: Pricing,
+): EvalSummary[] {
+  const names = [...new Set(results.map((r) => r.name))];
+  return names.map((scenario) => {
+    const group = results.filter((r) => r.name === scenario);
+    const sum = (key: "inputTokens" | "outputTokens") =>
+      group.reduce((total, r) => total + r[key], 0);
+    const passes = group.filter((r) => r.pass).length;
+    return {
+      scenario,
+      runs: group.length,
+      passes,
+      passRate: passes / group.length,
+      inputTokens: sum("inputTokens"),
+      outputTokens: sum("outputTokens"),
+      ...(pricing && {
+        costMicros: Math.round(
+          (sum("inputTokens") * pricing.inputMicrosPer1k +
+            sum("outputTokens") * pricing.outputMicrosPer1k) /
+            1000,
+        ),
+      }),
+      failures: [...new Set(group.flatMap((r) => r.failures))],
+    };
+  });
+}
