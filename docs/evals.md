@@ -31,17 +31,6 @@ The exit code is 0 only when every run passed, 1 otherwise and 2 for invalid arg
 
 To add a scenario, append to the `scenarios` array. Keep prompts explicit about which tool to use so live models behave predictably.
 
-## Qualification workflow
-
-`.github/workflows/qualify.yml` runs only on manual `workflow_dispatch`, never on push or pull request. It uses the standard Yada config: add `YADA_LLM_API_KEY` as a repository secret, and the `provider` and `model` inputs set `YADA_LLM_PROVIDER` and `YADA_LLM_MODEL`. Start it from the Actions tab (or `gh workflow run qualify.yml -f provider=anthropic -f model=<model-id> -f runs=5 -f pricing=<in>,<out>`). The report is uploaded as the `evals-results` artifact; live evals are otherwise refused when `CI` is set.
-
-### Qualification matrix
-
-Not yet run. Add one row per provider and model from the `evals-results` artifact: date from `date`, pass rate as the sum of `passes` over the sum of `runs` across `scenarios`.
-
-| Provider | Model | Date | Runs per scenario | Pass rate |
-| -------- | ----- | ---- | ----------------- | --------- |
-
 ## MCP server qualification
 
 `scripts/qualify-mcp.mjs` connects to the servers listed in a JSON file, discovers tools, optionally makes one read call, lists resources and prompts, and reports pass/fail with latency per step. It exits 1 if any step fails.

@@ -16,14 +16,8 @@ if (!name || name.startsWith("--")) {
   );
   process.exit(2);
 }
-if (
-  name !== "fake" &&
-  process.env.CI &&
-  process.env.GITHUB_EVENT_NAME !== "workflow_dispatch"
-) {
-  console.error(
-    "Live evals are not allowed in CI except manual workflow_dispatch",
-  );
+if (name !== "fake" && process.env.CI) {
+  console.error("Live evals are not allowed in CI");
   process.exit(2);
 }
 const option = (flag) => {
