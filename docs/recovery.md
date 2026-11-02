@@ -47,6 +47,8 @@ When using `runDurable` directly, the host owns the durable job queue, retry sch
 
 A worker claims a lease before execution and renews it while running. The default duration is 30 seconds; `leaseMs` accepts 100–300,000 milliseconds. Use a duration comfortably above expected database latency and event-loop pauses. Across hosts, keep clocks synchronized.
 
+The service worker also passes the lease to terminal job updates and retries, so a worker that lost its lease cannot finalize or reschedule the job; a job whose run already has a saved outcome is finalized without a lease.
+
 Competing claims raise `RunLeaseError` while a lease remains active. After a crash, retry after expiry. Each new claim receives a unique token; stale workers cannot overwrite the replacement worker's checkpoint. Database compare-and-swap checks prevent lost updates.
 
 Failure to persist a checkpoint raises `CheckpointError`; no successful answer is returned before its outcome is committed. Lease-renewal failures abort execution and leave the run recoverable after expiry. Cancellation requested by the caller is persisted. If a write has an uncertain result, the run remains reconciling until its receipt resolves; cancellation cannot discard that evidence. Ordinary model or tool errors otherwise produce terminal `dependency_failed` outcomes.

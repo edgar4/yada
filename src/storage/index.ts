@@ -36,10 +36,15 @@ export interface YadaStorage {
 }
 export async function createStorage(
   config: StorageConfig,
+  { migrate }: { migrate?: boolean } = {},
 ): Promise<YadaStorage> {
   const options = storageConfig.parse(config);
-  const db = await openDatabase(options);
-  const records = recordStore(db, options.encryptionKey);
+  const db = await openDatabase(options, { migrate: migrate ?? true });
+  const records = recordStore(
+    db,
+    options.encryptionKey,
+    options.previousEncryptionKeys,
+  );
   return {
     runs: createRunStore(records),
     jobs: createJobStore(records),
