@@ -137,7 +137,7 @@ createProvider({
 
 These tools run on the provider, are never exposed as Yada tools, and bypass policy, approvals and `maxToolCalls`. They appear in tracing as part of the model span. Final `content` stays plain text; cited sources are returned as `providerMetadata.data.sources` (`{ url, title }[]`, deduplicated by URL) and the number of calls as `usage.serverToolCalls`. The raw server-tool blocks stay in provider metadata and are replayed on later rounds to the same provider. Anthropic `pause_turn` is continued automatically up to three times, then the result finishes with `other`.
 
-Provider pricing for server tools is not included in Yada's cost limits.
+Provider pricing for server tools is not included in Yada's cost limits. Search results are untrusted web content that reaches the model without Yada's tool policy; turn web search off for agents that must only use your own data.
 
 ## OpenAI-compatible endpoints
 
