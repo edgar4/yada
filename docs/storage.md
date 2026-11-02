@@ -72,6 +72,14 @@ Import these functions from Yada's public entry point. Identity must be authenti
 
 For direct access, use `storage.conversations.load(identity, id)` and `save(identity, id, messages, expectedRevision)`. Use revision `0` to create a new conversation. Each save returns the next revision. `runConversation` persists complete turns including tool calls and results. Use [durable runs](recovery.md) to checkpoint individual executions and resume them after a crash. Callers should manage history length for the selected model's context limit.
 
+## Long-term memory
+
+`storage.memory` keeps short notes per `(tenantId, actorId)` in one encrypted record, so memory never crosses actors or tenants. It offers `put(identity, { key, text, tags? })` (upsert by key), `get`, `list`, `delete` and `search(identity, query, limit)`. Search is a case-insensitive substring match on key and text, or an exact tag match; there are no embeddings. Writes are revision-checked and retried, so caps hold under concurrency: 4 KiB per item, 200 items and 256 KiB per actor. Exceeding a cap throws.
+
+`memoryTools(storage.memory)` returns `memory_search` (read), and `memory_save` and `memory_forget` (writes that wait for approval, or follow your tool policy). Results come back as tool output, truncated by `maxToolOutput`, and are never added to the system prompt. Erase an actor's memory with `storage.retention.eraseActorMemory(identity)`.
+
+For an external knowledge source, implement `Retriever` (`search(identity, query, signal)` returning `{ id, text, source?, score? }[]`) and pass it to `retrievalTool(retriever)`, a read tool whose output is untrusted text.
+
 ## OAuth sessions
 
 Pass `storage.oauth` as the store to `createMcpOAuth`. It implements atomic field merging and single-use state consumption, and preserves issuer stamps and provider metadata across restarts. See [MCP OAuth](mcp-oauth.md) for callback integration and per-session serialization requirements.

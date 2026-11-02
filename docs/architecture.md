@@ -52,6 +52,10 @@ The runtime supports read tools, a scripted testing provider, and native adapter
 
 `run` defaults to in-memory execution and accepts typed checkpoint hooks. `runDurable` adds encrypted checkpoints and renewable execution leases through the storage boundary. See [run recovery](recovery.md). `runConversation` adds durable full-turn conversation history (tool calls, results, provider metadata, failure markers) through the storage interface. OAuth sessions can use the same encrypted storage. See [durable storage](storage.md).
 
+## Long-term memory
+
+`storage.memory` and `memoryTools` give the agent cross-conversation notes per tenant and actor. Memory is retrieved only through tools; its text is untrusted tool output, bounded by `maxToolOutput`, and never placed in the system prompt. `Retriever` and `retrievalTool` connect external search the same way. See [durable storage](storage.md).
+
 ## Sub-agents
 
 `agentTool({ name, description, provider, tools, system, limits?, maxRounds?, hooks?, authorize? })` returns a read tool with input `{ task }` that runs a nested agent with the caller's identity and signal and returns the completed text. `authorize` gates which identities see the sub-agent (default: everyone); its inner tools still apply their own authorization. A failed sub-agent returns `{"error": "agent_failed", "message": "The sub-agent failed: <code>"}` as the tool result, so the parent model sees only the failure code. Agent tools nest at most two deep (checked at construction). The parent's hooks and limits do not apply inside the sub-agent; pass `hooks` and `limits` to `agentTool`, and note each call gets its own budget.

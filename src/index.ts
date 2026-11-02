@@ -38,3 +38,5 @@ export * from "./entries/providers.js";
 export * from "./entries/mcp.js";
 export * from "./entries/storage.js";
 export * from "./entries/service.js";
+export { memoryTools, retrievalTool } from "./core/memory.js";
+export type { Retriever } from "./core/memory.js";
