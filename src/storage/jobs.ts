@@ -16,6 +16,8 @@ import {
   identitySchema,
   messageSchema,
   type ConversationMessage,
+  withSummary,
+  type ConversationSummary,
 } from "./conversations.js";
 import { StorageConflict, type recordStore } from "./records.js";
 import { withRunLease, RunLeaseError, type RunOwnership } from "./runs.js";
@@ -59,6 +61,7 @@ export interface JobStore {
     outcome?: TerminalResult,
     lease?: RunOwnership,
     turns?: readonly Turn[],
+    summary?: ConversationSummary,
   ): Promise<Job>;
   resume(
     identity: Identity,
@@ -235,6 +238,7 @@ export function createJobStore(
     outcome,
     lease,
     turns,
+    summary,
   ) =>
     mutateJob(identity, conversationId, id, lease, (value) => {
       const { state, job } = jobIn(value, identity, conversationId, id);
@@ -260,7 +264,7 @@ export function createJobStore(
                     outcome.status === "failed" ? outcome.code : "cancelled",
                 },
               ];
-        state.messages.push(...added);
+        state.messages = [...withSummary(state.messages, summary), ...added];
       }
       return { value: state, result: job };
     });
@@ -322,6 +326,7 @@ export function createJobStore(
       outcome,
       lease,
       turns,
+      summary,
     ) => {
       const job = await apply(
         identity,
@@ -331,6 +336,7 @@ export function createJobStore(
         outcome,
         lease,
         turns,
+        summary,
       );
       if (isTerminal(job.status))
         await untrack(conversationKey(identity, conversationId)).catch(

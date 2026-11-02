@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { failureCodes } from "./contracts.js";
 import { contentSchema } from "./content.js";
+export const summaryPrefix = "[summary of earlier conversation]\n";
 const call = z.object({
   id: z.string().min(1),
   name: z.string(),

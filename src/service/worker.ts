@@ -1,5 +1,9 @@
 import { contextWindow, type RunLimits } from "../core/limits.js";
-import { modelHistory } from "../storage/conversations.js";
+import {
+  modelHistory,
+  summaryOf,
+  type ConversationSummary,
+} from "../storage/conversations.js";
 import { runTree } from "../storage/actions.js";
 import { actionExecutor } from "./actions.js";
 import { setTimeout as delay } from "node:timers/promises";
@@ -118,6 +122,7 @@ export function createWorker(options: {
         outcome?: TerminalResult,
         lease?: RunOwnership,
         turns?: readonly Turn[],
+        summary?: ConversationSummary,
       ]
     ) => options.storage.jobs.update(identity, conversationId, job.id, ...args);
     let token = "";
@@ -200,12 +205,14 @@ export function createWorker(options: {
         !shutdown.signal.aborted
           ? { status: "failed", code: "timeout" }
           : result;
-      const messages =
-        final.status === "completed"
-          ? (await runs.load(identity, runId))?.checkpoint?.messages
-          : undefined;
-      const steered = (await runs.load(identity, runId))?.checkpoint?.steered;
-      const turns = messages && runTurns(messages, steered?.length);
+      const checkpoint = (await runs.load(identity, runId))?.checkpoint;
+      const runTurnsOf =
+        checkpoint && runTurns(checkpoint.messages, checkpoint.steered?.length);
+      const turns = final.status === "completed" ? runTurnsOf : undefined;
+      const summary =
+        checkpoint &&
+        runTurnsOf &&
+        summaryOf(modelHistory(job.history), checkpoint.messages, runTurnsOf);
       await updateJob(
         {
           type: final.status,
@@ -218,6 +225,7 @@ export function createWorker(options: {
         final,
         undefined,
         turns,
+        summary,
       );
       await traceFinished(
         final.status,
@@ -251,11 +259,13 @@ export function createWorker(options: {
     };
     try {
       await checkCancellation();
-      const history = contextWindow(
-        modelHistory(job.history),
-        profile.historyChars ?? 128_000,
-        profile.historyToolChars,
-      );
+      const history = profile.summarize
+        ? modelHistory(job.history)
+        : contextWindow(
+            modelHistory(job.history),
+            profile.historyChars ?? 128_000,
+            profile.historyToolChars,
+          );
       const result = await runDurable({
         ...profile,
         provider: bus ? profile.provider : completeOnly(profile.provider),

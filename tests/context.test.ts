@@ -187,7 +187,7 @@ describe("summarizing compaction", () => {
     expect(await run(plain)).toEqual({ status: "failed", code: "limit" });
     expect(summarize.provider.requests).toHaveLength(0);
   });
-  it("stores the full turns of a summarized conversation", async () => {
+  it("stores the full turns and the summary", async () => {
     const s = await storage();
     try {
       await s.conversations.save(identity, "c", history, 0);
@@ -198,7 +198,12 @@ describe("summarizing compaction", () => {
         store: s.conversations,
       });
       expect((await s.conversations.load(identity, "c"))?.messages).toEqual([
-        ...history,
+        ...history.slice(0, 2),
+        {
+          role: "summary",
+          content: "[summary of earlier conversation]\nEarlier: asked about a",
+        },
+        ...history.slice(2),
         { role: "user", content: "Now" },
         { role: "assistant", content: "Done", toolCalls: [] },
       ]);
