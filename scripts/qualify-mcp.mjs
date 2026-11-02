@@ -21,14 +21,14 @@ try {
 const identity = { actorId: "qualify", tenantId: "qualify" };
 const access = { identity, authorize: () => Promise.resolve(true) };
 const timed = async (action) => {
-  const started = performance.now();
+  const started = Date.now();
   try {
     const detail = await action();
-    return { ok: true, ms: Math.round(performance.now() - started), detail };
+    return { ok: true, ms: Date.now() - started, detail };
   } catch (error) {
     return {
       ok: false,
-      ms: Math.round(performance.now() - started),
+      ms: Date.now() - started,
       detail: error instanceof Error ? error.message : String(error),
     };
   }
