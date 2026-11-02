@@ -32,9 +32,9 @@ it("copies every starter file except local data and renames gitignore", async ()
 
 it("derives the required Node major from engines", () => {
   expect(() => {
-    assertNodeVersion(">=24.0.0 <25", "20.19.5");
-  }).toThrow("Yada requires Node 24.");
+    assertNodeVersion(">=24", "20.19.5");
+  }).toThrow("Yada requires Node 24 or newer; found 20.19.5.");
   expect(() => {
-    assertNodeVersion(">=24.0.0 <25", "24.1.0");
+    assertNodeVersion(">=24", "26.1.0");
   }).not.toThrow();
 });

@@ -32,6 +32,16 @@ try {
   });
   for (const warning of app.warnings) console.warn(warning);
   const server = createNodeServer((request) => app.handle(request));
+  server.prependListener("request", (incoming) => {
+    const peer = incoming.socket.remoteAddress ?? "";
+    const forwarded = incoming.headers["x-forwarded-for"]
+      ?.toString()
+      .split(",")
+      .at(-1)
+      ?.trim();
+    incoming.headers["x-yada-client-ip"] =
+      forwarded && /^(::1|127\.|::ffff:127\.)/.test(peer) ? forwarded : peer;
+  });
   let stopping: Promise<void> | undefined;
   const stop = () =>
     (stopping ??= (async () => {

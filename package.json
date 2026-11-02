@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "type": "module",
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('dist', {recursive: true, force: true})\" && tsc -p tsconfig.build.json",
+    "build": "node -e \"require('node:fs').rmSync('dist', {recursive: true, force: true})\" && tsc -p tsconfig.build.json && node scripts/build-bundle.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
@@ -53,7 +53,7 @@
     "vitest": "5.0.5"
   },
   "engines": {
-    "node": ">=24.0.0 <25"
+    "node": ">=24"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -70,6 +70,7 @@
       "types": "./dist/widget/index.d.ts",
       "import": "./dist/widget/index.js"
     },
+    "./widget.js": "./dist/yada-widget.js",
     "./providers": {
       "types": "./dist/entries/providers.d.ts",
       "import": "./dist/entries/providers.js"
@@ -89,6 +90,10 @@
     "./service": {
       "types": "./dist/entries/service.d.ts",
       "import": "./dist/entries/service.js"
+    },
+    "./langchain": {
+      "types": "./dist/entries/langchain.d.ts",
+      "import": "./dist/entries/langchain.js"
     },
     "./otel": {
       "types": "./dist/entries/otel.d.ts",

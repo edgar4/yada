@@ -6,10 +6,74 @@ import {
   type RunEvent,
 } from "../client/index.js";
 
+const defaultLabels = {
+  title: "Assistant",
+  empty: "Send a message to start the conversation.",
+  conversation: "Conversation",
+  message: "Message",
+  placeholder: "",
+  send: "Send",
+  cancel: "Cancel run",
+  reconnect: "Reconnect",
+  you: "You: ",
+  ready: "Ready",
+  loading: "Loading conversation",
+  connecting: "Connecting",
+  reconnecting: "Reconnecting",
+  disconnected: "Disconnected",
+  toolRunning: "Running {tool}",
+  toolFinished: "Finished {tool}",
+  tool: "tool",
+  queued: "queued",
+  running: "running",
+  awaitingApproval: "awaiting approval",
+  completed: "completed",
+  failed: "failed",
+  cancelled: "cancelled",
+  cancelRequested: "Cancellation requested",
+  approved: "Action approved",
+  declined: "Action declined",
+  approvalGroup: "Action approval",
+  approvalTitle: "Review action before approving",
+  approve: "Approve action",
+  decline: "Decline action",
+  remember: "Remember this approval for this run",
+  loadFailed: "Could not load the saved run.",
+  connectionFailed: "Connection failed. Reconnect to resume this run.",
+  cancelFailed: "Cancellation failed. Try again.",
+  decisionFailed:
+    "Approval decision failed. Reconnect to review its current status.",
+  steerFailed: "Could not send your message. Try again.",
+  errorFailed: "The run failed.",
+  errorCancelled: "The run was cancelled.",
+  errorLimit: "The run stopped after reaching its usage limit.",
+  errorDependencyFailed: "A service the assistant depends on failed.",
+  errorRefused: "The assistant declined to answer this request.",
+  errorTimeout: "The run took too long and was stopped.",
+  errorRetryExhausted: "The run failed after several attempts.",
+};
+export type WidgetLabels = Readonly<Record<keyof typeof defaultLabels, string>>;
+const errorLabels: Record<string, keyof WidgetLabels> = {
+  limit: "errorLimit",
+  dependency_failed: "errorDependencyFailed",
+  refused: "errorRefused",
+  timeout: "errorTimeout",
+  retry_exhausted: "errorRetryExhausted",
+  cancelled: "errorCancelled",
+};
+const statusLabels: Record<string, keyof WidgetLabels> = {
+  queued: "queued",
+  running: "running",
+  awaiting_approval: "awaitingApproval",
+  completed: "completed",
+  failed: "failed",
+  cancelled: "cancelled",
+};
 export type WidgetOptions = Readonly<{
   client: BrowserClient;
   conversationId: string;
   profileId: string;
+  labels?: Partial<WidgetLabels>;
 }>;
 export type WidgetRunDetail = Readonly<{
   conversationId: string;
@@ -25,7 +89,7 @@ const styles = `
 section { display:flex; flex-direction:column; background:var(--yada-background,#fff); border:1px solid var(--yada-border,#cbd5e1); border-radius:var(--yada-radius,12px); overflow:hidden; }
 h2 { font-size:1em; margin:0; padding:12px var(--yada-spacing,16px); border-bottom:1px solid var(--yada-border,#cbd5e1); }
 .log { display:flex; flex-direction:column; gap:8px; height:var(--yada-log-height,320px); overflow:auto; overflow-wrap:anywhere; padding:var(--yada-spacing,16px); }
-.log:empty::before { content:"Send a message to start the conversation."; margin:auto; opacity:.65; }
+.log:empty::before { content:attr(data-empty); margin:auto; opacity:.65; }
 .log > * { margin:0; max-width:80%; padding:10px 14px; border-radius:18px; line-height:1.55; }
 .log > p { white-space:pre-wrap; }
 .assistant > * { margin:0 0 .6em; }
@@ -40,6 +104,8 @@ h2 { font-size:1em; margin:0; padding:12px var(--yada-spacing,16px); border-bott
 .speaker, label, [role="status"] { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 .error { margin:0; padding:0 var(--yada-spacing,16px) 8px; font-size:.875em; }
 .error:empty { padding:0; }
+.remember { display:block; margin:0 0 4px; font-size:.9em; }
+[role="group"] .remember { position:static; width:auto; height:auto; clip-path:none; white-space:normal; overflow:visible; }
 .typing { display:flex; gap:4px; align-self:flex-start; margin:0 var(--yada-spacing,16px) 10px; padding:12px 14px; width:max-content; border-radius:18px; border-bottom-left-radius:4px; background:var(--yada-bubble-background,#f1f5f9); }
 .typing span { width:7px; height:7px; border-radius:50%; background:currentColor; opacity:.35; animation:yada-typing 1.2s infinite ease-in-out; }
 .typing span:nth-child(2) { animation-delay:.15s; }
@@ -59,6 +125,19 @@ pre { white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; margin:0; }
 [hidden] { display:none !important; }
 .error { color:var(--yada-error,#b91c1c); }
 `;
+
+let sheet: CSSStyleSheet | undefined;
+function applyStyles(root: ShadowRoot): void {
+  try {
+    sheet ??= new CSSStyleSheet();
+    sheet.replaceSync(styles);
+    root.adoptedStyleSheets = [sheet];
+  } catch {
+    const style = document.createElement("style");
+    style.textContent = styles;
+    root.append(style);
+  }
+}
 
 function inline(text: string): Node[] {
   const pattern =
@@ -154,22 +233,22 @@ export function defineYadaWidget(name = "yada-chat"): void {
     private readonly retry = document.createElement("button");
     private readonly approval = document.createElement("div");
     private readonly preview = document.createElement("pre");
+    private readonly approvalTitle = document.createElement("h3");
+    private readonly remember = document.createElement("input");
+    private readonly rememberLabel = document.createElement("label");
     private readonly approve = document.createElement("button");
     private readonly decline = document.createElement("button");
     private approvalId: string | undefined;
     private live: HTMLElement | undefined;
     private liveText = "";
+    private labels: WidgetLabels = defaultLabels;
 
     constructor() {
       super();
-      const style = document.createElement("style");
-      style.textContent = styles;
       const section = document.createElement("section");
       const title = document.createElement("h2");
-      title.textContent = "Assistant";
       this.log.className = "log";
       this.log.setAttribute("role", "log");
-      this.log.setAttribute("aria-label", "Conversation");
       this.log.setAttribute("aria-live", "polite");
       this.log.setAttribute("aria-relevant", "additions");
       this.typing.className = "typing";
@@ -180,36 +259,30 @@ export function defineYadaWidget(name = "yada-chat"): void {
         document.createElement("span"),
       );
       this.status.setAttribute("role", "status");
-      this.status.textContent = "Ready";
       this.error.setAttribute("role", "alert");
       this.error.className = "error";
       const form = document.createElement("form");
       const label = document.createElement("label");
-      label.textContent = "Message";
       this.prompt.id = "message";
       this.prompt.name = "message";
       this.prompt.required = true;
       this.prompt.maxLength = 32_000;
       label.htmlFor = this.prompt.id;
-      this.send.textContent = "Send";
       this.send.type = "submit";
-      this.cancel.textContent = "Cancel run";
       this.cancel.type = "button";
       this.cancel.hidden = true;
-      this.retry.textContent = "Reconnect";
       this.retry.type = "button";
       this.retry.hidden = true;
       this.approval.hidden = true;
       this.approval.setAttribute("role", "group");
-      this.approval.setAttribute("aria-label", "Action approval");
-      const approvalTitle = document.createElement("h3");
-      approvalTitle.textContent = "Review action before approving";
-      this.approve.textContent = "Approve action";
-      this.decline.textContent = "Decline action";
+      this.remember.type = "checkbox";
+      this.rememberLabel.append(this.remember, document.createTextNode(""));
+      this.rememberLabel.className = "remember";
       this.approve.type = this.decline.type = "button";
       this.approval.append(
-        approvalTitle,
+        this.approvalTitle,
         this.preview,
+        this.rememberLabel,
         this.approve,
         this.decline,
       );
@@ -223,10 +296,17 @@ export function defineYadaWidget(name = "yada-chat"): void {
         this.approval,
         form,
       );
-      this.root.append(style, section);
+      this.root.append(section);
+      applyStyles(this.root);
+      this.applyLabels(title, label);
+      this.status.textContent = this.labels.ready;
       form.addEventListener("submit", (event) => {
         event.preventDefault();
-        if (!this.options || this.active || !this.prompt.value.trim()) return;
+        if (!this.options || !this.prompt.value.trim()) return;
+        if (this.active) {
+          void this.steerRun();
+          return;
+        }
         this.input = this.options.client.createInput(
           this.options.profileId,
           this.prompt.value,
@@ -266,9 +346,33 @@ export function defineYadaWidget(name = "yada-chat"): void {
       });
     }
 
+    private applyLabels(
+      title = this.root.querySelector("h2"),
+      label = this.root.querySelector("form > label"),
+    ): void {
+      const text = this.labels;
+      if (title) title.textContent = text.title;
+      if (label) label.textContent = text.message;
+      this.log.setAttribute("aria-label", text.conversation);
+      this.log.dataset["empty"] = text.empty;
+      this.prompt.placeholder = text.placeholder;
+      this.send.textContent = text.send;
+      this.cancel.textContent = text.cancel;
+      this.retry.textContent = text.reconnect;
+      this.approval.setAttribute("aria-label", text.approvalGroup);
+      this.approvalTitle.textContent = text.approvalTitle;
+      this.approve.textContent = text.approve;
+      this.decline.textContent = text.decline;
+      this.rememberLabel.lastChild?.replaceWith(
+        document.createTextNode(text.remember),
+      );
+    }
+
     configure(options: WidgetOptions): void {
       this.controller?.abort();
       this.options = options;
+      this.labels = { ...defaultLabels, ...options.labels };
+      this.applyLabels();
       this.input = undefined;
       this.cursor = 0;
       this.active = false;
@@ -277,7 +381,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.live = undefined;
       this.liveText = "";
       this.error.textContent = "";
-      this.status.textContent = "Ready";
+      this.status.textContent = this.labels.ready;
       this.approval.hidden = this.cancel.hidden = this.retry.hidden = true;
       this.update();
     }
@@ -289,7 +393,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.configure(options);
       const controller = new AbortController();
       this.controller = controller;
-      this.status.textContent = "Loading conversation";
+      this.status.textContent = this.labels.loading;
       this.active = true;
       this.update();
       try {
@@ -310,8 +414,8 @@ export function defineYadaWidget(name = "yada-chat"): void {
       } catch (error) {
         if (this.isCurrent(controller)) {
           this.active = false;
-          this.error.textContent = "Could not load the saved run.";
-          this.status.textContent = "Ready";
+          this.error.textContent = this.labels.loadFailed;
+          this.status.textContent = this.labels.ready;
           this.update();
         }
         throw error;
@@ -328,8 +432,8 @@ export function defineYadaWidget(name = "yada-chat"): void {
     }
 
     private update(): void {
-      this.send.disabled = !this.options || this.active;
-      this.prompt.disabled = !this.options || this.active;
+      this.send.disabled = this.prompt.disabled =
+        !this.options || (this.active && !this.input);
       this.cancel.hidden = !this.active || !this.input;
       this.typing.hidden = !this.active || !this.approval.hidden || !!this.live;
     }
@@ -350,7 +454,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       if (role === "user") {
         const speaker = document.createElement("span");
         speaker.className = "speaker";
-        speaker.textContent = "You: ";
+        speaker.textContent = this.labels.you;
         bubble.append(speaker, text);
       } else bubble.append(markdown(text));
       this.log.append(bubble);
@@ -369,7 +473,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.error.textContent = "";
       this.retry.hidden = true;
       this.clearLive();
-      this.status.textContent = "Connecting";
+      this.status.textContent = this.labels.connecting;
       this.update();
       try {
         const job =
@@ -390,7 +494,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
           signal: controller.signal,
           onReconnect: () => {
             if (this.isCurrent(controller))
-              this.status.textContent = "Reconnecting";
+              this.status.textContent = this.labels.reconnecting;
           },
         })) {
           if (!this.isCurrent(controller)) return;
@@ -399,9 +503,8 @@ export function defineYadaWidget(name = "yada-chat"): void {
         }
       } catch {
         if (!this.isCurrent(controller)) return;
-        this.error.textContent =
-          "Connection failed. Reconnect to resume this run.";
-        this.status.textContent = "Disconnected";
+        this.error.textContent = this.labels.connectionFailed;
+        this.status.textContent = this.labels.disconnected;
         this.retry.hidden = false;
       }
     }
@@ -427,13 +530,24 @@ export function defineYadaWidget(name = "yada-chat"): void {
       if (event.type === "usage") return;
       if (event.type === "tool_started" || event.type === "tool_finished") {
         this.clearLive();
-        this.status.textContent = `${event.type === "tool_started" ? "Running" : "Finished"} ${event.tool ?? "tool"}`;
+        this.status.textContent = this.labels[
+          event.type === "tool_started" ? "toolRunning" : "toolFinished"
+        ].replace("{tool}", event.tool ?? this.labels.tool);
         this.update();
         return;
       }
-      this.status.textContent = event.type.replaceAll("_", " ");
+      const statusLabel = statusLabels[event.type];
+      this.status.textContent = statusLabel
+        ? this.labels[statusLabel]
+        : event.type.replaceAll("_", " ");
       if (event.text || ["failed", "cancelled"].includes(event.type))
         this.clearLive();
+      if (event.type === "failed" || event.type === "cancelled")
+        this.error.textContent =
+          this.labels[
+            (event.code && errorLabels[event.code]) ||
+              (event.type === "failed" ? "errorFailed" : "errorCancelled")
+          ];
       if (event.text && !restore) this.appendMessage(event.text, "assistant");
       this.approval.hidden = true;
       this.update();
@@ -451,6 +565,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
         );
         signal.throwIfAborted();
         this.approvalId = approval.id;
+        this.remember.checked = false;
         this.preview.textContent = approval.preview;
         this.approve.disabled = this.decline.disabled =
           approval.status !== "pending" || approval.expiresAt <= Date.now();
@@ -477,12 +592,38 @@ export function defineYadaWidget(name = "yada-chat"): void {
           controller.signal,
         );
         if (this.isCurrent(controller) && this.active)
-          this.status.textContent = "Cancellation requested";
+          this.status.textContent = this.labels.cancelRequested;
       } catch {
         if (this.isCurrent(controller) && this.active)
-          this.error.textContent = "Cancellation failed. Try again.";
+          this.error.textContent = this.labels.cancelFailed;
       } finally {
         if (this.isCurrent(controller)) this.cancel.disabled = false;
+      }
+    }
+
+    private async steerRun(): Promise<void> {
+      const { options, input, controller } = this;
+      const text = this.prompt.value;
+      if (!options || !input || !controller || !this.isCurrent(controller))
+        return;
+      this.send.disabled = true;
+      try {
+        await options.client.steer(
+          options.conversationId,
+          input.id,
+          text,
+          undefined,
+          controller.signal,
+        );
+        if (!this.isCurrent(controller)) return;
+        this.appendMessage(text, "user");
+        this.prompt.value = "";
+        this.error.textContent = "";
+      } catch {
+        if (this.isCurrent(controller))
+          this.error.textContent = this.labels.steerFailed;
+      } finally {
+        if (this.isCurrent(controller)) this.update();
       }
     }
 
@@ -504,6 +645,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
           approvalId,
           approved,
           controller.signal,
+          approved && this.remember.checked ? "run" : undefined,
         );
         if (
           !this.isCurrent(controller) ||
@@ -515,8 +657,8 @@ export function defineYadaWidget(name = "yada-chat"): void {
         this.approval.hidden = true;
         this.update();
         this.status.textContent = approved
-          ? "Action approved"
-          : "Action declined";
+          ? this.labels.approved
+          : this.labels.declined;
         this.cancel.focus();
       } catch {
         if (
@@ -525,8 +667,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
           this.cursor === cursor &&
           this.approvalId === approvalId
         ) {
-          this.error.textContent =
-            "Approval decision failed. Reconnect to review its current status.";
+          this.error.textContent = this.labels.decisionFailed;
           this.retry.hidden = false;
         }
       }

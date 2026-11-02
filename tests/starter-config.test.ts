@@ -67,8 +67,11 @@ it("requires secrets without echoing their values and reuses MCP validation", ()
     starterConfigFromEnv({ ...env, YADA_STORAGE_KEY: "invalid-private-key" }),
   ).toThrow("storage configuration");
   expect(() => starterConfigFromEnv({ ...env, YADA_LLM_API_KEY: "" })).toThrow(
-    "provider configuration",
+    "Set YADA_LLM_API_KEY in .env.starter",
   );
+  expect(() =>
+    starterConfigFromEnv({ ...env, YADA_LLM_PROVIDER: "nope" }),
+  ).toThrow("provider configuration");
   expect(() =>
     starterConfigFromEnv({ ...env, YADA_MCP_SERVERS: "not-json" }),
   ).toThrow("YADA_MCP_SERVERS");

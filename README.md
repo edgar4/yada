@@ -14,7 +14,7 @@ A plug-and-play AI agent harness for TypeScript backends. Bring any model, any M
 
 ## Get started
 
-Two ways in, both on Node 24.
+Two ways in, both on Node 24 or newer.
 
 ### Start a new agent app
 
@@ -37,13 +37,46 @@ Import the runtime from `@edgaralochi/yada`, the browser client from `@edgaraloc
 
 The core and the Anthropic and OpenAI-compatible providers need nothing else. Install only what you use:
 
-| Feature                  | Install                       |
-| ------------------------ | ----------------------------- |
-| SQLite storage (default) | `npm install better-sqlite3`  |
-| PostgreSQL storage       | `npm install pg`              |
-| MySQL storage            | `npm install mysql2`          |
-| Gemini                   | `npm install @google/genai`   |
-| `chatModelAdapter`       | `npm install @langchain/core` |
+| Feature                                            | Install                       |
+| -------------------------------------------------- | ----------------------------- |
+| SQLite storage (default)                           | `npm install better-sqlite3`  |
+| PostgreSQL storage                                 | `npm install pg`              |
+| MySQL storage                                      | `npm install mysql2`          |
+| Gemini                                             | `npm install @google/genai`   |
+| `chatModelAdapter` (`@edgaralochi/yada/langchain`) | `npm install @langchain/core` |
+
+### Use Yada in your backend
+
+```ts
+import { z } from "zod";
+import {
+  createProvider,
+  providerConfigFromEnv,
+  readTool,
+  run,
+} from "@edgaralochi/yada";
+
+const provider = createProvider(providerConfigFromEnv(process.env));
+const orderStatus = readTool({
+  name: "order_status",
+  description: "Look up an order by ID.",
+  input: z.strictObject({ id: z.string() }),
+  authorize: () => Promise.resolve(true),
+  execute: ({ id }) => Promise.resolve(`Order ${id}: shipped`),
+});
+
+const result = await run({
+  provider,
+  tools: [orderStatus],
+  identity: { actorId: "user-1", tenantId: "acme" },
+  input: "Where is order 1042?",
+  system: "Help customers with their orders.",
+  signal: AbortSignal.timeout(30_000),
+});
+if (result.status === "completed") console.log(result.text);
+```
+
+Set `YADA_LLM_PROVIDER`, `YADA_LLM_API_KEY` and optionally `YADA_LLM_MODEL`. For durable runs, approvals and an HTTP API, see the [worker and handler example](docs/service.md).
 
 Using a feature without its package fails with an error naming what to install. See [provider configuration](docs/configuration.md) to choose a model.
 
@@ -92,7 +125,7 @@ Automated tests require no provider credentials.
 
 ## Upgrading from 0.2
 
-- `better-sqlite3`, `pg`, `mysql2`, `@google/genai` (Gemini) and `@langchain/core` (`chatModelAdapter`) are optional peer dependencies; install the ones you use.
+- `better-sqlite3`, `pg`, `mysql2`, `@google/genai` (Gemini) and `@langchain/core` (`chatModelAdapter` from `@edgaralochi/yada/langchain`) are optional peer dependencies; install the ones you use.
 - `@langchain/google-genai`, `@langchain/anthropic` and `@langchain/openai` are no longer used; Anthropic and OpenAI-compatible providers run on the official SDKs.
 - `ReadTool.execute` returns `Content` (a string or an array of text and image parts) instead of `string`.
 - Hosted `openai` always uses the Responses API; the `api` option and `YADA_LLM_OPENAI_API` are removed.

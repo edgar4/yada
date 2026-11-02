@@ -281,7 +281,19 @@ it("rejects malformed, duplicated, expired, tampered and previous-process cookie
   vi.setSystemTime(Date.now() + 8 * 60 * 60 * 1000);
   expect(await auth.authenticate(authenticated(token))).toBeUndefined();
 });
-it("bounds global guesses and cannot be bypassed with forwarded address headers", async () => {
+it("limits login attempts per client address", async () => {
+  vi.useFakeTimers();
+  const auth = createStarterAuth(options);
+  const attempt = (ip: string) =>
+    handle(
+      auth,
+      post("/auth/login", { password: "wrong" }, { "x-yada-client-ip": ip }),
+    );
+  for (let index = 0; index < 10; index++) await attempt("192.0.2.1");
+  expect((await attempt("192.0.2.1")).status).toBe(429);
+  expect((await attempt("192.0.2.2")).status).toBe(401);
+});
+it("bounds unidentified guesses and cannot be bypassed with forwarded address headers", async () => {
   vi.useFakeTimers();
   const auth = createStarterAuth(options);
   for (let index = 0; index < 10; index++) {

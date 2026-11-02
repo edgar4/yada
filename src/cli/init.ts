@@ -43,8 +43,10 @@ export async function runCommand(
 
 export function assertNodeVersion(range: string, version: string) {
   const required = /\d+/.exec(range)?.[0];
-  if (required && version.split(".")[0] !== required)
-    throw new Error(`Yada requires Node ${required}.`);
+  if (required && Number(version.split(".")[0]) < Number(required))
+    throw new Error(
+      `Yada requires Node ${required} or newer; found ${version}.`,
+    );
 }
 
 export async function createStarter(directory: string) {

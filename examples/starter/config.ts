@@ -33,9 +33,19 @@ export function starterConfigFromEnv(
     throw new Error(
       "Check YADA_STARTER_PASSWORD (empty or 24–256 characters), YADA_STARTER_ORIGIN, and PORT",
     );
+  let provider;
+  try {
+    provider = providerConfigFromEnv(env);
+  } catch (error) {
+    if (!env["YADA_LLM_API_KEY"]?.trim() && !env["YADA_LLM_BASE_URL"])
+      throw new Error("Set YADA_LLM_API_KEY in .env.starter", {
+        cause: error,
+      });
+    throw error;
+  }
   return {
     ...result.data,
-    provider: providerConfigFromEnv(env),
+    provider,
     storage: storageConfigFromEnv({
       ...env,
       YADA_STORAGE_FILE: env["YADA_STORAGE_FILE"] ?? "work/starter/yada.sqlite",
