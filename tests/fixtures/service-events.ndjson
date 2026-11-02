@@ -1,0 +1,8 @@
+{"version":1,"sequence":1,"type":"queued","at":1760000000000}
+{"version":1,"sequence":2,"type":"running","at":1760000000100}
+{"version":1,"sequence":3,"type":"tool_started","at":1760000000200,"tool":"lookup_order"}
+{"version":1,"sequence":4,"type":"tool_finished","at":1760000000300,"tool":"lookup_order","failed":false}
+{"version":1,"sequence":5,"type":"usage","at":1760000000400,"inputTokens":120,"outputTokens":45}
+{"version":1,"sequence":6,"type":"awaiting_approval","at":1760000000500,"approvalId":"approval-1","expiresAt":1760000900500}
+{"version":1,"sequence":7,"type":"running","at":1760000060000}
+{"version":1,"sequence":8,"type":"completed","at":1760000061000,"text":"Your order has shipped."}
