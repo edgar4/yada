@@ -27,7 +27,7 @@ export async function runConversation(
   });
   let turns: ConversationMessage[];
   if (result.status === "completed")
-    turns = (last && runTurns(last.messages)) ?? [
+    turns = (last && runTurns(last.messages, last.steered?.length)) ?? [
       { role: "user", content: options.input },
       { role: "assistant", content: result.text, toolCalls: [] },
     ];

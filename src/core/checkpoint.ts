@@ -45,6 +45,7 @@ export const checkpointSchema = z.object({
   rounds: z.number().int().nonnegative(),
   calls: z.number().int().nonnegative(),
   failures: z.number().int().nonnegative().optional(),
+  steered: z.array(z.string()).optional(),
   reservedCostMicros: z.number().int().nonnegative().optional(),
   usage: z
     .object({
