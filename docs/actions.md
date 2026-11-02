@@ -43,3 +43,7 @@ When an [MCP server](mcp.md#sampling-and-elicitation) with `elicitation: true` a
 Approval requires `content` to validate against the requested schema (JSON Schema, Ajv); otherwise the endpoint returns `400` and the approval stays pending. `content` is rejected on any other action. Declining answers the server with `decline`; expiry answers with `cancel`.
 
 On resume the tool call is re-issued, so the server asks again and receives the stored answer. Each question has an operation ID derived from the run, tool call and question index; the answer is claimed through the same lease-fenced transition as writes, so a worker that lost its lease cannot answer. Elicited values live only in the action record (encrypted with the rest of the storage) and are never put in events, logs or the preview endpoint.
+
+## Sub-agent writes
+
+A [sub-agent](architecture.md#sub-agents) built with `agentTool` may use write tools when the run is durable. Its actions are recorded on the parent run with the call ID `sub:<parent call ID>:<call ID>` (nested sub-agents extend the prefix), so the approval endpoints, remembered approvals and lease fencing behave exactly as for the parent's own writes. The parent suspends with the sub-agent's approval ID; after the decision the parent re-issues the agent tool call and the sub-agent resumes from its checkpoint and executes the approved action once.

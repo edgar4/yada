@@ -3,9 +3,9 @@ import type { Identity } from "../core/contracts.js";
 import { isTerminal } from "../service/contracts.js";
 import { conversationStateSchema } from "./jobs.js";
 import { conversationKey } from "./conversations.js";
-import { actionSchema, operationId } from "./actions.js";
+import { actionSchema, runTree } from "./actions.js";
 import type { recordStore } from "./records.js";
-import { checkpointSchema } from "../core/checkpoint.js";
+import { createRunStore } from "./runs.js";
 export function createRetention(records: ReturnType<typeof recordStore>) {
   const stateSchema = conversationStateSchema.pick({
     jobs: true,
@@ -24,28 +24,18 @@ export function createRetention(records: ReturnType<typeof recordStore>) {
   ];
   const runKey = (identity: Identity, runId: string) =>
     JSON.stringify(["run", identity.tenantId, identity.actorId, runId]);
+  const runs = createRunStore(records);
   async function resolvedActions(identity: Identity, runId: string) {
-    const run = await records.read(runKey(identity, runId));
-    const state = z
-      .object({ checkpoint: checkpointSchema.optional() })
-      .parse(run?.value ?? {});
-    const keys =
-      state.checkpoint?.messages
-        .flatMap((turn) => (turn.role === "assistant" ? turn.toolCalls : []))
-        .map((call) =>
-          JSON.stringify([
-            "action",
-            identity.tenantId,
-            identity.actorId,
-            operationId(identity, runId, call.id),
-          ]),
-        ) ?? [];
+    const tree = await runTree(runs, identity, runId);
+    const keys = tree.actionIds.map((id) =>
+      JSON.stringify(["action", identity.tenantId, identity.actorId, id]),
+    );
     for (const key of keys) {
       const action = await records.read(key);
       if (action && actionSchema.parse(action.value).status === "executing")
         throw new Error("Resolve unfinished actions before erasure");
     }
-    return keys;
+    return { keys, runIds: tree.runIds };
   }
   return {
     async eraseConversation(identity: Identity, id: string) {
@@ -69,9 +59,10 @@ export function createRetention(records: ReturnType<typeof recordStore>) {
         planned?.revision ?? 0,
       );
       for (const runId of runIds) {
-        for (const actionKey of await resolvedActions(identity, runId))
-          await records.remove(actionKey);
-        await records.remove(runKey(identity, runId));
+        const tree = await resolvedActions(identity, runId);
+        for (const actionKey of tree.keys) await records.remove(actionKey);
+        for (const id of tree.runIds)
+          await records.remove(runKey(identity, id));
       }
       await records.mutate(key, (value) => ({
         value: {

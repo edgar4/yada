@@ -1,4 +1,5 @@
 import type { WriteTool, Suspension, Ask } from "./action.js";
+import type { RunOptions } from "./runtime.js";
 export type ProviderMetadata = Readonly<{
   provider: string;
   data: Record<string, unknown>;
@@ -74,6 +75,11 @@ export type ToolRun = Readonly<{
   ask?: Ask;
   addUsage: (usage: ProviderResult["usage"]) => void;
   maxOutput: number;
+  runChild?: (options: RunOptions) => Promise<ChildRun>;
+}>;
+export type ChildRun = Readonly<{
+  result: RunResult;
+  usage: ProviderResult["usage"];
 }>;
 export type Tool = ReadTool | WriteTool;
 export const failureCodes = [

@@ -1,6 +1,6 @@
 import { contextWindow, type RunLimits } from "../core/limits.js";
 import { modelHistory } from "../storage/conversations.js";
-import { operationId } from "../storage/actions.js";
+import { runTree } from "../storage/actions.js";
 import { actionExecutor } from "./actions.js";
 import { setTimeout as delay } from "node:timers/promises";
 import type {
@@ -152,12 +152,9 @@ export function createWorker(options: {
       sequence = updated.events.length;
     };
     const executing = async () => {
-      const saved = await runs.load(identity, runId);
-      for (const call of saved?.checkpoint?.pending ?? []) {
-        const action = await options.storage.actions.load(
-          identity,
-          operationId(identity, runId, call.id),
-        );
+      const tree = await runTree(runs, identity, runId, true);
+      for (const id of tree.actionIds) {
+        const action = await options.storage.actions.load(identity, id);
         if (action?.status === "executing") return true;
       }
       return false;
@@ -302,6 +299,7 @@ export function createWorker(options: {
         store: {
           ...runs,
           claim: async (...args) => {
+            if (args[1] !== runId) return runs.claim(...args);
             if (!(await eligible())) throw new RunLeaseError();
             const state = await runs.claim(...args);
             if (state.lease) token = state.lease.token;
@@ -323,6 +321,7 @@ export function createWorker(options: {
           },
           save: async (...args) => {
             if (shutdown.signal.aborted) throw new CheckpointError();
+            if (args[1] !== runId) return runs.save(...args);
             await runs.save(...args);
             await updateJob({ type: "progress" }, undefined, {
               runId: args[1],

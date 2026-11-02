@@ -39,6 +39,8 @@ export function requireRunLease(value: unknown, token: string): DurableRun {
     throw new RunLeaseError();
   return state;
 }
+export const subRunId = (runId: string, callId: string) =>
+  JSON.stringify(["sub", runId, callId]);
 export type RunOwnership = Readonly<{ runId: string; token: string }>;
 export function withRunLease<T>(
   records: ReturnType<typeof recordStore>,

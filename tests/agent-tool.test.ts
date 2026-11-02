@@ -104,7 +104,7 @@ describe("agentTool", () => {
     const { result } = parent(tool, controller.signal);
     expect(await result).toEqual({ status: "cancelled" });
   });
-  it("rejects write tools", () => {
+  it("fails a sub-agent write without a durable context", async () => {
     const write = writeTool({
       name: "w",
       description: "w",
@@ -114,14 +114,18 @@ describe("agentTool", () => {
       prepare: () => Promise.reject(new Error("unused")),
       execute: () => Promise.resolve("ok"),
     });
-    expect(() =>
-      agentTool({
-        ...base,
-        name: "sub",
-        provider: createFakeProvider(() => say("x")),
-        tools: [write],
-      }),
-    ).toThrow("write");
+    const sub = createFakeProvider((_r, n) =>
+      n === 1 ? call("w", {}) : say("x"),
+    );
+    const tool = agentTool({
+      ...base,
+      name: "sub",
+      provider: sub,
+      tools: [write],
+    });
+    const { provider, result } = parent(tool);
+    expect((await result).status).toBe("completed");
+    expect(toolContent(provider)).toContain("unsupported");
   });
   it("limits nesting depth to 2", () => {
     const leafProvider = createFakeProvider(() => say("leaf"));

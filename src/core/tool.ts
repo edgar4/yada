@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Content, Identity, ReadTool } from "./contracts.js";
+import type { Content, Identity, ReadTool, ToolRun } from "./contracts.js";
 export class InvalidArguments extends Error {}
 export function readTool<S extends z.ZodType>(options: {
   name: string;
@@ -10,6 +10,7 @@ export function readTool<S extends z.ZodType>(options: {
     args: z.output<S>,
     identity: Identity,
     signal: AbortSignal,
+    run?: ToolRun,
   ) => Promise<Content>;
 }): ReadTool {
   return {
@@ -20,7 +21,7 @@ export function readTool<S extends z.ZodType>(options: {
       parameters: z.toJSONSchema(options.input),
     },
     authorize: options.authorize,
-    execute: async (args, identity, signal) => {
+    execute: async (args, identity, signal, run) => {
       const parsed = options.input.safeParse(args);
       if (!parsed.success)
         throw new InvalidArguments(
@@ -31,7 +32,7 @@ export function readTool<S extends z.ZodType>(options: {
             )
             .join("; "),
         );
-      return options.execute(parsed.data, identity, signal);
+      return options.execute(parsed.data, identity, signal, run);
     },
   };
 }
