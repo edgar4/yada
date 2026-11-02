@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createProvider } from "../src/index.js";
+import { createProvider, providerConfigFromEnv } from "../src/index.js";
 import type { ProviderRequest, Turn } from "../src/index.js";
 import { chatReply, claudeReply, json, stubFetch } from "./helpers/http.js";
 afterEach(() => vi.unstubAllGlobals());
@@ -218,6 +218,207 @@ describe("anthropic", () => {
       interleaved[1],
       interleaved[3],
     ]);
+  });
+
+  describe("server tools", () => {
+    const search = (tool_use_id = "srv1") => [
+      {
+        type: "server_tool_use",
+        id: tool_use_id,
+        name: "web_search",
+        input: { query: "yada" },
+      },
+      {
+        type: "web_search_tool_result",
+        tool_use_id,
+        content: [
+          {
+            type: "web_search_result",
+            url: "https://a.example",
+            title: "A",
+            encrypted_content: "enc",
+            page_age: null,
+          },
+          {
+            type: "web_search_result",
+            url: "https://a.example",
+            title: "A again",
+            encrypted_content: "enc2",
+            page_age: null,
+          },
+        ],
+      },
+    ];
+    const withTools = () =>
+      createProvider({
+        provider: "anthropic",
+        apiKey: "k",
+        model: "c",
+        serverTools: ["web_search", "code_execution"],
+        webSearch: { maxUses: 2, allowedDomains: ["a.example"] },
+      });
+
+    it("declares tools and normalizes sources and call counts", async () => {
+      const calls = stubFetch(() =>
+        claudeReply([...search(), { type: "text", text: "Answer" }]),
+      );
+      const result = await withTools().complete(request());
+      expect(calls[0]?.body["tools"]).toEqual([
+        {
+          name: "lookup",
+          description: "Lookup",
+          input_schema: expect.any(Object) as unknown,
+        },
+        {
+          type: "web_search_20260318",
+          name: "web_search",
+          max_uses: 2,
+          allowed_domains: ["a.example"],
+        },
+        { type: "code_execution_20260521", name: "code_execution" },
+      ]);
+      expect(result).toMatchObject({
+        content: "Answer",
+        toolCalls: [],
+        finishReason: "stop",
+        usage: { serverToolCalls: 1 },
+        providerMetadata: {
+          data: { sources: [{ url: "https://a.example", title: "A" }] },
+        },
+      });
+    });
+
+    it("replays server tool blocks without thinking", async () => {
+      const calls = stubFetch((n) =>
+        n === 1
+          ? claudeReply([...search(), { type: "text", text: "Answer" }])
+          : claudeReply(),
+      );
+      const first = await withTools().complete(request());
+      await withTools().complete(
+        request([
+          { role: "user", content: "Hi" },
+          {
+            role: "assistant",
+            content: first.content,
+            toolCalls: [],
+            ...(first.providerMetadata && {
+              providerMetadata: first.providerMetadata,
+            }),
+          },
+          { role: "user", content: "More" },
+        ]),
+      );
+      const messages = calls[1]?.body["messages"] as {
+        content: { type: string }[];
+      }[];
+      expect(messages[1]?.content.map((block) => block.type)).toEqual([
+        "server_tool_use",
+        "web_search_tool_result",
+        "text",
+      ]);
+    });
+
+    it("continues pause_turn automatically and merges the legs", async () => {
+      const calls = stubFetch((n) =>
+        n === 1
+          ? claudeReply(search(), "pause_turn", {
+              input_tokens: 5,
+              output_tokens: 2,
+            })
+          : claudeReply([{ type: "text", text: "Done" }]),
+      );
+      const result = await withTools().complete(request());
+      expect(calls).toHaveLength(2);
+      const messages = calls[1]?.body["messages"] as {
+        role: string;
+        content: { type: string }[];
+      }[];
+      expect(messages.at(-1)?.role).toBe("assistant");
+      expect(messages.at(-1)?.content.map((block) => block.type)).toEqual([
+        "server_tool_use",
+        "web_search_tool_result",
+      ]);
+      expect(result).toMatchObject({
+        content: "Done",
+        finishReason: "stop",
+        usage: { inputTokens: 6, outputTokens: 2, serverToolCalls: 1 },
+      });
+    });
+
+    it("maps endless pause_turn to other after bounded continuations", async () => {
+      const calls = stubFetch(() => claudeReply(search(), "pause_turn"));
+      const result = await withTools().complete(request());
+      expect(calls).toHaveLength(4);
+      expect(result.finishReason).toBe("other");
+    });
+
+    it("keeps tool calls separate from server tools", async () => {
+      stubFetch(() =>
+        claudeReply(
+          [
+            ...search(),
+            { type: "tool_use", id: "t1", name: "lookup", input: {} },
+          ],
+          "tool_use",
+        ),
+      );
+      const result = await withTools().complete(request());
+      expect(result.toolCalls).toEqual([
+        { id: "t1", name: "lookup", args: {} },
+      ]);
+      expect(result.finishReason).toBe("tool_calls");
+    });
+
+    it("rejects unsupported combinations", () => {
+      expect(() =>
+        createProvider({
+          provider: "openai",
+          api: "chat",
+          apiKey: "k",
+          serverTools: ["web_search"],
+        }),
+      ).toThrow();
+      expect(() =>
+        createProvider({
+          provider: "deepseek",
+          apiKey: "k",
+          serverTools: ["web_search"],
+        }),
+      ).toThrow();
+      expect(() =>
+        createProvider({
+          provider: "ollama",
+          model: "m",
+          serverTools: ["web_search"],
+        } as never),
+      ).toThrow();
+      expect(() =>
+        createProvider({
+          provider: "gemini",
+          apiKey: "k",
+          serverTools: ["web_search"],
+          webSearch: { maxUses: 1 },
+        }),
+      ).toThrow();
+      expect(() =>
+        providerConfigFromEnv({
+          YADA_LLM_PROVIDER: "anthropic",
+          YADA_LLM_API_KEY: "k",
+          YADA_LLM_SERVER_TOOLS: "web_search,nope",
+        }),
+      ).toThrow();
+    });
+
+    it("reads YADA_LLM_SERVER_TOOLS", () => {
+      expect(
+        providerConfigFromEnv({
+          YADA_LLM_PROVIDER: "anthropic",
+          YADA_LLM_API_KEY: "k",
+          YADA_LLM_SERVER_TOOLS: "web_search, code_execution",
+        }),
+      ).toMatchObject({ serverTools: ["web_search", "code_execution"] });
+    });
   });
 
   it("rejects metadata from another provider", async () => {

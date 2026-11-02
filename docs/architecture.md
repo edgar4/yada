@@ -22,6 +22,8 @@ Read-tool failures are returned to the model as a JSON tool result, `{"error": "
 
 Consecutive read-tool calls in one response run concurrently, up to `maxParallelTools`; write calls run alone, in order, and act as barriers. Tool messages are appended and failures counted in call order, and each result is checkpointed as soon as all earlier results exist, so a resumed run re-runs only reads without a stored result. A terminal failure or cancellation aborts the reads still in flight.
 
+The optional `drainSteering()` option returns `{ id, content }` messages at the top of each round, after pending tool calls and before limit checks. Each is appended as a user turn and its `id` recorded in the checkpoint (`steered`), so a redelivered message already checkpointed is skipped. `runTurns(messages, steered)` persists a completed run from its original input onward, including steering turns. The worker supplies it from the job's steering messages and marks them consumed after the checkpoint is saved.
+
 Tool output over `maxToolOutput` (32,000) characters is truncated and ends with `…[truncated N chars]`. A call ID the provider reuses from an earlier round is rewritten to `<id>-r<round>`; duplicate IDs within one response fail with `invalid_response`.
 
 Termination: `stop` with text completes. `stop` with empty text after tool use completes with the latest non-empty assistant text of the run, otherwise fails with `invalid_response`. `length` and `other` fail with `invalid_response`. `refusal` (including content-filter and safety stops) fails with `refused`. Limits fail with `limit`.
@@ -48,9 +50,13 @@ Cancellation returns promptly even when a dependency ignores its signal. It cann
 
 ## Current capabilities
 
-The runtime supports read tools, a scripted testing provider, and native adapters for Anthropic (`src/providers/native/anthropic.ts`, Messages API, the full ordered assistant content kept in `providerMetadata.data.contentBlocks` and replayed verbatim; legacy `thinkingBlocks` still replay) and OpenAI-compatible servers (OpenAI, DeepSeek, Ollama, llama.cpp, `src/providers/native/openai.ts`, Chat Completions) built on the official SDKs with their built-in retries, and Gemini (`src/providers/native/gemini.ts`, `@google/genai`, optional peer, SDK retries via `httpOptions.retryOptions`, model parts with thought signatures replayed from `providerMetadata.data.parts`); `chatModelAdapter` wraps any LangChain chat model. Tool input schemas use Zod and infer handler argument types. Provider tests cover SDK mappings and real SDK execution for hosted and local providers with mocked HTTP responses.
+The runtime supports read tools, a scripted testing provider, and native adapters for Anthropic (`src/providers/native/anthropic.ts`, Messages API, the full ordered assistant content kept in `providerMetadata.data.contentBlocks` and replayed verbatim; legacy `thinkingBlocks` still replay) and OpenAI-compatible servers (OpenAI, DeepSeek, Ollama, llama.cpp, `src/providers/native/openai.ts`, Chat Completions) built on the official SDKs with their built-in retries, and Gemini (`src/providers/native/gemini.ts`, `@google/genai`, optional peer, SDK retries via `httpOptions.retryOptions`, model parts with thought signatures replayed from `providerMetadata.data.parts`); `chatModelAdapter` wraps any LangChain chat model. Tool input schemas use Zod and infer handler argument types. Provider tests cover SDK mappings and real SDK execution for hosted and local providers with mocked HTTP responses. Provider-hosted web search and code execution (`serverTools`, see [configuration](configuration.md)) are declared inside the adapters, never exposed as `Tool`s, and counted only as `usage.serverToolCalls`.
 
 `run` defaults to in-memory execution and accepts typed checkpoint hooks. `runDurable` adds encrypted checkpoints and renewable execution leases through the storage boundary. See [run recovery](recovery.md). `runConversation` adds durable full-turn conversation history (tool calls, results, provider metadata, failure markers) through the storage interface. OAuth sessions can use the same encrypted storage. See [durable storage](storage.md).
+
+## Long-term memory
+
+`storage.memory` and `memoryTools` give the agent cross-conversation notes per tenant and actor. Memory is retrieved only through tools; its text is untrusted tool output, bounded by `maxToolOutput`, and never placed in the system prompt. `Retriever` and `retrievalTool` connect external search the same way. See [durable storage](storage.md).
 
 ## Sub-agents
 

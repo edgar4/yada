@@ -1,8 +1,17 @@
 import { z } from "zod";
 import { nativeOpenAIAdapter } from "./native/openai.js";
 import { nativeOpenAIResponsesAdapter } from "./native/openai-responses.js";
-import { effort, modelOptions, openaiApi } from "./options.js";
-const openaiOptions = modelOptions.extend({ effort, api: openaiApi });
+import {
+  effort,
+  modelOptions,
+  openaiApi,
+  serverToolFields,
+} from "./options.js";
+const openaiOptions = modelOptions.extend({
+  effort,
+  api: openaiApi,
+  ...serverToolFields,
+});
 export function createOpenAIProvider(config: z.input<typeof openaiOptions>) {
   const { api, ...options } = openaiOptions.parse(config);
   const settings = {

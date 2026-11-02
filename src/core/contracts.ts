@@ -44,6 +44,7 @@ export type ProviderResult = Readonly<{
     outputTokens: number;
     cacheReadTokens?: number;
     cacheWriteTokens?: number;
+    serverToolCalls?: number;
   }>;
   content: string;
   toolCalls: readonly ToolCall[];

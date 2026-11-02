@@ -23,3 +23,4 @@ export {
   rotateStorageKey,
 } from "../storage/maintenance.js";
 export type { StorageBackup } from "../storage/maintenance.js";
+export type { MemoryStore, MemoryItem, MemoryInput } from "../core/memory.js";

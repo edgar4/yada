@@ -45,6 +45,7 @@ export const checkpointSchema = z.object({
   rounds: z.number().int().nonnegative(),
   calls: z.number().int().nonnegative(),
   failures: z.number().int().nonnegative().optional(),
+  steered: z.array(z.string()).optional(),
   reservedCostMicros: z.number().int().nonnegative().optional(),
   usage: z
     .object({
@@ -52,6 +53,7 @@ export const checkpointSchema = z.object({
       outputTokens: z.number().int().nonnegative(),
       cacheReadTokens: z.number().int().nonnegative().optional(),
       cacheWriteTokens: z.number().int().nonnegative().optional(),
+      serverToolCalls: z.number().int().nonnegative().optional(),
     })
     .optional(),
   outcome: runResultSchema.optional(),

@@ -5,6 +5,7 @@ import { conversationStateSchema } from "./jobs.js";
 import { conversationKey } from "./conversations.js";
 import { actionSchema, runTree } from "./actions.js";
 import type { recordStore } from "./records.js";
+import { memoryKey } from "./memory.js";
 import { createRunStore } from "./runs.js";
 export function createRetention(records: ReturnType<typeof recordStore>) {
   const stateSchema = conversationStateSchema.pick({
@@ -38,6 +39,8 @@ export function createRetention(records: ReturnType<typeof recordStore>) {
     return { keys, runIds: tree.runIds };
   }
   return {
+    eraseActorMemory: (identity: Identity) =>
+      records.remove(memoryKey(identity)),
     async eraseConversation(identity: Identity, id: string) {
       const key = conversationKey(identity, id);
       const planned = await records.read(key);

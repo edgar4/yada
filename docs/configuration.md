@@ -127,6 +127,31 @@ Usage reports `inputTokens` as the total including cached tokens, plus `cacheRea
 
 Hosted `openai` uses the Responses API by default; `openai-compatible`, `ollama` and `llamacpp` use Chat Completions. Choose with `api: "chat" | "responses"` (`YADA_LLM_OPENAI_API`). Responses requests set `store: false` and ask for `reasoning.encrypted_content`; reasoning items are kept in provider metadata and replayed before their tool calls on later rounds. Set `effort` (`YADA_LLM_EFFORT`) to send `reasoning.effort` (Chat Completions: `reasoning_effort`). Metadata from Responses cannot be replayed in Chat Completions mode.
 
+## Server-side tools
+
+`serverTools` (`YADA_LLM_SERVER_TOOLS`, comma-separated) enables provider-hosted `web_search` and `code_execution`. Supported for `anthropic`, `openai` with the Responses API and `gemini`; any other provider (Chat Completions, DeepSeek, local and compatible servers) rejects it at config parse.
+
+```ts
+createProvider({
+  provider: "anthropic",
+  apiKey: secretFromYourServer,
+  serverTools: ["web_search", "code_execution"],
+  webSearch: { maxUses: 3, allowedDomains: ["docs.example.com"] },
+});
+```
+
+| Provider             | `web_search`          | `code_execution`          |
+| -------------------- | --------------------- | ------------------------- |
+| `anthropic`          | `web_search_20260318` | `code_execution_20260521` |
+| `openai` (Responses) | `web_search`          | `code_interpreter`        |
+| `gemini`             | `googleSearch`        | `codeExecution`           |
+
+`webSearch.maxUses` bounds cost: Anthropic `max_uses`, OpenAI `max_tool_calls` (counts every built-in tool call). `webSearch.allowedDomains` limits results (Anthropic, OpenAI). `webSearch` is rejected for `gemini`.
+
+These tools run on the provider, are never exposed as Yada tools, and bypass policy, approvals and `maxToolCalls`. They appear in tracing as part of the model span. Final `content` stays plain text; cited sources are returned as `providerMetadata.data.sources` (`{ url, title }[]`, deduplicated by URL) and the number of calls as `usage.serverToolCalls`. The raw server-tool blocks stay in provider metadata and are replayed on later rounds to the same provider. Anthropic `pause_turn` is continued automatically up to three times, then the result finishes with `other`.
+
+Provider pricing for server tools is not included in Yada's cost limits.
+
 ## OpenAI-compatible endpoints
 
 Use `openai-compatible` for OpenRouter, Groq, Together, vLLM, LM Studio or an Azure-compatible gateway that speaks Chat Completions. `model` and `baseUrl` are required; `apiKey` is optional.

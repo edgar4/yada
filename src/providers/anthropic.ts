@@ -4,11 +4,12 @@ import {
   effort,
   modelOptions,
   promptCache,
+  serverToolFields,
   thinkingDisplay,
 } from "./options.js";
 const anthropicOptions = modelOptions
   .omit({ temperature: true })
-  .extend({ effort, thinkingDisplay, promptCache });
+  .extend({ effort, thinkingDisplay, promptCache, ...serverToolFields });
 export function createAnthropicProvider(
   config: z.input<typeof anthropicOptions>,
 ) {

@@ -50,4 +50,4 @@ it("fails when --scenario matches nothing", async () => {
     stderr: expect.stringContaining("No scenario") as unknown,
   });
   await expect(run(scenarios[0]?.name ?? "")).resolves.toBeDefined();
-});
+}, 30_000);

@@ -4,10 +4,11 @@ import type {
   ResponseCreateParamsNonStreaming,
   ResponseInputContent,
   ResponseInputItem,
+  Tool,
 } from "openai/resources/responses/responses";
 import { z } from "zod";
 import { contentText } from "../../core/content.js";
-import { withTrailingImages } from "../shared.js";
+import { uniqueSources, withTrailingImages } from "../shared.js";
 import type {
   Content,
   ProviderAdapter,
@@ -15,6 +16,7 @@ import type {
   ProviderResult,
   Turn,
 } from "../../core/contracts.js";
+import type { ServerToolSettings } from "../options.js";
 import { toResult, type OpenAISettings } from "./openai.js";
 
 const inputOf = (content: Content): string | ResponseInputContent[] =>
@@ -31,6 +33,9 @@ const inputOf = (content: Content): string | ResponseInputContent[] =>
       );
 
 const reasoningItems = z.array(z.looseObject({ type: z.literal("reasoning") }));
+const serverItems = z.array(
+  z.looseObject({ type: z.enum(["web_search_call", "code_interpreter_call"]) }),
+);
 
 function toItems(turn: Turn, name: string): ResponseInputItem[] {
   switch (turn.role) {
@@ -47,6 +52,9 @@ function toItems(turn: Turn, name: string): ResponseInputItem[] {
       return [
         ...(reasoningItems.parse(
           providerMetadata?.data["reasoning"] ?? [],
+        ) as unknown as ResponseInputItem[]),
+        ...(serverItems.parse(
+          providerMetadata?.data["serverItems"] ?? [],
         ) as unknown as ResponseInputItem[]),
         ...(turn.content
           ? [{ role: "assistant" as const, content: turn.content }]
@@ -77,44 +85,69 @@ function toProviderResult(response: Response, name: string): ProviderResult {
   const parts = response.output.flatMap((item) =>
     item.type === "message" ? item.content : [],
   );
+  const serverCalls = response.output.filter(
+    (item) =>
+      item.type === "web_search_call" || item.type === "code_interpreter_call",
+  );
+  const sources = uniqueSources(
+    parts.flatMap((part) =>
+      part.type === "output_text"
+        ? part.annotations.flatMap((note) =>
+            note.type === "url_citation"
+              ? [{ url: note.url, title: note.title }]
+              : [],
+          )
+        : [],
+    ),
+  );
   const reason = response.incomplete_details?.reason;
   const { usage } = response;
-  return {
-    ...toResult({
-      content: parts
-        .flatMap((part) => (part.type === "output_text" ? [part.text] : []))
-        .join(""),
-      calls: response.output.flatMap((item) =>
-        item.type === "function_call"
-          ? [{ id: item.call_id, name: item.name, arguments: item.arguments }]
-          : [],
-      ),
-      finish:
-        response.status === "incomplete"
-          ? reason === "max_output_tokens"
-            ? "length"
-            : reason
-          : "stop",
-      refused: parts.some((part) => part.type === "refusal"),
-      usage: usage && {
-        prompt_tokens: usage.input_tokens,
-        completion_tokens: usage.output_tokens,
-        prompt_tokens_details: {
-          cached_tokens: usage.input_tokens_details.cached_tokens,
-        },
+  const result = toResult({
+    content: parts
+      .flatMap((part) => (part.type === "output_text" ? [part.text] : []))
+      .join(""),
+    calls: response.output.flatMap((item) =>
+      item.type === "function_call"
+        ? [{ id: item.call_id, name: item.name, arguments: item.arguments }]
+        : [],
+    ),
+    finish:
+      response.status === "incomplete"
+        ? reason === "max_output_tokens"
+          ? "length"
+          : reason
+        : "stop",
+    refused: parts.some((part) => part.type === "refusal"),
+    usage: usage && {
+      prompt_tokens: usage.input_tokens,
+      completion_tokens: usage.output_tokens,
+      prompt_tokens_details: {
+        cached_tokens: usage.input_tokens_details.cached_tokens,
       },
-    }),
-    ...(reasoning.length && {
+    },
+  });
+  return {
+    ...result,
+    ...(serverCalls.length &&
+      result.usage && {
+        usage: { ...result.usage, serverToolCalls: serverCalls.length },
+      }),
+    ...((reasoning.length || serverCalls.length) && {
       providerMetadata: {
         provider: name,
-        data: { api: "responses", reasoning },
+        data: {
+          api: "responses",
+          ...(reasoning.length && { reasoning }),
+          ...(serverCalls.length && { serverItems: serverCalls }),
+          ...(sources.length && { sources }),
+        },
       },
     }),
   };
 }
 
 export function nativeOpenAIResponsesAdapter(
-  settings: OpenAISettings,
+  settings: OpenAISettings & ServerToolSettings,
 ): ProviderAdapter {
   const client = new OpenAI({
     apiKey: settings.apiKey ?? "unused",
@@ -126,6 +159,30 @@ export function nativeOpenAIResponsesAdapter(
     request: ProviderRequest,
   ): ResponseCreateParamsNonStreaming => {
     request.signal.throwIfAborted();
+    const tools: Tool[] = [
+      ...request.tools.map((tool) => ({
+        type: "function" as const,
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+        strict: false,
+      })),
+      ...(settings.serverTools ?? []).map((name): Tool =>
+        name === "web_search"
+          ? {
+              type: "web_search",
+              ...(settings.webSearch?.allowedDomains && {
+                filters: {
+                  allowed_domains: settings.webSearch.allowedDomains,
+                },
+              }),
+            }
+          : {
+              type: "code_interpreter",
+              container: { type: "auto" },
+            },
+      ),
+    ];
     return {
       model: settings.model,
       instructions: request.system,
@@ -135,15 +192,15 @@ export function nativeOpenAIResponsesAdapter(
         (images) => [{ role: "user", content: inputOf(images) }],
       ).flat(),
       store: false,
-      include: ["reasoning.encrypted_content"],
-      ...(request.tools.length && {
-        tools: request.tools.map((tool) => ({
-          type: "function" as const,
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.parameters,
-          strict: false,
-        })),
+      include: [
+        "reasoning.encrypted_content",
+        ...(settings.serverTools?.includes("code_execution")
+          ? (["code_interpreter_call.outputs"] as const)
+          : []),
+      ],
+      ...(tools.length && { tools }),
+      ...(settings.webSearch?.maxUses && {
+        max_tool_calls: settings.webSearch.maxUses,
       }),
       ...(settings.maxTokens !== undefined && {
         max_output_tokens: settings.maxTokens,

@@ -5,7 +5,9 @@ import {
   isTerminal,
   jobInputSchema,
   jobSchema,
+  maxSteering,
   type JobInput,
+  type SteeringInput,
   type Job,
   type RunEvent,
 } from "../service/contracts.js";
@@ -64,6 +66,19 @@ export interface JobStore {
     id: string,
     approvalId: string,
   ): Promise<boolean>;
+  steer(
+    identity: Identity,
+    conversationId: string,
+    id: string,
+    message: SteeringInput,
+  ): Promise<Job>;
+  consumeSteering(
+    identity: Identity,
+    conversationId: string,
+    id: string,
+    ids: readonly string[],
+    lease: RunOwnership,
+  ): Promise<Job>;
   retry(identity: Identity, conversationId: string, id: string): Promise<Job>;
   cancel(identity: Identity, conversationId: string, id: string): Promise<void>;
   pending(after?: string): Promise<{
@@ -193,6 +208,25 @@ export function createJobStore(
       at: job.updatedAt,
     });
   };
+  const mutateJob = (
+    identity: Identity,
+    conversationId: string,
+    id: string,
+    lease: RunOwnership | undefined,
+    change: (value: unknown) => { value: unknown; result: Job },
+  ) => {
+    const key = conversationKey(identity, conversationId);
+    if (!lease) return records.mutate(key, change);
+    if (lease.runId !== JSON.stringify([conversationId, id]))
+      return Promise.reject(new RunLeaseError());
+    return withRunLease(records, identity, lease, async (tx, assertOwned) => {
+      const conversation = await tx.read(key);
+      const next = change(conversation?.value);
+      assertOwned();
+      await tx.write(key, next.value, conversation?.revision ?? 0);
+      return next.result;
+    });
+  };
   const apply: JobStore["update"] = (
     identity,
     conversationId,
@@ -201,9 +235,8 @@ export function createJobStore(
     outcome,
     lease,
     turns,
-  ) => {
-    const key = conversationKey(identity, conversationId);
-    const change = (value: unknown) => {
+  ) =>
+    mutateJob(identity, conversationId, id, lease, (value) => {
       const { state, job } = jobIn(value, identity, conversationId, id);
       if (isTerminal(job.status)) return { value: state, result: job };
       append(job, event);
@@ -230,18 +263,7 @@ export function createJobStore(
         state.messages.push(...added);
       }
       return { value: state, result: job };
-    };
-    if (!lease) return records.mutate(key, change);
-    if (lease.runId !== JSON.stringify([conversationId, id]))
-      return Promise.reject(new RunLeaseError());
-    return withRunLease(records, identity, lease, async (tx, assertOwned) => {
-      const conversation = await tx.read(key);
-      const next = change(conversation?.value);
-      assertOwned();
-      await tx.write(key, next.value, conversation?.revision ?? 0);
-      return next.result;
     });
-  };
   return {
     submit: async (identity, conversationId, input) => {
       const parsed = jobInputSchema.parse(input);
@@ -272,6 +294,7 @@ export function createJobStore(
           status: "queued",
           cancelRequested: false,
           history: state.messages,
+          steering: [],
           events: [],
         };
         append(job, { type: "queued" });
@@ -315,6 +338,28 @@ export function createJobStore(
         );
       return job;
     },
+    steer: (identity, conversationId, id, message) =>
+      records.mutate(conversationKey(identity, conversationId), (value) => {
+        const { state, job } = jobIn(value, identity, conversationId, id);
+        const existing = job.steering.find((item) => item.id === message.id);
+        if (existing) {
+          if (JSON.stringify(existing.input) !== JSON.stringify(message.input))
+            throw new JobConflict();
+        } else {
+          if (isTerminal(job.status) || job.steering.length >= maxSteering)
+            throw new JobConflict();
+          job.steering.push({ ...message, consumed: false });
+          append(job, { type: "steering_received" });
+        }
+        return { value: state, result: job };
+      }),
+    consumeSteering: (identity, conversationId, id, ids, lease) =>
+      mutateJob(identity, conversationId, id, lease, (value) => {
+        const { state, job } = jobIn(value, identity, conversationId, id);
+        for (const item of job.steering)
+          if (ids.includes(item.id)) item.consumed = true;
+        return { value: state, result: job };
+      }),
     retry: (identity, conversationId, id) =>
       records.mutate(conversationKey(identity, conversationId), (value) => {
         const { state, job } = jobIn(value, identity, conversationId, id);

@@ -30,3 +30,11 @@ export function withTrailingImages<M>(
   flush();
   return messages;
 }
+
+export const uniqueSources = (
+  sources: readonly { url: string; title: string }[],
+) =>
+  sources.filter(
+    (source, index) =>
+      sources.findIndex((other) => other.url === source.url) === index,
+  );

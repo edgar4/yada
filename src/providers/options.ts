@@ -28,6 +28,16 @@ export const effort = z
 export const openaiApi = z.enum(["chat", "responses"]).optional();
 export const thinkingDisplay = z.enum(["summarized", "omitted"]).optional();
 export const promptCache = z.enum(["off", "5m", "1h"]).optional();
+export const serverToolFields = {
+  serverTools: z.array(z.enum(["web_search", "code_execution"])).optional(),
+  webSearch: z
+    .strictObject({
+      maxUses: z.number().int().positive().optional(),
+      allowedDomains: z.array(z.string().trim().min(1)).min(1).optional(),
+    })
+    .optional(),
+};
+export type ServerToolSettings = z.infer<z.ZodObject<typeof serverToolFields>>;
 export const modelOptions = z.strictObject({
   ...modelFields,
   maxTokens: z.number().int().positive().default(8192),

@@ -103,6 +103,7 @@ const server = createNodeServer(async (request) => {
         status: "completed",
         cancelRequested: false,
         history: [],
+        steering: [],
         outcome: { status: "completed", text: contentText(input.input) },
         events: [
           { version: 1, sequence: 1, type: "queued", at: 1 },

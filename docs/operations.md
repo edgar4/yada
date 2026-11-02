@@ -22,9 +22,9 @@ This does not discover provider pricing or guarantee the provider's final invoic
 
 SQLite maintenance requires a persistent database filename. These config-based APIs open their own connection and reject `:memory:`, which would address a different empty database.
 
-`backupStorage(config)` returns a versioned encrypted snapshot of all Yada records. The database encryption key is never embedded in the snapshot. Store snapshots and keys separately with restricted access. Snapshots contain encrypted conversations, jobs, runs, approvals and OAuth sessions. Treat them as sensitive even though payloads are encrypted.
+`backupStorage(config)` returns a versioned encrypted snapshot of all Yada records. The database encryption key is never embedded in the snapshot. Store snapshots and keys separately with restricted access. Snapshots contain encrypted conversations, jobs, runs, approvals, long-term memory and OAuth sessions. Treat them as sensitive even though payloads are encrypted.
 
-`restoreStorage(config, backup)` verifies every envelope with the supplied key and requires an empty destination. Inserts are transactional; a damaged or duplicate record rolls back the restore. Restore into a separate database and verify representative conversations before switching the application to it. Keep the original database available for rollback.
+`restoreStorage(config, backup)` verifies every envelope with the supplied key and requires an empty destination. Inserts are transactional; a damaged or duplicate record rolls back the restore. Restore into a separate database and verify representative conversations and memory before switching the application to it. Keep the original database available for rollback.
 
 `rotateStorageKey(config, newKey)` re-encrypts records transactionally. **Stop all writers and workers before rotation**, keep a verified backup, then restart every instance with the new key. This is an offline maintenance API, not online rolling rotation. Never mix instances using different keys. Retain the previous key for older backups according to your retention policy.
 
@@ -35,6 +35,8 @@ The conformance suite verifies encrypted backup/restore and key rotation on SQLi
 `storage.jobs.prune(identity, conversationId, beforeTimestamp)` removes terminal job/event listings older than the cutoff. It retains conversation history and internal references needed for later full erasure. Retired run IDs cannot be reused.
 
 `storage.retention.eraseConversation(identity, conversationId)` removes conversation content, completed run checkpoints, and associated action records. Cancel or reconcile unfinished runs first. Erasure leaves an empty tombstone to prevent the same conversation ID from being recreated accidentally. Interrupted erasure can be retried; its pending cleanup references remain durable. OAuth grants belong to connections and are managed separately through disconnect/revocation.
+
+`storage.retention.eraseActorMemory(identity)` deletes that actor's long-term memory record. Memory is a normal record, so backups and restores include it.
 
 Backups and external backend operation receipts have independent retention policies. Erasing Yada records does not revoke provider credentials or delete data in connected services.
 
