@@ -28,7 +28,7 @@ const cloudConfig = z
   .refine((value) =>
     value.provider === "anthropic"
       ? value.temperature === undefined
-      : value.effort === undefined &&
+      : (value.provider === "gemini" || value.effort === undefined) &&
         value.thinkingDisplay === undefined &&
         value.promptCache === undefined,
   );
@@ -44,7 +44,7 @@ export function createProvider(input: ProviderConfig) {
   const local = localOptions.safeParse(config);
   if (local.success) return createLocalProvider(local.data);
   throw new Error(
-    "Invalid provider configuration: choose a supported provider and provide a model for local and OpenAI-compatible servers or an API key for hosted providers. Anthropic does not accept temperature, and effort and promptCache apply only to Anthropic.",
+    "Invalid provider configuration: choose a supported provider and provide a model for local and OpenAI-compatible servers or an API key for hosted providers. Anthropic does not accept temperature, and effort applies only to Anthropic and Gemini, and thinkingDisplay and promptCache only to Anthropic.",
   );
 }
 const envFields = [
