@@ -107,12 +107,13 @@ describe("providers", () => {
       },
     ]);
   });
-  it("maps images for openai", async () => {
+  it("maps images for openai-compatible servers", async () => {
     const calls = stubFetch(() => chatReply());
     const adapter = createProvider({
-      provider: "openai",
-      api: "chat",
-      apiKey: "key",
+      provider: "openai-compatible",
+      model: "m",
+      baseUrl: "http://localhost:1/v1",
+      vision: true,
     });
     expect(adapter.capabilities.vision).toBe(true);
     await adapter.complete(request);
@@ -149,9 +150,10 @@ describe("providers", () => {
   it("sends tool images in a following user message", async () => {
     const calls = stubFetch(() => chatReply());
     await createProvider({
-      provider: "openai",
-      api: "chat",
-      apiKey: "key",
+      provider: "openai-compatible",
+      model: "m",
+      baseUrl: "http://localhost:1/v1",
+      vision: true,
     }).complete({
       ...request,
       messages: [

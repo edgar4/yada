@@ -553,11 +553,5 @@ describe("errors", () => {
       expect(execute).toHaveBeenCalledTimes(1);
       expect(calls).toHaveLength(2);
     });
-
-    it("rejects webSearch options", () => {
-      expect(() =>
-        gemini({ serverTools: ["web_search"], webSearch: { maxUses: 1 } }),
-      ).toThrow();
-    });
   });
 });

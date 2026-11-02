@@ -58,9 +58,6 @@ it.each([
   { YADA_LLM_TEMPERATURE: "3" },
   { YADA_LLM_MAX_RETRIES: "11" },
   { YADA_LLM_MAX_RETRIES: "-1" },
-  { YADA_LLM_PROVIDER: "deepseek", YADA_LLM_EFFORT: "high" },
-  { YADA_LLM_PROVIDER: "gemini", YADA_LLM_OPENAI_API: "chat" },
-  { YADA_LLM_PROVIDER: "anthropic", YADA_LLM_TEMPERATURE: "0.5" },
   { YADA_LLM_PROVIDER: "anthropic", YADA_LLM_EFFORT: "nope" },
   { YADA_LLM_BASE_URL: "ftp://example.com" },
   { YADA_LLM_BASE_URL: "https://user:pass@example.com/v1" },
@@ -74,17 +71,36 @@ it.each([
   { provider: "openai-compatible", model: "m" },
   { provider: "openai-compatible", baseUrl: "http://localhost:1/v1" },
   { provider: "openai", apiKey: "k", headers: { a: 1 } },
-  { provider: "deepseek", apiKey: "k", effort: "high" },
-  { provider: "deepseek", apiKey: "k", api: "chat" },
-  { provider: "openai", apiKey: "k", thinkingDisplay: "omitted" },
   { provider: "anthropic", apiKey: "k", effort: "extreme" },
   { provider: "anthropic", apiKey: "k", thinkingDisplay: "full" },
-  { provider: "anthropic", apiKey: "k", temperature: 0.5 },
   { provider: "ollama", model: "m", maxRetries: 99 },
+  { provider: "openai", apiKey: "k", api: "chat" },
 ])("rejects invalid config %o", (config) => {
   expect(() => createProvider(config as never)).toThrow(
     "Invalid provider configuration",
   );
+});
+it.each([
+  "anthropic",
+  "openai",
+  "gemini",
+  "deepseek",
+  "ollama",
+  "llamacpp",
+] as const)("accepts every generic setting for %s", (provider) => {
+  expect(() =>
+    createProvider(
+      providerConfigFromEnv({
+        YADA_LLM_PROVIDER: provider,
+        YADA_LLM_API_KEY: "k",
+        YADA_LLM_MODEL: "m",
+        YADA_LLM_TEMPERATURE: "0.5",
+        YADA_LLM_EFFORT: "high",
+        YADA_LLM_PROMPT_CACHE: "1h",
+        YADA_LLM_SERVER_TOOLS: "web_search",
+      }),
+    ),
+  ).not.toThrow();
 });
 function lookupTool() {
   return readTool({
@@ -190,8 +206,7 @@ it("applies the default max tokens and a custom base URL to hosted providers", a
     }),
   );
   await createProvider({
-    provider: "openai",
-    api: "chat",
+    provider: "deepseek",
     apiKey: "k",
     baseUrl: "https://proxy.example.com/v1",
   }).complete({
@@ -201,9 +216,7 @@ it("applies the default max tokens and a custom base URL to hosted providers", a
     signal: AbortSignal.timeout(5000),
   });
   expect(urls[0]).toBe("https://proxy.example.com/v1/chat/completions");
-  expect(
-    bodies[0]?.["max_completion_tokens"] ?? bodies[0]?.["max_tokens"],
-  ).toBe(8192);
+  expect(bodies[0]?.["max_tokens"]).toBe(8192);
 });
 it("retries transient failures and stops when aborted", async () => {
   const fetchMock = vi.fn(() => json({ error: { message: "busy" } }, 503));
@@ -295,48 +308,4 @@ it("round trips Claude 5 thinking blocks and sends effort through a tool loop", 
     thinking: "",
     signature: "sig",
   });
-});
-it("uses the documented OpenAI default with reasoning disabled", async () => {
-  const bodies: Record<string, unknown>[] = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn((_url: string, init: RequestInit) => {
-      bodies.push(JSON.parse(init.body as string) as Record<string, unknown>);
-      return json({
-        id: "c",
-        object: "chat.completion",
-        created: 1,
-        model: "m",
-        choices: [
-          {
-            index: 0,
-            finish_reason: "stop",
-            message: { role: "assistant", content: "Hello" },
-          },
-        ],
-      });
-    }),
-  );
-  const request = {
-    system: "s",
-    messages: [],
-    tools: [],
-    signal: AbortSignal.timeout(5000),
-  };
-  await createProvider({
-    provider: "openai",
-    api: "chat",
-    apiKey: "k",
-  }).complete(request);
-  await createProvider({
-    provider: "openai",
-    api: "chat",
-    apiKey: "k",
-    model: "x",
-  }).complete(request);
-  expect(bodies[0]).toMatchObject({
-    model: "gpt-6-luna",
-    reasoning_effort: "none",
-  });
-  expect(bodies[1]).not.toHaveProperty("reasoning_effort");
 });

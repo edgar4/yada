@@ -197,14 +197,18 @@ describe("openai responses", () => {
   it("rejects responses metadata in chat mode", async () => {
     stubFetch(() => chatReply());
     await expect(
-      openai({ api: "chat" }).complete(
+      createProvider({
+        provider: "openai-compatible",
+        model: "m",
+        baseUrl: "http://localhost:1/v1",
+      }).complete(
         request([
           {
             role: "assistant",
             content: "x",
             toolCalls: [],
             providerMetadata: {
-              provider: "openai",
+              provider: "openai-compatible",
               data: { api: "responses" },
             },
           },
@@ -283,27 +287,24 @@ describe("openai responses", () => {
     await expect(openai().stream?.(request()).next()).rejects.toThrow("Empty");
   });
 
-  it("selects the API from config and the environment", async () => {
+  it("uses Responses for OpenAI and Chat Completions for compatible servers", async () => {
     const calls = stubFetch((n) => (n === 2 ? responsesReply() : chatReply()));
-    const local = {
+    await createProvider({
       provider: "openai-compatible",
       model: "m",
       baseUrl: "http://localhost:1/v1",
-    } as const;
-    await createProvider(local).complete(request());
-    await createProvider({ ...local, api: "responses" }).complete(request());
+    }).complete(request());
     await createProvider(
       providerConfigFromEnv({
         YADA_LLM_PROVIDER: "openai",
         YADA_LLM_API_KEY: "k",
-        YADA_LLM_OPENAI_API: "chat",
       }),
     ).complete(request());
     expect(
       calls.map((c) =>
         c.url.replace(/^.*\/(chat\/completions|responses)$/, "$1"),
       ),
-    ).toEqual(["chat/completions", "responses", "chat/completions"]);
+    ).toEqual(["chat/completions", "responses"]);
   });
 
   describe("server tools", () => {
@@ -439,20 +440,6 @@ describe("openai responses", () => {
       expect(result).toEqual({ status: "completed", text: "ok" });
       expect(execute).toHaveBeenCalledTimes(1);
       expect(calls).toHaveLength(2);
-    });
-
-    it("rejects chat mode and other providers", () => {
-      expect(() =>
-        openai({ api: "chat", serverTools: ["web_search"] }),
-      ).toThrow();
-      expect(() =>
-        createProvider({
-          provider: "openai-compatible",
-          model: "m",
-          baseUrl: "http://localhost:1/v1",
-          serverTools: ["web_search"],
-        } as never),
-      ).toThrow();
     });
   });
 });

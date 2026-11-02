@@ -6,17 +6,16 @@ import {
   run,
 } from "../src/index.js";
 import { z } from "zod";
-import { chatReply, stubFetch } from "./helpers/http.js";
+import { chatReply, responsesReply, stubFetch } from "./helpers/http.js";
 afterEach(() => vi.unstubAllGlobals());
 it.each([undefined, "custom-model"])(
   "selects OpenAI and its model %s",
   async (model) => {
-    const calls = stubFetch(() => chatReply({ content: "Hello" }));
+    const calls = stubFetch(() => responsesReply());
     const provider = createProvider(
       providerConfigFromEnv({
         YADA_LLM_PROVIDER: "openai",
         YADA_LLM_API_KEY: "key",
-        YADA_LLM_OPENAI_API: "chat",
         ...(model ? { YADA_LLM_MODEL: model } : {}),
       }),
     );
@@ -27,11 +26,11 @@ it.each([undefined, "custom-model"])(
         tools: [],
         signal: new AbortController().signal,
       }),
-    ).toEqual({ content: "Hello", toolCalls: [], finishReason: "stop" });
+    ).toMatchObject({ content: "ok", toolCalls: [], finishReason: "stop" });
     expect(calls[0]?.body).toMatchObject({ model: model ?? "gpt-6-luna" });
   },
 );
-it("completes a tool round trip with OpenAI", async () => {
+it("completes a tool round trip with an OpenAI-compatible server", async () => {
   const calls = stubFetch((call) =>
     call === 1
       ? chatReply(
@@ -52,9 +51,9 @@ it("completes a tool round trip with OpenAI", async () => {
   const execute = vi.fn(() => Promise.resolve("Available"));
   const result = await run({
     provider: createProvider({
-      provider: "openai",
-      api: "chat",
-      apiKey: "key",
+      provider: "openai-compatible",
+      model: "m",
+      baseUrl: "http://localhost:1/v1",
     }),
     tools: [
       readTool({

@@ -25,7 +25,6 @@ export const modelFields = {
 export const effort = z
   .enum(["low", "medium", "high", "xhigh", "max"])
   .optional();
-export const openaiApi = z.enum(["chat", "responses"]).optional();
 export const thinkingDisplay = z.enum(["summarized", "omitted"]).optional();
 export const promptCache = z.enum(["off", "5m", "1h"]).optional();
 export const serverToolFields = {
@@ -38,8 +37,15 @@ export const serverToolFields = {
     .optional(),
 };
 export type ServerToolSettings = z.infer<z.ZodObject<typeof serverToolFields>>;
+export const settingFields = {
+  effort,
+  thinkingDisplay,
+  promptCache,
+  ...serverToolFields,
+};
 export const modelOptions = z.strictObject({
   ...modelFields,
+  ...settingFields,
   maxTokens: z.number().int().positive().default(8192),
   maxRetries: z.number().int().min(0).max(10).default(defaultMaxRetries),
 });
