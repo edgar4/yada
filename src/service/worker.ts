@@ -236,7 +236,7 @@ export function createWorker(options: {
         undefined,
         turns,
       );
-      await accrueCost();
+      await accrueCost().catch(() => undefined);
       await traceFinished(
         final.status,
         final.status === "failed" ? final.code : undefined,
