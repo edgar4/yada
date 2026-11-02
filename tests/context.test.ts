@@ -127,6 +127,24 @@ describe("summarizing compaction", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(events).toEqual(["summary", "model"]);
   });
+  it("never summarizes the current run's input or steering turns", async () => {
+    const o = options();
+    let drained = false;
+    await run({
+      ...o,
+      history: history.slice(0, 2),
+      summarize: { provider: o.summarize.provider, keepTurns: 1 },
+      drainSteering: () => {
+        if (drained) return Promise.resolve([]);
+        drained = true;
+        return Promise.resolve([{ id: "m", content: "More" }]);
+      },
+    });
+    expect(o.provider.requests[0]?.messages.slice(1)).toEqual([
+      { role: "user", content: "Now" },
+      { role: "user", content: "More" },
+    ]);
+  });
   it("is checkpointed so a resumed run does not summarize again", async () => {
     const saved: RunCheckpoint[] = [];
     const first = options();

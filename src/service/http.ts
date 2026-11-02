@@ -9,6 +9,7 @@ import {
   isTerminal,
   jobInputSchema,
   maxJobBodyBytes,
+  steeringInputSchema,
   type RunEvent,
 } from "./contracts.js";
 import { eventKey, type EventBus } from "./events.js";
@@ -69,7 +70,7 @@ export function createHandler(options: {
       if (!identity) return json({ error: "Authentication required" }, 401);
       const url = new URL(request.url);
       const match =
-        /^\/v1\/conversations\/([^/]+)\/runs(?:\/([^/]+)(?:\/(events|cancel|approvals\/[^/]+(?:\/decision)?))?)?$/.exec(
+        /^\/v1\/conversations\/([^/]+)\/runs(?:\/([^/]+)(?:\/(events|cancel|messages|approvals\/[^/]+(?:\/decision)?))?)?$/.exec(
           url.pathname,
         );
       if (!match?.[1]) return json({ error: "Not found" }, 404);
@@ -155,6 +156,17 @@ export function createHandler(options: {
           conversationId,
           id,
           approvalId,
+        );
+        return json({ accepted: true }, 202);
+      }
+      if (match[3] === "messages") {
+        if (request.method !== "POST")
+          return json({ error: "Method not allowed" }, 405);
+        await options.storage.jobs.steer(
+          identity,
+          conversationId,
+          id,
+          steeringInputSchema.parse(await readJson(request, maxJobBodyBytes)),
         );
         return json({ accepted: true }, 202);
       }

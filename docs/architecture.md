@@ -22,6 +22,8 @@ Read-tool failures are returned to the model as a JSON tool result, `{"error": "
 
 Consecutive read-tool calls in one response run concurrently, up to `maxParallelTools`; write calls run alone, in order, and act as barriers. Tool messages are appended and failures counted in call order, and each result is checkpointed as soon as all earlier results exist, so a resumed run re-runs only reads without a stored result. A terminal failure or cancellation aborts the reads still in flight.
 
+The optional `drainSteering()` option returns `{ id, content }` messages at the top of each round, after pending tool calls and before limit checks. Each is appended as a user turn and its `id` recorded in the checkpoint (`steered`), so a redelivered message already checkpointed is skipped. `runTurns(messages, steered)` persists a completed run from its original input onward, including steering turns. The worker supplies it from the job's steering messages and marks them consumed after the checkpoint is saved.
+
 Tool output over `maxToolOutput` (32,000) characters is truncated and ends with `…[truncated N chars]`. A call ID the provider reuses from an earlier round is rewritten to `<id>-r<round>`; duplicate IDs within one response fail with `invalid_response`.
 
 Termination: `stop` with text completes. `stop` with empty text after tool use completes with the latest non-empty assistant text of the run, otherwise fails with `invalid_response`. `length` and `other` fail with `invalid_response`. `refusal` (including content-filter and safety stops) fails with `refused`. Limits fail with `limit`.

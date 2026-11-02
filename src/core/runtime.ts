@@ -31,8 +31,12 @@ export type SummarizeOptions = Readonly<{
   provider?: ProviderAdapter;
   keepTurns?: number;
 }>;
-export const runTurns = (messages: readonly Turn[]) =>
-  messages.slice(messages.map((turn) => turn.role).lastIndexOf("user"));
+export const runTurns = (messages: readonly Turn[], steered = 0) =>
+  messages.slice(
+    messages
+      .flatMap((turn, index) => (turn.role === "user" ? [index] : []))
+      .at(-(steered + 1)) ?? 0,
+  );
 export type RunOptions = {
   provider: ProviderAdapter;
   tools: readonly Tool[];
@@ -46,6 +50,7 @@ export type RunOptions = {
   maxRounds?: number;
   maxToolCalls?: number;
   checkpoint?: RunCheckpoint;
+  drainSteering?: () => Promise<readonly { id: string; content: Content }[]>;
   persist?: (checkpoint: RunCheckpoint) => Promise<void>;
   hooks?: RunHooks;
   summarize?: SummarizeOptions;
@@ -181,6 +186,8 @@ async function runLoop(options: RunOptions): Promise<RunResult> {
         return await finish({ status: "failed", code: "unsupported" });
       const stopped = await executePending(loop);
       if (stopped) return stopped;
+      const unsupported = await drainSteering(loop);
+      if (unsupported) return unsupported;
       const exceeded = await checkLimits(loop);
       if (exceeded) return exceeded;
       const result = await callModel(loop);
@@ -195,6 +202,29 @@ async function runLoop(options: RunOptions): Promise<RunResult> {
         : { status: "failed", code: "dependency_failed" },
     );
   }
+}
+async function drainSteering(loop: Loop): Promise<RunResult | undefined> {
+  const { state, options } = loop;
+  if (!options.drainSteering) return undefined;
+  let drained: Awaited<ReturnType<NonNullable<RunOptions["drainSteering"]>>>;
+  try {
+    drained = await options.drainSteering();
+  } catch {
+    throw new CheckpointError();
+  }
+  const fresh = drained.filter((item) => !state.steered?.includes(item.id));
+  if (!fresh.length) return undefined;
+  if (
+    !options.provider.capabilities.vision &&
+    fresh.some((item) => hasImages(item.content))
+  )
+    return loop.finish({ status: "failed", code: "unsupported" });
+  for (const { id, content } of fresh) {
+    state.messages.push({ role: "user", content });
+    state.steered = [...(state.steered ?? []), id];
+  }
+  await loop.save();
+  return undefined;
 }
 async function executePending(loop: Loop): Promise<RunResult | undefined> {
   const { state } = loop;
@@ -453,7 +483,10 @@ async function summarize(loop: Loop): Promise<RunResult | undefined> {
   const users = state.messages.flatMap((turn, index) =>
     turn.role === "user" ? [index] : [],
   );
-  const split = users.at(-(options.summarize?.keepTurns ?? 2)) ?? 0;
+  const split = Math.min(
+    users.at(-(options.summarize?.keepTurns ?? 2)) ?? 0,
+    users.at(-((state.steered?.length ?? 0) + 1)) ?? 0,
+  );
   const first = state.messages[0];
   const summarized =
     first?.role === "user" &&
@@ -551,7 +584,7 @@ async function classify(
           ? result.content
           : lastAssistantText(state.messages)
         : undefined;
-    if (text)
+    if (text) {
       state.messages.push({
         role: "assistant",
         content: text,
@@ -560,6 +593,12 @@ async function classify(
           ? { providerMetadata: result.providerMetadata }
           : {}),
       });
+      if (state.rounds < loop.maxRounds) {
+        const steered = state.steered?.length ?? 0;
+        const stopped = await drainSteering(loop);
+        if (stopped || (state.steered?.length ?? 0) > steered) return stopped;
+      }
+    }
     return loop.finish(
       text
         ? { status: "completed", text }

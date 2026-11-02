@@ -122,6 +122,7 @@ export function createWorker(options: {
     ) => options.storage.jobs.update(identity, conversationId, job.id, ...args);
     let token = "";
     let sequence = job.events.length;
+    let consumed = 0;
     let recording = Promise.resolve();
     const record = async (event: AgentEvent) => {
       if (event.type === "text_delta")
@@ -203,7 +204,8 @@ export function createWorker(options: {
         final.status === "completed"
           ? (await runs.load(identity, runId))?.checkpoint?.messages
           : undefined;
-      const turns = messages && runTurns(messages);
+      const steered = (await runs.load(identity, runId))?.checkpoint?.steered;
+      const turns = messages && runTurns(messages, steered?.length);
       await updateJob(
         {
           type: final.status,
@@ -271,6 +273,10 @@ export function createWorker(options: {
         ),
         history,
         input: job.input,
+        drainSteering: async () =>
+          (await loadJob())?.steering.flatMap((item) =>
+            item.consumed ? [] : [{ id: item.id, content: item.input }],
+          ) ?? [],
         identity,
         runId,
         profileId: job.profileId,
@@ -323,10 +329,19 @@ export function createWorker(options: {
             if (shutdown.signal.aborted) throw new CheckpointError();
             if (args[1] !== runId) return runs.save(...args);
             await runs.save(...args);
-            await updateJob({ type: "progress" }, undefined, {
-              runId: args[1],
-              token: args[2],
-            });
+            const lease = { runId: args[1], token: args[2] };
+            await updateJob({ type: "progress" }, undefined, lease);
+            const steered = args[3].steered ?? [];
+            if (steered.length > consumed) {
+              await options.storage.jobs.consumeSteering(
+                identity,
+                conversationId,
+                job.id,
+                steered,
+                lease,
+              );
+              consumed = steered.length;
+            }
           },
           renew: async (...args) => {
             await checkCancellation().catch(() => undefined);

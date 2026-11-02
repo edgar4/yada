@@ -4,6 +4,7 @@ import {
   isTerminal,
   jobInputSchema,
   jobSchema,
+  steeringInputSchema,
   type Job,
   type JobInput,
   type RunEvent,
@@ -206,6 +207,35 @@ export class BrowserClient {
       undefined,
       signal,
     );
+  }
+
+  async steer(
+    conversationId: string,
+    runId: string,
+    input: JobInput["input"],
+    id: string = crypto.randomUUID(),
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const body = JSON.stringify(steeringInputSchema.parse({ id, input }));
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await this.json(
+          `${this.path(conversationId, runId)}/messages`,
+          "POST",
+          body,
+          signal,
+        );
+        return;
+      } catch (error) {
+        if (
+          signal?.aborted ||
+          !retryable(error) ||
+          attempt >= (this.options.maxRetries ?? 3)
+        )
+          throw error;
+        await wait(this.delay(attempt), signal);
+      }
+    }
   }
 
   async getApproval(

@@ -18,6 +18,11 @@ export const jobInputSchema = z.strictObject({
     "Invalid job input",
   ),
 });
+export const steeringInputSchema = z.strictObject({
+  id: z.string().min(1).max(128),
+  input: jobInputSchema.shape.input,
+});
+export const maxSteering = 8;
 export const maxJobBodyBytes = maxImages * (maxImageChars + 1_024) + 98_304;
 const statusSchema = z.enum([
   "queued",
@@ -33,6 +38,7 @@ export const activityTypes = [
   "tool_started",
   "tool_finished",
   "usage",
+  "steering_received",
 ] as const;
 export const eventSchema = z.strictObject({
   version: z.literal(1),
@@ -56,9 +62,13 @@ export const jobSchema = jobInputSchema.extend({
   status: statusSchema,
   cancelRequested: z.boolean(),
   history: z.array(messageSchema),
+  steering: z
+    .array(steeringInputSchema.extend({ consumed: z.boolean() }))
+    .default([]),
   outcome: runResultSchema.optional(),
   events: z.array(eventSchema),
 });
+export type SteeringInput = z.infer<typeof steeringInputSchema>;
 export type JobInput = z.infer<typeof jobInputSchema>;
 export type Job = z.infer<typeof jobSchema>;
 export type RunEvent = z.infer<typeof eventSchema>;
