@@ -5,5 +5,6 @@ export function createGeminiProvider(config: ModelOptions) {
   return nativeGeminiAdapter({
     ...options,
     model: options.model ?? "gemini-3.8-flash",
+    serverTools: options.serverTools ?? ["web_search"],
   });
 }

@@ -81,10 +81,27 @@ describe("openai responses", () => {
           },
           strict: false,
         },
+        { type: "web_search" },
       ],
       max_output_tokens: 100,
       reasoning: { effort: "high" },
     });
+  });
+
+  it("enables web search by default and disables it with none", async () => {
+    const calls = stubFetch(() => responsesReply());
+    for (const tools of [undefined, "none"])
+      await createProvider(
+        providerConfigFromEnv({
+          YADA_LLM_PROVIDER: "openai",
+          YADA_LLM_API_KEY: "k",
+          ...(tools && { YADA_LLM_SERVER_TOOLS: tools }),
+        }),
+      ).complete(request());
+    expect(calls.map((c) => JSON.stringify(c.body["tools"]))).toEqual([
+      expect.stringContaining('"type":"web_search"'),
+      expect.not.stringContaining("web_search"),
+    ]);
   });
 
   it("defaults the hosted model to no reasoning", async () => {

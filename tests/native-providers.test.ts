@@ -81,6 +81,7 @@ describe("anthropic", () => {
           description: "Lookup",
           input_schema: { type: "object" },
         },
+        { type: "web_search_20260318", name: "web_search" },
       ],
     });
     expect(calls[0]?.body).not.toHaveProperty("temperature");

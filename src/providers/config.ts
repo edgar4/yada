@@ -61,7 +61,10 @@ export function providerConfigFromEnv(
       ),
     ),
     ...(env["YADA_LLM_SERVER_TOOLS"] !== undefined && {
-      serverTools: list(env["YADA_LLM_SERVER_TOOLS"]),
+      serverTools:
+        env["YADA_LLM_SERVER_TOOLS"].trim() === "none"
+          ? []
+          : list(env["YADA_LLM_SERVER_TOOLS"]),
     }),
     ...Object.fromEntries(
       envNumbers.flatMap(([name, key]) =>

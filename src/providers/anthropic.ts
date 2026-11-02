@@ -5,5 +5,6 @@ export function createAnthropicProvider(config: ModelOptions) {
   return nativeAnthropicAdapter({
     ...options,
     model: options.model ?? "claude-opus-5-5",
+    serverTools: options.serverTools ?? ["web_search"],
   });
 }

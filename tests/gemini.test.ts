@@ -98,6 +98,7 @@ describe("request mapping", () => {
             },
           ],
         },
+        { googleSearch: {} },
       ],
       contents: [
         {
