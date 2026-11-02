@@ -34,6 +34,27 @@ export const limitsSchema = z
     "Cost limit needs a per-call reservation or pricing",
   );
 export type RunLimits = z.input<typeof limitsSchema>;
+export function usageCostMicros(
+  pricing: NonNullable<RunLimits["pricing"]>,
+  usage: Readonly<{
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens?: number | undefined;
+    cacheWriteTokens?: number | undefined;
+  }>,
+): number {
+  const { cacheReadTokens = 0, cacheWriteTokens = 0 } = usage;
+  return (
+    ((usage.inputTokens - cacheReadTokens - cacheWriteTokens) *
+      pricing.inputMicrosPer1k +
+      cacheReadTokens *
+        (pricing.cacheReadMicrosPer1k ?? pricing.inputMicrosPer1k) +
+      cacheWriteTokens *
+        (pricing.cacheWriteMicrosPer1k ?? pricing.inputMicrosPer1k) +
+      usage.outputTokens * pricing.outputMicrosPer1k) /
+    1000
+  );
+}
 const compactedNote = (turn: Extract<Turn, { role: "tool" }>) =>
   `[compacted: ${String(contentSize(turn.content))} chars]`;
 const compact = (turn: Extract<Turn, { role: "tool" }>): Turn => {
