@@ -64,6 +64,16 @@ export function tracingHooks(
       if (result.usage) {
         model.setAttribute("usage.input_tokens", result.usage.inputTokens);
         model.setAttribute("usage.output_tokens", result.usage.outputTokens);
+        if (result.usage.cacheReadTokens !== undefined)
+          model.setAttribute(
+            "usage.cache_read_tokens",
+            result.usage.cacheReadTokens,
+          );
+        if (result.usage.cacheWriteTokens !== undefined)
+          model.setAttribute(
+            "usage.cache_write_tokens",
+            result.usage.cacheWriteTokens,
+          );
       }
       close(model, true);
       model = undefined;

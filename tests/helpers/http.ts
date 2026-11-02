@@ -74,6 +74,7 @@ const blockStream = (block: Block, index: number): [string, object][] => {
 export const claudeReply = (
   content: Block[] = [{ type: "text", text: "ok" }],
   stop_reason = "end_turn",
+  usage: object = { input_tokens: 1, output_tokens: 1 },
 ) =>
   sseEvents([
     [
@@ -88,7 +89,7 @@ export const claudeReply = (
           content: [],
           stop_reason: null,
           stop_sequence: null,
-          usage: { input_tokens: 1, output_tokens: 1 },
+          usage,
         },
       },
     ],

@@ -8,7 +8,12 @@ import {
   run,
   runConversation,
 } from "../src/index.js";
-import type { ConversationStore, ProviderResult, Turn } from "../src/index.js";
+import type {
+  ConversationStore,
+  ProviderResult,
+  RunCheckpoint,
+  Turn,
+} from "../src/index.js";
 const identity = { actorId: "a", tenantId: "t" };
 const answer: ProviderResult = {
   content: "Done",
@@ -68,6 +73,120 @@ describe("in-run compaction", () => {
         limits: { maxContextChars: 900 },
       }),
     ).toEqual({ status: "failed", code: "limit" });
+  });
+});
+describe("summarizing compaction", () => {
+  const history: Turn[] = [
+    { role: "user", content: "a".repeat(3000) },
+    { role: "assistant", content: "A", toolCalls: [] },
+    { role: "user", content: "two" },
+    { role: "assistant", content: "B", toolCalls: [] },
+  ];
+  const summary = (finishReason: ProviderResult["finishReason"] = "stop") =>
+    createFakeProvider(() => ({
+      content: "Earlier: asked about a",
+      toolCalls: [],
+      finishReason,
+      usage: { inputTokens: 5, outputTokens: 2 },
+    }));
+  const options = (summarizer = summary()) => ({
+    ...base,
+    tools: [],
+    provider: createFakeProvider(() => answer),
+    input: "Now",
+    history,
+    limits: { maxContextChars: 2000 },
+    summarize: { provider: summarizer },
+  });
+  it("replaces turns before the kept user turns with one summary", async () => {
+    const o = options();
+    const events: string[] = [];
+    expect(
+      await run({
+        ...o,
+        hooks: {
+          onEvent: (event) => {
+            if (event.type === "model_finished")
+              events.push(event.purpose ?? "model");
+          },
+        },
+      }),
+    ).toEqual({ status: "completed", text: "Done" });
+    const transcript = o.summarize.provider.requests[0]?.messages[0];
+    expect(transcript?.content).toBe(
+      `user: ${"a".repeat(3000)}\n\nassistant: A`,
+    );
+    expect(o.provider.requests[0]?.messages).toEqual([
+      {
+        role: "user",
+        content: "[summary of earlier conversation]\nEarlier: asked about a",
+      },
+      ...history.slice(2),
+      { role: "user", content: "Now" },
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events).toEqual(["summary", "model"]);
+  });
+  it("is checkpointed so a resumed run does not summarize again", async () => {
+    const saved: RunCheckpoint[] = [];
+    const first = options();
+    await run({
+      ...first,
+      persist: (checkpoint) => {
+        saved.push(checkpoint);
+        return Promise.resolve();
+      },
+    });
+    const resumed = options();
+    expect(
+      await run({ ...resumed, checkpoint: saved[0] as RunCheckpoint }),
+    ).toEqual({ status: "completed", text: "Done" });
+    expect(resumed.summarize.provider.requests).toHaveLength(0);
+  });
+  it("runs only when tool compaction is not enough", async () => {
+    const o = options();
+    await run({
+      ...o,
+      history: [
+        { role: "user", content: "one" },
+        {
+          role: "assistant",
+          content: "",
+          toolCalls: [{ id: "1", name: "t", args: {} }],
+        },
+        { role: "tool", toolCallId: "1", name: "t", content: "b".repeat(3000) },
+        { role: "assistant", content: "B", toolCalls: [] },
+      ],
+    });
+    expect(o.summarize.provider.requests).toHaveLength(0);
+  });
+  it("maps a refused summary and stays off by default", async () => {
+    expect(await run(options(summary("refusal")))).toEqual({
+      status: "failed",
+      code: "refused",
+    });
+    const { summarize, ...plain } = options();
+    expect(await run(plain)).toEqual({ status: "failed", code: "limit" });
+    expect(summarize.provider.requests).toHaveLength(0);
+  });
+  it("stores the full turns of a summarized conversation", async () => {
+    const s = await storage();
+    try {
+      await s.conversations.save(identity, "c", history, 0);
+      const o = options();
+      await runConversation({
+        ...o,
+        conversationId: "c",
+        store: s.conversations,
+      });
+      expect((await s.conversations.load(identity, "c"))?.messages).toEqual([
+        ...history,
+        { role: "user", content: "Now" },
+        { role: "assistant", content: "Done", toolCalls: [] },
+      ]);
+    } finally {
+      await s.close();
+    }
   });
 });
 describe("contextWindow", () => {

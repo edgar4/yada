@@ -1,4 +1,4 @@
-import { run } from "../core/runtime.js";
+import { run, runTurns } from "../core/runtime.js";
 import type { RunCheckpoint } from "../core/checkpoint.js";
 import { modelHistory, type ConversationMessage } from "./conversations.js";
 import { StorageConflict } from "./records.js";
@@ -27,7 +27,7 @@ export async function runConversation(
   });
   let turns: ConversationMessage[];
   if (result.status === "completed")
-    turns = last?.messages.slice(history.length) ?? [
+    turns = (last && runTurns(last.messages)) ?? [
       { role: "user", content: options.input },
       { role: "assistant", content: result.text, toolCalls: [] },
     ];

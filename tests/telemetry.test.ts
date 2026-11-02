@@ -212,6 +212,32 @@ describe("cost from actual usage", () => {
     expect(result).toEqual({ status: "failed", code: "limit" });
     expect(calls).toBe(2);
   });
+  it("prices cached input tokens separately when configured", async () => {
+    const cachedCall = {
+      ...call,
+      usage: { inputTokens: 1000, outputTokens: 0, cacheReadTokens: 900 },
+    };
+    const attempt = (cacheReadMicrosPer1k?: number) =>
+      run({
+        ...base,
+        provider: createFakeProvider((_r, n) =>
+          n === 1 ? cachedCall : answer,
+        ),
+        tools: [lookup(() => Promise.resolve("ok"))],
+        limits: {
+          maxCostMicros: 500,
+          pricing: {
+            inputMicrosPer1k: 1000,
+            outputMicrosPer1k: 1000,
+            ...(cacheReadMicrosPer1k === undefined
+              ? {}
+              : { cacheReadMicrosPer1k }),
+          },
+        },
+      });
+    expect((await attempt(100)).status).toBe("completed");
+    expect(await attempt()).toEqual({ status: "failed", code: "limit" });
+  });
   it("allows runs under the budget and rejects an unpriced limit", async () => {
     const result = await run({
       ...base,

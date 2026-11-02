@@ -113,6 +113,12 @@ createProvider({
 
 Thinking and redacted thinking blocks are kept in provider metadata and sent back unchanged on later tool rounds, as Anthropic requires. `effort` and `thinkingDisplay` are accepted only for `anthropic`. `temperature` is rejected for `anthropic` because the Messages API no longer accepts it.
 
+## Anthropic prompt caching
+
+The Anthropic provider caches the prompt prefix by default, so each tool round rereads the system prompt, tools and history from the cache instead of paying full input price. It sends a top-level `cache_control` (cached up to the latest message) and a breakpoint on the system prompt, so the system prompt and tools stay cached across conversations. Set `promptCache` (`YADA_LLM_PROMPT_CACHE`) to `"5m"` (default), `"1h"` or `"off"`. Use `"off"` for gateways that reject `cache_control`. `promptCache` is accepted only for `anthropic`; OpenAI caches long prompts automatically.
+
+Usage reports `inputTokens` as the total including cached tokens, plus `cacheReadTokens` and `cacheWriteTokens` when the provider returns them (Anthropic both, OpenAI-compatible servers `cacheReadTokens`).
+
 ## OpenAI-compatible endpoints
 
 Use `openai-compatible` for OpenRouter, Groq, Together, vLLM, LM Studio or an Azure-compatible gateway that speaks Chat Completions. `model` and `baseUrl` are required; `apiKey` is optional.

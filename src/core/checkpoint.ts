@@ -50,6 +50,8 @@ export const checkpointSchema = z.object({
     .object({
       inputTokens: z.number().int().nonnegative(),
       outputTokens: z.number().int().nonnegative(),
+      cacheReadTokens: z.number().int().nonnegative().optional(),
+      cacheWriteTokens: z.number().int().nonnegative().optional(),
     })
     .optional(),
   outcome: runResultSchema.optional(),

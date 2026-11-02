@@ -11,6 +11,7 @@ import type {
 } from "../core/contracts.js";
 import { CheckpointError } from "../core/checkpoint.js";
 import { runDurable } from "../storage/durable-run.js";
+import { runTurns, type SummarizeOptions } from "../core/runtime.js";
 import { RunLeaseError, type RunOwnership } from "../storage/runs.js";
 import type { YadaStorage } from "../storage/index.js";
 import type { JobStore } from "../storage/jobs.js";
@@ -29,6 +30,7 @@ export type AgentProfile = Readonly<{
   maxRounds?: number;
   maxToolCalls?: number;
   timeoutMs?: number;
+  summarize?: SummarizeOptions;
 }>;
 const completeOnly = (provider: ProviderAdapter): ProviderAdapter => ({
   name: provider.name,
@@ -192,7 +194,7 @@ export function createWorker(options: {
         ...(await counters()),
       });
     };
-    const finalize = async (result: TerminalResult, historyLength: number) => {
+    const finalize = async (result: TerminalResult) => {
       const latest = await loadJob();
       const final: TerminalResult =
         result.status === "cancelled" &&
@@ -200,12 +202,11 @@ export function createWorker(options: {
         !shutdown.signal.aborted
           ? { status: "failed", code: "timeout" }
           : result;
-      const turns =
+      const messages =
         final.status === "completed"
-          ? (await runs.load(identity, runId))?.checkpoint?.messages.slice(
-              historyLength,
-            )
+          ? (await runs.load(identity, runId))?.checkpoint?.messages
           : undefined;
+      const turns = messages && runTurns(messages);
       await updateJob(
         {
           type: final.status,
@@ -336,7 +337,7 @@ export function createWorker(options: {
       });
       await recording;
       if ("approvalId" in result) await traceFinished(result.status);
-      else await finalize(result, history.length);
+      else await finalize(result);
     } catch (error) {
       await handleFailure(error);
     }

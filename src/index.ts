@@ -1,5 +1,5 @@
 export type * from "./core/contracts.js";
-export { run } from "./core/runtime.js";
+export { run, type SummarizeOptions } from "./core/runtime.js";
 export { composeHooks } from "./core/hooks.js";
 export type { AgentEvent, RunHooks } from "./core/hooks.js";
 export { tracingHooks } from "./core/telemetry.js";

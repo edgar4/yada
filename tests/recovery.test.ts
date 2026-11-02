@@ -185,6 +185,30 @@ for (const driver of drivers)
         ),
       ).rejects.toThrow("configuration mismatch");
     });
+    it("binds default round and call limits from the limits schema", async () => {
+      const s = await setup();
+      await runDurable({
+        runId: s.id,
+        profileId: "v1",
+        store: s.store.runs,
+        identity,
+        provider: createFakeProvider(() => ({
+          content: "Done",
+          toolCalls: [],
+          finishReason: "stop",
+        })),
+        tools: [],
+        input: "Hi",
+        system: "Help",
+        signal: AbortSignal.timeout(3000),
+      });
+      const stored = await s.store.runs.load(identity, s.id);
+      expect(stored?.request).toMatchObject({
+        maxRounds: 32,
+        maxToolCalls: 64,
+        limits: { maxRounds: 32, maxToolCalls: 64 },
+      });
+    });
     it("resumes a saved decision after the worker loses its response", async () => {
       const s = await setup();
       const execute = vi.fn(() => Promise.resolve("Found"));

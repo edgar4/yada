@@ -81,7 +81,13 @@ type Completion = Readonly<{
   finish: string | null | undefined;
   refused?: boolean;
   usage?:
-    { prompt_tokens: number; completion_tokens: number } | null | undefined;
+    | {
+        prompt_tokens: number;
+        completion_tokens: number;
+        prompt_tokens_details?: { cached_tokens?: number | null } | null;
+      }
+    | null
+    | undefined;
 }>;
 
 const finishReasons: Record<string, ProviderResult["finishReason"]> = {
@@ -109,6 +115,9 @@ function toResult(completion: Completion): ProviderResult {
       usage: {
         inputTokens: completion.usage.prompt_tokens,
         outputTokens: completion.usage.completion_tokens,
+        ...(completion.usage.prompt_tokens_details?.cached_tokens && {
+          cacheReadTokens: completion.usage.prompt_tokens_details.cached_tokens,
+        }),
       },
     }),
     content: completion.content,

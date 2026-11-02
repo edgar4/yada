@@ -70,7 +70,7 @@ it("retains consumed budgets and call IDs on recovery", async () => {
   expect(
     await run({
       ...s.options,
-      checkpoint: { ...pending, pending: [], rounds: 8 },
+      checkpoint: { ...pending, pending: [], rounds: 32 },
     }),
   ).toEqual({ status: "failed", code: "limit" });
   expect(s.provider.requests).toHaveLength(0);
