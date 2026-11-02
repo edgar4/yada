@@ -1,6 +1,11 @@
 import { run, runTurns } from "../core/runtime.js";
 import type { RunCheckpoint } from "../core/checkpoint.js";
-import { modelHistory, type ConversationMessage } from "./conversations.js";
+import {
+  modelHistory,
+  summaryOf,
+  withSummary,
+  type ConversationMessage,
+} from "./conversations.js";
 import { StorageConflict } from "./records.js";
 import type { ConversationStore } from "./index.js";
 export async function runConversation(
@@ -25,6 +30,13 @@ export async function runConversation(
       return Promise.resolve();
     },
   });
+  const summary =
+    last &&
+    summaryOf(
+      history,
+      last.messages,
+      runTurns(last.messages, last.steered?.length),
+    );
   let turns: ConversationMessage[];
   if (result.status === "completed")
     turns = (last && runTurns(last.messages, last.steered?.length)) ?? [
@@ -44,7 +56,7 @@ export async function runConversation(
     await store.save(
       identity,
       conversationId,
-      [...(previous?.messages ?? []), ...turns],
+      [...withSummary(previous?.messages ?? [], summary), ...turns],
       previous?.revision ?? 0,
     );
   } catch (error) {
@@ -53,7 +65,7 @@ export async function runConversation(
     await store.save(
       identity,
       conversationId,
-      [...(latest?.messages ?? []), ...turns],
+      [...withSummary(latest?.messages ?? [], summary), ...turns],
       latest?.revision ?? 0,
     );
   }

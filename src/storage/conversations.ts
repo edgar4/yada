@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { turnSchema } from "../core/checkpoint.js";
+import { summaryPrefix, turnSchema } from "../core/checkpoint.js";
 import type { Identity, Turn } from "../core/contracts.js";
 import type { recordStore } from "./records.js";
 export const identitySchema = z.strictObject({
@@ -10,6 +10,10 @@ const failureSchema = z.strictObject({
   role: z.literal("failure"),
   code: z.string(),
 });
+const summarySchema = z.strictObject({
+  role: z.literal("summary"),
+  content: z.string(),
+});
 export const messageSchema: z.ZodType<ConversationMessage> = z.preprocess(
   (value) =>
     typeof value === "object" &&
@@ -19,12 +23,54 @@ export const messageSchema: z.ZodType<ConversationMessage> = z.preprocess(
     !("toolCalls" in value)
       ? { ...value, toolCalls: [] }
       : value,
-  z.union([turnSchema, failureSchema]),
+  z.union([turnSchema, failureSchema, summarySchema]),
 );
 export type ConversationMessage =
-  Turn | Readonly<{ role: "failure"; code: string }>;
-export const modelHistory = (messages: readonly ConversationMessage[]) =>
-  messages.filter((message): message is Turn => message.role !== "failure");
+  | Turn
+  | Readonly<{ role: "failure"; code: string }>
+  | Readonly<{ role: "summary"; content: string }>;
+const isTurn = (message?: ConversationMessage): message is Turn =>
+  message?.role !== "failure" && message?.role !== "summary";
+export function modelHistory(messages: readonly ConversationMessage[]): Turn[] {
+  const start = messages.map((message) => message.role).lastIndexOf("summary");
+  const summary = messages[start];
+  return [
+    ...(summary?.role === "summary"
+      ? [{ role: "user" as const, content: summary.content }]
+      : []),
+    ...messages.slice(start + 1).filter(isTurn),
+  ];
+}
+export type ConversationSummary = Readonly<{ content: string; kept: number }>;
+export function summaryOf(
+  history: readonly Turn[],
+  messages: readonly Turn[],
+  turns: readonly Turn[],
+): ConversationSummary | undefined {
+  const first = messages[0];
+  if (
+    first?.role !== "user" ||
+    typeof first.content !== "string" ||
+    !first.content.startsWith(summaryPrefix) ||
+    first.content === history[0]?.content
+  )
+    return undefined;
+  return { content: first.content, kept: messages.length - 1 - turns.length };
+}
+export function withSummary(
+  messages: readonly ConversationMessage[],
+  summary?: ConversationSummary,
+): ConversationMessage[] {
+  if (!summary) return [...messages];
+  let index = messages.length;
+  for (let kept = 0; kept < summary.kept && index > 0;)
+    if (isTurn(messages[--index])) kept++;
+  return [
+    ...messages.slice(0, index),
+    { role: "summary", content: summary.content },
+    ...messages.slice(index),
+  ];
+}
 export type Conversation = Readonly<{
   revision: number;
   messages: readonly ConversationMessage[];

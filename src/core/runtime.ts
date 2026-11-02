@@ -13,6 +13,7 @@ import {
   checkpointSchema,
   CheckpointError,
   type RunCheckpoint,
+  summaryPrefix,
 } from "./checkpoint.js";
 import type {
   ChildRun,
@@ -29,7 +30,6 @@ import type {
 } from "./contracts.js";
 const toolError = (error: string, message: string) =>
   JSON.stringify({ error, message });
-const summaryPrefix = "[summary of earlier conversation]\n";
 const summarySystem =
   "Summarize this conversation for an assistant that will continue it. Keep the facts, decisions, tool results and open questions it still needs. Reply with the summary only.";
 export type SummarizeOptions = Readonly<{

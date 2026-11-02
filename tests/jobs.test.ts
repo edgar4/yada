@@ -195,3 +195,62 @@ it("retries storage outages and refuses a second scheduler", async () => {
   await worker.stop();
   expect(JSON.stringify(trace.mock.calls)).not.toContain("secret");
 });
+it("persists worker summaries in conversation history", async () => {
+  const s = await storageFixture("sqlite");
+  const provider = createFakeProvider(() => ({
+    content: "Hi",
+    toolCalls: [],
+    finishReason: "stop",
+  }));
+  const summarizer = createFakeProvider(() => ({
+    content: "Asked about a",
+    toolCalls: [],
+    finishReason: "stop",
+  }));
+  const worker = createWorker({
+    storage: s.storage,
+    profiles: {
+      v1: {
+        provider,
+        tools: [],
+        system: "Help",
+        limits: { maxContextChars: 2000 },
+        summarize: { provider: summarizer, keepTurns: 1 },
+      },
+    },
+  });
+  for (const [id, input] of [
+    ["one", "a".repeat(1500)],
+    ["two", "b".repeat(1000)],
+    ["three", "c"],
+  ] as const) {
+    await s.storage.jobs.submit(s.identity, "chat", {
+      id,
+      profileId: "v1",
+      input,
+    });
+    await worker.tick();
+    expect((await s.storage.jobs.load(s.identity, "chat", id))?.status).toBe(
+      "completed",
+    );
+  }
+  expect(summarizer.requests).toHaveLength(1);
+  expect(provider.requests[2]?.messages[0]).toEqual({
+    role: "user",
+    content: "[summary of earlier conversation]\nAsked about a",
+  });
+  expect(
+    (await s.storage.conversations.load(s.identity, "chat"))?.messages.map(
+      (message) => message.role,
+    ),
+  ).toEqual([
+    "user",
+    "assistant",
+    "summary",
+    "user",
+    "assistant",
+    "user",
+    "assistant",
+  ]);
+  await worker.stop();
+});
