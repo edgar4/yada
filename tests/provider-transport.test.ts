@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createProvider, readTool, run } from "../src/index.js";
 afterEach(() => vi.unstubAllGlobals());
-it.each(["openai", "gemini", "deepseek", "ollama", "llamacpp"] as const)(
+it.each(["gemini", "deepseek", "ollama", "llamacpp"] as const)(
   "round trips through the real %s SDK with mocked HTTP",
   async (provider) => {
     const bodies: unknown[] = [];
@@ -73,7 +73,6 @@ it.each(["openai", "gemini", "deepseek", "ollama", "llamacpp"] as const)(
         provider,
         apiKey: "test",
         model: "test",
-        ...(provider === "openai" && { api: "chat" }),
       }),
       tools: [
         readTool({
@@ -124,7 +123,6 @@ it.each(["openai", "gemini", "deepseek", "ollama", "llamacpp"] as const)(
           provider,
           apiKey: "test",
           model: "test",
-          ...(provider === "openai" && { api: "chat" }),
         }),
         tools: [],
         identity: { actorId: "a", tenantId: "t" },

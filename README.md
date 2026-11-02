@@ -78,7 +78,7 @@ YADA_LLM_MODEL=claude-opus-5-5
 YADA_LLM_API_KEY=your-anthropic-api-key
 ```
 
-Live requests use your provider account and may incur charges; keep `.env` private. For the full starter, run `npm run starter:init`, add credentials to `.env.starter`, then `npm run starter`.
+That is all Yada needs. `.env.example` also lists the optional settings (effort, temperature, prompt caching, provider-hosted web search and code execution) with their allowed values; see [configuration](docs/configuration.md#model-settings). Live requests use your provider account and may incur charges; keep `.env` private. For the full starter, run `npm run starter:init`, add credentials to `.env.starter`, then `npm run starter`.
 
 Before opening a pull request:
 
@@ -95,8 +95,9 @@ Automated tests require no provider credentials.
 - `better-sqlite3`, `pg`, `mysql2`, `@google/genai` (Gemini) and `@langchain/core` (`chatModelAdapter`) are optional peer dependencies; install the ones you use.
 - `@langchain/google-genai`, `@langchain/anthropic` and `@langchain/openai` are no longer used; Anthropic and OpenAI-compatible providers run on the official SDKs.
 - `ReadTool.execute` returns `Content` (a string or an array of text and image parts) instead of `string`.
-- Hosted `openai` uses the Responses API by default. Set `api: "chat"` (`YADA_LLM_OPENAI_API=chat`) to keep Chat Completions.
-- `temperature` is rejected for `anthropic`; use `effort` instead.
+- Hosted `openai` always uses the Responses API; the `api` option and `YADA_LLM_OPENAI_API` are removed.
+- Provider-hosted web search is on by default for `anthropic`, `openai` and `gemini` and is billed by the provider; set `YADA_LLM_SERVER_TOOLS=none` to turn it off.
+- Every provider accepts every model setting and ignores ones it has no equivalent for (Anthropic ignores `temperature`; use `effort`).
 - `maxContextChars` defaults to 256,000 and service `historyChars` to 128,000.
 - `maxRounds` defaults to 32 and `maxToolCalls` to 64, also for `runDurable` and worker profiles. Set `maxCostMicros` to bound spend. Durable runs suspended before the upgrade fail with `Run configuration mismatch` on resume unless their profile pins the old `maxRounds: 8` and `maxToolCalls: 16`.
 

@@ -1,33 +1,13 @@
-import { z } from "zod";
-import { nativeOpenAIAdapter } from "./native/openai.js";
 import { nativeOpenAIResponsesAdapter } from "./native/openai-responses.js";
-import {
-  effort,
-  modelOptions,
-  openaiApi,
-  serverToolFields,
-} from "./options.js";
-const openaiOptions = modelOptions.extend({
-  effort,
-  api: openaiApi,
-  ...serverToolFields,
-});
-export function createOpenAIProvider(config: z.input<typeof openaiOptions>) {
-  const { api, ...options } = openaiOptions.parse(config);
-  const settings = {
+import { modelOptions, type ModelOptions } from "./options.js";
+export function createOpenAIProvider(config: ModelOptions) {
+  const options = modelOptions.parse(config);
+  return nativeOpenAIResponsesAdapter({
     ...options,
     name: "openai",
     model: options.model ?? "gpt-6-luna",
+    serverTools: options.serverTools ?? ["web_search"],
     vision: true,
-  };
-  const defaultEffort = options.effort ?? (options.model ? undefined : "none");
-  return api === "chat"
-    ? nativeOpenAIAdapter({
-        ...settings,
-        maxTokensParam: "max_completion_tokens",
-        ...(defaultEffort && {
-          extraBody: { reasoning_effort: defaultEffort },
-        }),
-      })
-    : nativeOpenAIResponsesAdapter({ ...settings, effort: defaultEffort });
+    effort: options.effort ?? (options.model ? undefined : "none"),
+  });
 }

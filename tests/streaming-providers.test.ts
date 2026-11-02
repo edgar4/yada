@@ -269,7 +269,7 @@ const gemini = {
 };
 it.each([
   ["anthropic", anthropic],
-  ["openai", openai],
+  ["deepseek", openai],
   ["gemini", gemini],
 ] as const)(
   "streams %s into the same result as complete",
@@ -295,7 +295,6 @@ it.each([
       apiKey: "test",
       model: "test",
       ...(name === "anthropic" ? { thinkingDisplay: "summarized" } : {}),
-      ...(name === "openai" ? { api: "chat" } : {}),
     });
     const request = {
       system: "Help",

@@ -88,7 +88,7 @@ Yada routes requests to `https://api.deepseek.com` using Chat Completions with t
 
 ## Tuning and endpoints
 
-All providers accept these optional settings, except that Anthropic rejects `temperature`. `baseUrl` must be an `http(s)` URL without credentials, query or fragment, and is trusted server configuration.
+All providers accept these optional settings. `baseUrl` must be an `http(s)` URL without credentials, query or fragment, and is trusted server configuration.
 
 | Setting (code / env)                   | Default                           | Meaning                                             |
 | -------------------------------------- | --------------------------------- | --------------------------------------------------- |
@@ -98,38 +98,25 @@ All providers accept these optional settings, except that Anthropic rejects `tem
 | `baseUrl` / `YADA_LLM_BASE_URL`        | provider default                  | Override the API endpoint (proxy, gateway, region). |
 | `headers` (code only)                  | none                              | Extra HTTP headers as a record of strings.          |
 
-## Anthropic effort and thinking
+## Model settings
 
-Claude 5 models think adaptively by default. Control depth with `effort` (`YADA_LLM_EFFORT`), sent as `output_config.effort`, and optionally choose how thinking is returned with `thinkingDisplay`, sent as `thinking: { type: "adaptive", display }`.
+Every provider accepts the same settings. Yada maps each one to the provider's own parameter and ignores it where the provider has no equivalent, so switching providers never needs a config change.
 
-```ts
-createProvider({
-  provider: "anthropic",
-  apiKey: secretFromYourServer,
-  effort: "high", // low | medium | high | xhigh | max
-  thinkingDisplay: "summarized", // or "omitted"
-});
-```
+| Setting (code / env)                    | Values                               | Default                                            | Anthropic              | OpenAI             | Gemini                       | DeepSeek, local, compatible |
+| --------------------------------------- | ------------------------------------ | -------------------------------------------------- | ---------------------- | ------------------ | ---------------------------- | --------------------------- |
+| `temperature` / `YADA_LLM_TEMPERATURE`  | 0 to 2                               | provider default                                   | ignored                | `temperature`      | `temperature`                | `temperature`               |
+| `effort` / `YADA_LLM_EFFORT`            | `low` `medium` `high` `xhigh` `max`  | provider default (`none` for default OpenAI model) | `output_config.effort` | `reasoning.effort` | `thinkingLevel` (max `HIGH`) | ignored                     |
+| `thinkingDisplay` (code only)           | `summarized` `omitted`               | provider default                                   | `thinking.display`     | ignored            | ignored                      | ignored                     |
+| `promptCache` / `YADA_LLM_PROMPT_CACHE` | `5m` `1h` `off`                      | `5m`                                               | `cache_control` TTL    | automatic          | ignored                      | ignored                     |
+| `serverTools` / `YADA_LLM_SERVER_TOOLS` | `web_search` `code_execution` `none` | `web_search`                                       | hosted tools           | hosted tools       | hosted tools                 | ignored                     |
 
-Thinking and redacted thinking blocks are kept in provider metadata and sent back unchanged on later tool rounds, as Anthropic requires. `effort` and `thinkingDisplay` are accepted only for `anthropic`. `temperature` is rejected for `anthropic` because the Messages API no longer accepts it.
+Hosted `openai` uses the Responses API with `store: false`; reasoning items are kept in provider metadata and replayed before their tool calls. Without `model` and `effort` it defaults to `gpt-6-luna` with `effort: "none"`. DeepSeek, local and compatible servers use Chat Completions; DeepSeek runs in [non-thinking tool-call mode](https://api-docs.deepseek.com/guides/tool_calls/).
 
-## Gemini effort
-
-`effort` (`YADA_LLM_EFFORT`) is also accepted for `gemini` and sent as `thinkingConfig.thinkingLevel`: `low` and `medium` map to `LOW` and `MEDIUM`; `high`, `xhigh` and `max` map to `HIGH`, the highest level Gemini offers. Without `effort` the model's default thinking applies. `thinkingDisplay` and `promptCache` remain Anthropic-only.
-
-## Anthropic prompt caching
-
-The Anthropic provider caches the prompt prefix by default, so each tool round rereads the system prompt, tools and history from the cache instead of paying full input price. It sends a top-level `cache_control` (cached up to the latest message) and a breakpoint on the system prompt, so the system prompt and tools stay cached across conversations. Set `promptCache` (`YADA_LLM_PROMPT_CACHE`) to `"5m"` (default), `"1h"` or `"off"`. Use `"off"` for gateways that reject `cache_control`. `promptCache` is accepted only for `anthropic`; OpenAI caches long prompts automatically.
-
-Usage reports `inputTokens` as the total including cached tokens, plus `cacheReadTokens` and `cacheWriteTokens` when the provider returns them (Anthropic both, OpenAI-compatible servers `cacheReadTokens`).
-
-## OpenAI API and reasoning
-
-Hosted `openai` uses the Responses API by default; `openai-compatible`, `ollama` and `llamacpp` use Chat Completions. Choose with `api: "chat" | "responses"` (`YADA_LLM_OPENAI_API`). Responses requests set `store: false` and ask for `reasoning.encrypted_content`; reasoning items are kept in provider metadata and replayed before their tool calls on later rounds. Set `effort` (`YADA_LLM_EFFORT`) to send `reasoning.effort` (Chat Completions: `reasoning_effort`). Metadata from Responses cannot be replayed in Chat Completions mode.
+Anthropic and Gemini thinking blocks are kept in provider metadata and sent back unchanged on later tool rounds. Anthropic caches the system prompt, tools and history by default; use `promptCache: "off"` for gateways that reject `cache_control`. Usage reports `inputTokens` as the total including cached tokens, plus `cacheReadTokens` and `cacheWriteTokens` when the provider returns them.
 
 ## Server-side tools
 
-`serverTools` (`YADA_LLM_SERVER_TOOLS`, comma-separated) enables provider-hosted `web_search` and `code_execution`. Supported for `anthropic`, `openai` with the Responses API and `gemini`; any other provider (Chat Completions, DeepSeek, local and compatible servers) rejects it at config parse.
+`serverTools` (comma-separated in `YADA_LLM_SERVER_TOOLS`, e.g. `web_search,code_execution`) enables provider-hosted `web_search` and `code_execution` on Anthropic, OpenAI and Gemini. Web search is on by default for these providers; set `none` (code: `serverTools: []`) to turn it off. `code_execution` is opt-in.
 
 ```ts
 createProvider({
@@ -140,17 +127,17 @@ createProvider({
 });
 ```
 
-| Provider             | `web_search`          | `code_execution`          |
-| -------------------- | --------------------- | ------------------------- |
-| `anthropic`          | `web_search_20260318` | `code_execution_20260521` |
-| `openai` (Responses) | `web_search`          | `code_interpreter`        |
-| `gemini`             | `googleSearch`        | `codeExecution`           |
+| Provider    | `web_search`          | `code_execution`          |
+| ----------- | --------------------- | ------------------------- |
+| `anthropic` | `web_search_20260318` | `code_execution_20260521` |
+| `openai`    | `web_search`          | `code_interpreter`        |
+| `gemini`    | `googleSearch`        | `codeExecution`           |
 
-`webSearch.maxUses` bounds cost: Anthropic `max_uses`, OpenAI `max_tool_calls` (counts every built-in tool call). `webSearch.allowedDomains` limits results (Anthropic, OpenAI). `webSearch` is rejected for `gemini`.
+`webSearch.maxUses` bounds cost: Anthropic `max_uses`, OpenAI `max_tool_calls` (counts every built-in tool call). `webSearch.allowedDomains` limits results (Anthropic, OpenAI). Gemini ignores `webSearch`.
 
 These tools run on the provider, are never exposed as Yada tools, and bypass policy, approvals and `maxToolCalls`. They appear in tracing as part of the model span. Final `content` stays plain text; cited sources are returned as `providerMetadata.data.sources` (`{ url, title }[]`, deduplicated by URL) and the number of calls as `usage.serverToolCalls`. The raw server-tool blocks stay in provider metadata and are replayed on later rounds to the same provider. Anthropic `pause_turn` is continued automatically up to three times, then the result finishes with `other`.
 
-Provider pricing for server tools is not included in Yada's cost limits.
+Provider pricing for server tools is not included in Yada's cost limits. Search results are untrusted web content that reaches the model without Yada's tool policy; turn web search off for agents that must only use your own data.
 
 ## OpenAI-compatible endpoints
 
