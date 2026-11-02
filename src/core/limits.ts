@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { contentSize } from "./content.js";
+import { contentSize, hasImages, omitImages, turnSize } from "./content.js";
 import type { Turn } from "./contracts.js";
 export const limitsSchema = z
   .strictObject({
@@ -9,6 +9,8 @@ export const limitsSchema = z
     maxFailures: z.number().int().positive().default(3),
     maxParallelTools: z.number().int().positive().default(4),
     maxToolOutput: z.number().int().positive().default(32_000),
+    toolTimeoutMs: z.number().int().positive().default(120_000),
+    maxDurationMs: z.number().int().positive().optional(),
     maxCostMicros: z.number().int().nonnegative().optional(),
     costPerCallMicros: z.number().int().positive().optional(),
     pricing: z
@@ -68,9 +70,17 @@ export function compactOldest(messages: Turn[], excess: number): number {
   let saved = 0;
   for (let index = 0; index < latest && saved < excess; index++) {
     const turn = messages[index];
+    if (turn?.role === "assistant" || !turn || !hasImages(turn.content))
+      continue;
+    const next = { ...turn, content: omitImages(turn.content) };
+    saved += turnSize(turn) - turnSize(next);
+    messages[index] = next;
+  }
+  for (let index = 0; index < latest && saved < excess; index++) {
+    const turn = messages[index];
     if (turn?.role !== "tool") continue;
     const next = compact(turn);
-    saved += JSON.stringify(turn).length - JSON.stringify(next).length;
+    saved += turnSize(turn) - turnSize(next);
     messages[index] = next;
   }
   return saved;
@@ -94,7 +104,7 @@ export function contextWindow(
   for (let index = turns.length - 1; index >= 0; index--) {
     const turn = turns[index];
     if (!turn) continue;
-    size += JSON.stringify(turn).length;
+    size += turnSize(turn);
     if (size > maxChars) break;
     if (turn.role === "user") start = index;
   }

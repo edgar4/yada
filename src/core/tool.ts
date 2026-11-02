@@ -5,6 +5,7 @@ export function readTool<S extends z.ZodType>(options: {
   name: string;
   description: string;
   input: S;
+  timeoutMs?: number;
   authorize: (identity: Identity) => Promise<boolean>;
   execute: (
     args: z.output<S>,
@@ -15,6 +16,7 @@ export function readTool<S extends z.ZodType>(options: {
 }): ReadTool {
   return {
     effect: "read",
+    ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
     spec: {
       name: options.name,
       description: options.description,

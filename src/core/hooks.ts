@@ -15,20 +15,27 @@ export type AgentEvent =
       call: ToolCall;
       content: string;
       failed: boolean;
+      cause?: string;
     }>
+  | Readonly<{ type: "steering_unconsumed"; count: number }>
   | Readonly<{
       type: "model_finished";
       purpose?: "summary";
       usage?: ProviderResult["usage"];
       finishReason: ProviderResult["finishReason"];
     }>
-  | Readonly<{ type: "run_finished"; result: TerminalResult }>
+  | Readonly<{ type: "run_finished"; result: TerminalResult; cause?: string }>
   | Readonly<{ type: "run_suspended"; result: Suspension }>;
+export type ModelCall = Readonly<{ purpose?: "summary" }>;
 export type RunHooks = Readonly<{
   beforeModel?(
     request: ProviderRequest,
+    call?: ModelCall,
   ): Promise<ProviderRequest | undefined> | ProviderRequest | undefined;
-  afterModel?(result: ProviderResult): Promise<void> | undefined;
+  afterModel?(
+    result: ProviderResult,
+    call?: ModelCall,
+  ): Promise<void> | undefined;
   beforeTool?(
     call: ToolCall,
     tool: Tool,
@@ -41,14 +48,14 @@ export type RunHooks = Readonly<{
 }>;
 export function composeHooks(...hooks: readonly RunHooks[]): RunHooks {
   return {
-    async beforeModel(request) {
+    async beforeModel(request, call) {
       let current = request;
       for (const hook of hooks)
-        current = (await hook.beforeModel?.(current)) ?? current;
+        current = (await hook.beforeModel?.(current, call)) ?? current;
       return current === request ? undefined : current;
     },
-    async afterModel(result) {
-      for (const hook of hooks) await hook.afterModel?.(result);
+    async afterModel(result, call) {
+      for (const hook of hooks) await hook.afterModel?.(result, call);
     },
     async beforeTool(call, tool) {
       for (const hook of hooks) {

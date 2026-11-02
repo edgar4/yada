@@ -44,7 +44,7 @@ describe("standalone runtime", () => {
     expect(s.execute).toHaveBeenCalledWith(
       { id: "a" },
       s.options.identity,
-      s.options.signal,
+      expect.any(AbortSignal) as AbortSignal,
       expect.objectContaining({ maxOutput: expect.any(Number) as number }),
     );
     expect(s.provider.requests[1]?.messages.at(-1)).toEqual({

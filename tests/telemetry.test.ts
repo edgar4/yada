@@ -110,7 +110,7 @@ describe("tracing hooks", () => {
     const tool = spans.find((span) => span.name === "yada.tool");
     expect(tool?.attrs["tool.outcome"]).toBe("tool_failed");
     expect(tool?.status).toBe("error");
-    expect(JSON.stringify(spans)).not.toMatch(/private/);
+    expect(tool?.attrs["tool.cause"]).toBe("Error: private-error");
   });
   it("closes an open model span when the run fails", async () => {
     const { spans, tracer } = memoryTracer();

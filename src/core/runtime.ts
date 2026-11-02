@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   compactOldest,
   limitsSchema,
@@ -5,13 +6,14 @@ import {
   type RunLimits,
 } from "./limits.js";
 import { Suspended, type ActionExecutor } from "./action.js";
-import type { AgentEvent, RunHooks } from "./hooks.js";
+import type { AgentEvent, ModelCall, RunHooks } from "./hooks.js";
 import { abortable } from "./abort.js";
-import { contentText, hasImages, mapText } from "./content.js";
+import { contentText, hasImages, mapText, messagesSize } from "./content.js";
 import { InvalidArguments } from "./tool.js";
 import {
   checkpointSchema,
   CheckpointError,
+  feedbackPrefix,
   type RunCheckpoint,
   summaryPrefix,
 } from "./checkpoint.js";
@@ -36,12 +38,19 @@ export type SummarizeOptions = Readonly<{
   provider?: ProviderAdapter;
   keepTurns?: number;
 }>;
-export const runTurns = (messages: readonly Turn[], steered = 0) =>
-  messages.slice(
-    messages
-      .flatMap((turn, index) => (turn.role === "user" ? [index] : []))
-      .at(-(steered + 1)) ?? 0,
+const startsWith = (turn: Turn, prefix: string) =>
+  turn.role === "user" &&
+  typeof turn.content === "string" &&
+  turn.content.startsWith(prefix);
+const isSummary = (turn: Turn) => startsWith(turn, summaryPrefix);
+const isSynthetic = (turn: Turn) =>
+  isSummary(turn) || startsWith(turn, feedbackPrefix);
+const userIndexes = (messages: readonly Turn[]) =>
+  messages.flatMap((turn, index) =>
+    turn.role === "user" && !isSynthetic(turn) ? [index] : [],
   );
+export const runTurns = (messages: readonly Turn[], steered = 0) =>
+  messages.slice(userIndexes(messages).at(-(steered + 1)) ?? 0);
 export type RunOptions = {
   provider: ProviderAdapter;
   tools: readonly Tool[];
@@ -59,10 +68,13 @@ export type RunOptions = {
   persist?: (checkpoint: RunCheckpoint) => Promise<void>;
   hooks?: RunHooks;
   summarize?: SummarizeOptions;
+  output?: z.ZodType;
   nest?: (call: ToolCall, child: RunOptions) => Promise<ChildRun>;
 };
 type Loop = {
   options: RunOptions;
+  system: string;
+  cause?: string | undefined;
   signal: AbortSignal;
   identity: Identity;
   limits: ReturnType<typeof limitsSchema.parse>;
@@ -78,23 +90,46 @@ type Loop = {
   emit: (event: AgentEvent) => void;
 };
 type ToolOutcome =
-  | { content: Content; failed: boolean }
+  | { content: Content; failed: boolean; cause?: string }
   | { stop: RunResult }
   | { terminal: TerminalResult };
-const emitTo = (hooks: RunHooks | undefined, event: AgentEvent) => {
-  void Promise.resolve()
-    .then(() => hooks?.onEvent?.(event))
-    .catch(() => undefined);
-};
+const causeText = (error: unknown) =>
+  error instanceof Error
+    ? `${error.name}: ${error.message}`
+        .replace(/\b[\w+/=.~-]{32,}\b/g, "[redacted]")
+        .slice(0, 500)
+    : undefined;
 export async function run(options: RunOptions): Promise<RunResult> {
-  const result = await runLoop(options);
-  if (result.status === "awaiting_approval" || result.status === "reconciling")
-    emitTo(options.hooks, { type: "run_suspended", result });
-  return result;
+  let queue: Promise<void> = Promise.resolve();
+  const emit = (event: AgentEvent) => {
+    queue = queue
+      .then(() => options.hooks?.onEvent?.(event))
+      .catch(() => undefined);
+  };
+  try {
+    const result = await runLoop(options, emit);
+    if (
+      result.status === "awaiting_approval" ||
+      result.status === "reconciling"
+    )
+      emit({ type: "run_suspended", result });
+    return result;
+  } finally {
+    await queue;
+  }
 }
-async function runLoop(options: RunOptions): Promise<RunResult> {
-  const { provider, signal, hooks } = options;
+async function runLoop(
+  options: RunOptions,
+  emit: (event: AgentEvent) => void,
+): Promise<RunResult> {
+  const { provider } = options;
   const limits = limitsSchema.parse(options.limits ?? {});
+  const deadline = limits.maxDurationMs
+    ? AbortSignal.timeout(limits.maxDurationMs)
+    : undefined;
+  const signal = deadline
+    ? AbortSignal.any([options.signal, deadline])
+    : options.signal;
   const maxRounds = options.maxRounds ?? limits.maxRounds;
   const maxToolCalls = options.maxToolCalls ?? limits.maxToolCalls;
   if (
@@ -133,9 +168,6 @@ async function runLoop(options: RunOptions): Promise<RunResult> {
       throw new CheckpointError();
     }
   };
-  const emit = (event: AgentEvent) => {
-    emitTo(hooks, event);
-  };
   const finish = async (result: TerminalResult): Promise<RunResult> => {
     try {
       for (const call of state.pending) {
@@ -147,7 +179,15 @@ async function runLoop(options: RunOptions): Promise<RunResult> {
     }
     state.outcome = result;
     await save();
-    emit({ type: "run_finished", result });
+    emit({
+      type: "run_finished",
+      result,
+      ...(loop.cause &&
+      result.status === "failed" &&
+      result.code === "dependency_failed"
+        ? { cause: loop.cause }
+        : {}),
+    });
     return result;
   };
   if (state.outcome) return state.outcome;
@@ -160,6 +200,9 @@ async function runLoop(options: RunOptions): Promise<RunResult> {
   );
   const loop: Loop = {
     options,
+    system: options.output
+      ? `${options.system}\n\nAnswer with only JSON matching this JSON Schema:\n${JSON.stringify(z.toJSONSchema(options.output))}`
+      : options.system,
     signal,
     identity,
     limits,
@@ -182,8 +225,6 @@ async function runLoop(options: RunOptions): Promise<RunResult> {
     if (loop.visible.length && !provider.capabilities.toolCalling)
       return await finish({ status: "failed", code: "unsupported" });
     for (;;) {
-      if ((state.failures ?? 0) >= limits.maxFailures)
-        return await finish({ status: "failed", code: "dependency_failed" });
       if (
         !provider.capabilities.vision &&
         state.messages.some((turn) => hasImages(turn.content))
@@ -191,6 +232,8 @@ async function runLoop(options: RunOptions): Promise<RunResult> {
         return await finish({ status: "failed", code: "unsupported" });
       const stopped = await executePending(loop);
       if (stopped) return stopped;
+      if ((state.failures ?? 0) >= limits.maxFailures)
+        return await finish({ status: "failed", code: "dependency_failed" });
       const unsupported = await drainSteering(loop);
       if (unsupported) return unsupported;
       const exceeded = await checkLimits(loop);
@@ -201,23 +244,31 @@ async function runLoop(options: RunOptions): Promise<RunResult> {
     }
   } catch (error) {
     if (error instanceof CheckpointError) throw error;
+    if (!options.signal.aborted && !deadline?.aborted)
+      loop.cause = causeText(error);
     return finish(
-      signal.aborted
+      options.signal.aborted
         ? { status: "cancelled" }
-        : { status: "failed", code: "dependency_failed" },
+        : deadline?.aborted
+          ? { status: "failed", code: "timeout" }
+          : { status: "failed", code: "dependency_failed" },
     );
+  }
+}
+async function freshSteering(loop: Loop) {
+  const { state, options } = loop;
+  if (!options.drainSteering) return [];
+  try {
+    return (await options.drainSteering()).filter(
+      (item) => !state.steered?.includes(item.id),
+    );
+  } catch {
+    throw new CheckpointError();
   }
 }
 async function drainSteering(loop: Loop): Promise<RunResult | undefined> {
   const { state, options } = loop;
-  if (!options.drainSteering) return undefined;
-  let drained: Awaited<ReturnType<NonNullable<RunOptions["drainSteering"]>>>;
-  try {
-    drained = await options.drainSteering();
-  } catch {
-    throw new CheckpointError();
-  }
-  const fresh = drained.filter((item) => !state.steered?.includes(item.id));
+  const fresh = await freshSteering(loop);
   if (!fresh.length) return undefined;
   if (
     !options.provider.capabilities.vision &&
@@ -251,6 +302,16 @@ async function executePending(loop: Loop): Promise<RunResult | undefined> {
     );
     if (stopped) return stopped;
   }
+  if (state.roundFailures !== undefined) {
+    const last = state.messages
+      .map((turn) => turn.role)
+      .lastIndexOf("assistant");
+    const turn = state.messages[last];
+    const calls = turn?.role === "assistant" ? turn.toolCalls.length : 0;
+    state.failures =
+      state.roundFailures >= calls ? (state.failures ?? 0) + 1 : 0;
+    delete state.roundFailures;
+  }
   return undefined;
 }
 async function executeGroup(
@@ -258,7 +319,7 @@ async function executeGroup(
   group: readonly ToolCall[],
   concurrency: number,
 ): Promise<RunResult | undefined> {
-  const { state, limits } = loop;
+  const { state } = loop;
   const abort = new AbortController();
   const forward = () => {
     abort.abort(loop.signal.reason);
@@ -293,7 +354,7 @@ async function executeGroup(
           continue;
         }
         const content = await shapeOutput(inner, call, outcome.content);
-        slot.resolve({ content, failed: outcome.failed });
+        slot.resolve({ ...outcome, content });
       } catch (error) {
         slot.reject(error);
       }
@@ -307,7 +368,7 @@ async function executeGroup(
       loop.signal.throwIfAborted();
       if ("stop" in outcome) return outcome.stop;
       if ("terminal" in outcome) return await loop.finish(outcome.terminal);
-      const { content, failed } = outcome;
+      const { content, failed, cause } = outcome;
       state.messages.push({
         role: "tool",
         toolCallId: call.id,
@@ -315,7 +376,8 @@ async function executeGroup(
         content,
       });
       state.calls++;
-      state.failures = failed ? (state.failures ?? 0) + 1 : 0;
+      state.roundFailures = (state.roundFailures ?? 0) + (failed ? 1 : 0);
+      if (cause) loop.cause = cause;
       state.pending.shift();
       await loop.save();
       loop.emit({
@@ -323,12 +385,8 @@ async function executeGroup(
         call,
         content: contentText(content),
         failed,
+        ...(cause ? { cause } : {}),
       });
-      if (state.failures >= limits.maxFailures)
-        return await loop.finish({
-          status: "failed",
-          code: "dependency_failed",
-        });
     }
     return undefined;
   } finally {
@@ -388,30 +446,43 @@ async function executeCall(loop: Loop, call: ToolCall): Promise<ToolOutcome> {
       ? { failed: false, content }
       : { stop: content };
   }
+  const toolSignal = AbortSignal.any([
+    signal,
+    AbortSignal.timeout(tool.timeoutMs ?? loop.limits.toolTimeoutMs),
+  ]);
   try {
     return {
       failed: false,
       content: await abortable(
         () =>
-          tool.execute(call.args, identity, signal, {
+          tool.execute(call.args, identity, toolSignal, {
             addUsage: (usage) => {
               addUsage(loop.state, usage);
             },
             maxOutput: loop.limits.maxToolOutput,
+            limits: loop.limits,
             ...(nest ? { runChild: (child) => nest(call, child) } : {}),
             ...(options.executeWrite?.ask
               ? { ask: options.executeWrite.ask(call) }
               : {}),
           }),
-        signal,
+        toolSignal,
       ),
     };
   } catch (error) {
     if (error instanceof Suspended) return { stop: error.suspension };
     if (error instanceof CheckpointError) throw error;
     signal.throwIfAborted();
+    if (toolSignal.aborted)
+      return {
+        failed: true,
+        content: toolError("timeout", "The tool timed out"),
+        cause: "TimeoutError: The tool timed out",
+      };
+    const cause = causeText(error);
     return {
       failed: true,
+      ...(cause ? { cause } : {}),
       content:
         error instanceof InvalidArguments
           ? toolError("invalid_arguments", error.message)
@@ -425,8 +496,8 @@ async function checkLimits(loop: Loop): Promise<RunResult | undefined> {
   if (state.rounds >= loop.maxRounds) return exceeded();
   loop.signal.throwIfAborted();
   const size = () =>
-    options.system.length +
-    JSON.stringify(state.messages).length +
+    loop.system.length +
+    messagesSize(state.messages) +
     JSON.stringify(loop.visible.map((tool) => tool.spec)).length;
   let contextSize = size();
   if (contextSize > limits.maxContextChars)
@@ -440,6 +511,11 @@ async function checkLimits(loop: Loop): Promise<RunResult | undefined> {
     contextSize = size();
   }
   if (contextSize > limits.maxContextChars) return exceeded();
+  return reserveCost(loop);
+}
+function reserveCost(loop: Loop): Promise<RunResult> | undefined {
+  const { state, limits } = loop;
+  const exceeded = () => loop.finish({ status: "failed", code: "limit" });
   if (limits.maxCostMicros !== undefined && limits.pricing && state.usage) {
     const spent = usageCostMicros(limits.pricing, state.usage);
     if (spent >= limits.maxCostMicros) return exceeded();
@@ -474,74 +550,66 @@ const transcriptLine = (turn: Turn) =>
         .join("\n")}`
     : `${turn.role === "tool" ? `tool ${turn.name}` : "user"}: ${contentText(turn.content)}`;
 async function summarize(loop: Loop): Promise<RunResult | undefined> {
-  const { state, signal, options } = loop;
-  const users = state.messages.flatMap((turn, index) =>
-    turn.role === "user" ? [index] : [],
-  );
+  const { state, options } = loop;
+  const users = userIndexes(state.messages);
   const split = Math.min(
     users.at(-(options.summarize?.keepTurns ?? 2)) ?? 0,
     users.at(-((state.steered?.length ?? 0) + 1)) ?? 0,
   );
   const first = state.messages[0];
-  const summarized =
-    first?.role === "user" &&
-    typeof first.content === "string" &&
-    first.content.startsWith(summaryPrefix);
-  if (split < (summarized ? 2 : 1)) return undefined;
-  const provider = options.summarize?.provider ?? options.provider;
-  const result = await abortable(
-    () =>
-      provider.complete({
-        system: summarySystem,
-        messages: [
-          {
-            role: "user",
-            content: state.messages
-              .slice(0, split)
-              .map(transcriptLine)
-              .join("\n\n"),
-          },
-        ],
-        tools: [],
-        signal,
-      }),
-    signal,
+  const summarized = first !== undefined && isSummary(first);
+  let from = 0;
+  let to = split;
+  if (split < (summarized ? 2 : 1)) {
+    from = (users.at(-1) ?? -1) + 1;
+    to = state.messages.map((turn) => turn.role).lastIndexOf("assistant");
+    if (to <= from) return undefined;
+  }
+  const stopped = reserveCost(loop);
+  if (stopped) return stopped;
+  if (loop.limits.costPerCallMicros !== undefined) await loop.save();
+  const result = await modelCall(
+    loop,
+    {
+      system: summarySystem,
+      messages: [
+        {
+          role: "user",
+          content: state.messages
+            .slice(from, to)
+            .map(transcriptLine)
+            .join("\n\n"),
+        },
+      ],
+      tools: [],
+      signal: loop.signal,
+    },
+    options.summarize?.provider ?? options.provider,
+    { purpose: "summary" },
   );
-  signal.throwIfAborted();
-  addUsage(state, result.usage);
-  loop.emit({
-    type: "model_finished",
-    purpose: "summary",
-    ...(result.usage ? { usage: result.usage } : {}),
-    finishReason: result.finishReason,
-  });
   if (result.finishReason === "refusal")
     return loop.finish({ status: "failed", code: "refused" });
   if (result.finishReason !== "stop" || !result.content.trim())
     return loop.finish({ status: "failed", code: "invalid_response" });
-  state.messages.splice(0, split, {
+  state.messages.splice(from, to - from, {
     role: "user",
     content: summaryPrefix + result.content,
   });
   await loop.save();
   return undefined;
 }
-async function callModel(loop: Loop): Promise<ProviderResult> {
+async function modelCall(
+  loop: Loop,
+  request: ProviderRequest,
+  provider: ProviderAdapter,
+  call: ModelCall = {},
+): Promise<ProviderResult> {
   const { state, signal, options } = loop;
-  state.rounds++;
-  await loop.save();
-  loop.emit({ type: "round_started", round: state.rounds });
-  let request: ProviderRequest = {
-    system: options.system,
-    messages: structuredClone(state.messages),
-    tools: loop.visible.map((tool) => tool.spec),
-    signal,
-  };
-  const edited = await options.hooks?.beforeModel?.(request);
+  const { hooks } = options;
+  const edited = await hooks?.beforeModel?.(request, call);
   if (edited) request = { ...edited, signal };
-  const { provider, hooks } = options;
   let result: ProviderResult;
-  if (provider.stream && hooks?.onEvent) {
+  if (!call.purpose && provider.stream && hooks?.onEvent) {
     const chunks = provider.stream(request);
     for (;;) {
       const next = await abortable(() => chunks.next(), signal);
@@ -554,13 +622,48 @@ async function callModel(loop: Loop): Promise<ProviderResult> {
   } else result = await abortable(() => provider.complete(request), signal);
   signal.throwIfAborted();
   addUsage(state, result.usage);
-  await options.hooks?.afterModel?.(result);
+  if (!call.purpose) await loop.save();
+  await hooks?.afterModel?.(result, call);
   loop.emit({
     type: "model_finished",
+    ...call,
     ...(result.usage ? { usage: result.usage } : {}),
     finishReason: result.finishReason,
   });
   return result;
+}
+async function callModel(loop: Loop): Promise<ProviderResult> {
+  const { state, options } = loop;
+  state.rounds++;
+  await loop.save();
+  loop.emit({ type: "round_started", round: state.rounds });
+  return modelCall(
+    loop,
+    {
+      system: loop.system,
+      messages: structuredClone(state.messages),
+      tools: loop.visible.map((tool) => tool.spec),
+      signal: loop.signal,
+    },
+    options.provider,
+  );
+}
+const maxOutputRetries = 2;
+function parseOutput(schema: z.ZodType, text: string) {
+  let json: unknown;
+  try {
+    json = JSON.parse(
+      text.trim().replace(/^```(?:json)?\s*|\s*```$/g, ""),
+    ) as unknown;
+  } catch {
+    return "The answer is not valid JSON.";
+  }
+  const parsed = schema.safeParse(json);
+  return parsed.success
+    ? { data: parsed.data }
+    : parsed.error.issues
+        .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
+        .join("; ");
 }
 async function classify(
   loop: Loop,
@@ -579,6 +682,7 @@ async function classify(
           ? result.content
           : lastAssistantText(state.messages)
         : undefined;
+    let data: unknown;
     if (text) {
       state.messages.push({
         role: "assistant",
@@ -588,15 +692,36 @@ async function classify(
           ? { providerMetadata: result.providerMetadata }
           : {}),
       });
+      if (loop.options.output) {
+        const parsed = parseOutput(loop.options.output, text);
+        if (typeof parsed === "string") {
+          if (
+            (state.outputRetries ?? 0) >= maxOutputRetries ||
+            state.rounds >= loop.maxRounds
+          )
+            return fail("invalid_response");
+          state.outputRetries = (state.outputRetries ?? 0) + 1;
+          state.messages.push({
+            role: "user",
+            content: `${feedbackPrefix}${parsed}\nAnswer again with only valid JSON.`,
+          });
+          await loop.save();
+          return undefined;
+        }
+        data = parsed.data;
+      }
       if (state.rounds < loop.maxRounds) {
         const steered = state.steered?.length ?? 0;
         const stopped = await drainSteering(loop);
         if (stopped || (state.steered?.length ?? 0) > steered) return stopped;
+      } else {
+        const count = (await freshSteering(loop)).length;
+        if (count) loop.emit({ type: "steering_unconsumed", count });
       }
     }
     return loop.finish(
       text
-        ? { status: "completed", text }
+        ? { status: "completed", text, ...(data === undefined ? {} : { data }) }
         : { status: "failed", code: "invalid_response" },
     );
   }
