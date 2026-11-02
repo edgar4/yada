@@ -7,12 +7,20 @@ export interface QuotaStore {
     quota: Readonly<{ requests?: QuotaWindow; costMicros?: QuotaWindow }>,
   ): Promise<{ retryAfterMs: number } | undefined>;
   addCost(scopeKey: string, windowMs: number, micros: number): Promise<void>;
+  lease(
+    scopeKey: string,
+    id: string,
+    limit: number,
+    ttlMs: number,
+  ): Promise<boolean>;
+  release(scopeKey: string, id: string): Promise<void>;
 }
 const counterSchema = z.object({ start: z.number(), used: z.number() });
 const storedSchema = z.object({
   requests: counterSchema.optional(),
   cost: counterSchema.optional(),
 });
+const leasesSchema = z.object({ leases: z.record(z.string(), z.number()) });
 const current = (
   counter: z.infer<typeof counterSchema> | undefined,
   windowMs: number,
@@ -51,6 +59,28 @@ export function createQuotaStore(
           result: undefined,
         };
       }),
+    lease: (scopeKey, id, limit, ttlMs) =>
+      records.mutate(scopeKey, (value) => {
+        const now = Date.now();
+        const leases = Object.fromEntries(
+          Object.entries(
+            leasesSchema.catch({ leases: {} }).parse(value).leases,
+          ).filter(([, expiresAt]) => expiresAt > now),
+        );
+        const granted = id in leases || Object.keys(leases).length < limit;
+        if (granted) leases[id] = now + ttlMs;
+        return { value: { leases }, result: granted };
+      }),
+    release: async (scopeKey, id) => {
+      await records.mutate(scopeKey, (value) => {
+        const leases = Object.fromEntries(
+          Object.entries(
+            leasesSchema.catch({ leases: {} }).parse(value).leases,
+          ).filter(([leaseId]) => leaseId !== id),
+        );
+        return { value: { leases }, result: undefined };
+      });
+    },
     addCost: async (scopeKey, windowMs, micros) => {
       await records.mutate(scopeKey, (value) => {
         const cost = current(

@@ -119,6 +119,41 @@ it("limits requests and concurrent streams per actor", async () => {
   expect((await s.call("/v1/conversations/chat/runs/a")).status).toBe(429);
 });
 
+it("shares request and stream limits across instances", async () => {
+  const s = await setup({
+    limits: { requestsPerMinute: 3, streamsPerActor: 1 },
+  });
+  const other = createHandler({
+    storage: s.storage,
+    origins: [],
+    authenticate: () => Promise.resolve(s.identity),
+    authorizeProfile: () => Promise.resolve(true),
+    limits: { requestsPerMinute: 3, streamsPerActor: 1 },
+  });
+  const get = (path: string) => other(new Request(`http://localhost${path}`));
+  expect((await s.submit("a")).status).toBe(202);
+  const stream = await s.call("/v1/conversations/chat/runs/a/events");
+  expect(stream.status).toBe(200);
+  const refused = await get("/v1/conversations/chat/runs/a/events");
+  expect(refused.status).toBe(429);
+  await stream.body?.cancel();
+  expect((await get("/v1/conversations")).status).toBe(200);
+  expect((await get("/v1/conversations")).status).toBe(429);
+});
+
+it("fails open and reports when the shared counters fail", async () => {
+  const onError = vi.fn();
+  const s = await setup({ onError });
+  vi.spyOn(s.storage.quota, "consume").mockRejectedValue(new Error("down"));
+  vi.spyOn(s.storage.quota, "lease").mockRejectedValue(new Error("down"));
+  expect((await s.submit("a")).status).toBe(202);
+  expect((await s.call("/v1/conversations")).status).toBe(200);
+  const stream = await s.call("/v1/conversations/chat/runs/a/events");
+  expect(stream.status).toBe(200);
+  await stream.body?.cancel();
+  expect(onError).toHaveBeenCalled();
+});
+
 it("lists, reads and erases conversations including remembered grants", async () => {
   const s = await setup();
   for (const name of ["one", "two", "three"]) {

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Identity } from "../core/contracts.js";
 import type { YadaStorage } from "../storage/index.js";
@@ -57,6 +58,7 @@ const visibleMessages = (
           ? [{ role: message.role, content: contentText(message.content) }]
           : [],
   );
+const LEASE_TTL_MS = 30_000;
 export type HandlerLimits = Readonly<{
   requestsPerMinute?: number;
   streamsPerActor?: number;
@@ -95,6 +97,22 @@ export function createHandler(options: {
       options.onError?.(error, request);
     } catch {
       return;
+    }
+  };
+  const sharedRetryAfter = async (
+    identity: Identity,
+    request: Request,
+  ): Promise<number | undefined> => {
+    try {
+      return (
+        await options.storage.quota.consume(
+          JSON.stringify(["rate", identity.tenantId, identity.actorId]),
+          { requests: { limit: requestsPerMinute, windowMs: 60_000 } },
+        )
+      )?.retryAfterMs;
+    } catch (error) {
+      report(error, request);
+      return undefined;
     }
   };
   return async (request: Request): Promise<Response> => {
@@ -148,7 +166,9 @@ export function createHandler(options: {
       const submitting =
         request.method === "POST" &&
         /^\/v1\/conversations\/[^/]+\/runs$/.test(url.pathname);
-      const wait = submitting ? undefined : retryAfter(actorKey);
+      const wait = submitting
+        ? undefined
+        : (retryAfter(actorKey) ?? (await sharedRetryAfter(identity, request)));
       if (wait !== undefined) return throttle(wait);
       const conversation = /^\/v1\/conversations(?:\/([^/]+))?$/.exec(
         url.pathname,
@@ -338,14 +358,42 @@ export function createHandler(options: {
       if (cursor > job.events.length)
         return json({ error: "Invalid event cursor" }, 409);
       if ((streams.get(actorKey) ?? 0) >= maxStreams) return throttle(1000);
+      const leaseKey = JSON.stringify([
+        "streams",
+        identity.tenantId,
+        identity.actorId,
+      ]);
+      const leaseId = randomUUID();
+      const lease = async () => {
+        try {
+          return await options.storage.quota.lease(
+            leaseKey,
+            leaseId,
+            maxStreams,
+            LEASE_TTL_MS,
+          );
+        } catch (error) {
+          report(error, request);
+          return true;
+        }
+      };
+      if (!(await lease())) return throttle(1000);
       streams.set(actorKey, (streams.get(actorKey) ?? 0) + 1);
+      const renewal = setInterval(() => void lease(), LEASE_TTL_MS / 3);
+      renewal.unref();
       let released = false;
       const release = () => {
         if (released) return;
         released = true;
+        clearInterval(renewal);
         const open = (streams.get(actorKey) ?? 1) - 1;
         if (open) streams.set(actorKey, open);
         else streams.delete(actorKey);
+        options.storage.quota
+          .release(leaseKey, leaseId)
+          .catch((error: unknown) => {
+            report(error, request);
+          });
       };
       const stopped = new AbortController();
       const signal = AbortSignal.any([request.signal, stopped.signal]);
