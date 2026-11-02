@@ -8,6 +8,7 @@ import {
   defined,
   effort,
   modelFields,
+  openaiApi,
   promptCache,
   thinkingDisplay,
 } from "./options.js";
@@ -22,13 +23,15 @@ const cloudConfig = z
     provider: z.enum(["anthropic", "openai", "gemini", "deepseek"]),
     ...modelFields,
     effort,
+    api: openaiApi,
     thinkingDisplay,
     promptCache,
   })
   .refine((value) =>
     value.provider === "anthropic"
       ? value.temperature === undefined
-      : value.effort === undefined &&
+      : (value.effort === undefined || value.provider === "openai") &&
+        (value.api === undefined || value.provider === "openai") &&
         value.thinkingDisplay === undefined &&
         value.promptCache === undefined,
   );
@@ -44,7 +47,7 @@ export function createProvider(input: ProviderConfig) {
   const local = localOptions.safeParse(config);
   if (local.success) return createLocalProvider(local.data);
   throw new Error(
-    "Invalid provider configuration: choose a supported provider and provide a model for local and OpenAI-compatible servers or an API key for hosted providers. Anthropic does not accept temperature, and effort and promptCache apply only to Anthropic.",
+    "Invalid provider configuration: choose a supported provider and provide a model for local and OpenAI-compatible servers or an API key for hosted providers. Anthropic does not accept temperature, and promptCache applies only to Anthropic, effort only to Anthropic and OpenAI, and api only to OpenAI and OpenAI-compatible servers.",
   );
 }
 const envFields = [
@@ -53,6 +56,7 @@ const envFields = [
   ["YADA_LLM_MODEL", "model"],
   ["YADA_LLM_EFFORT", "effort"],
   ["YADA_LLM_PROMPT_CACHE", "promptCache"],
+  ["YADA_LLM_OPENAI_API", "api"],
 ] as const;
 const envNumbers = [
   ["YADA_LLM_MAX_TOKENS", "maxTokens"],
@@ -79,7 +83,7 @@ export function providerConfigFromEnv(
   });
   if (!result.success)
     throw new Error(
-      "Invalid provider configuration: check YADA_LLM_PROVIDER, YADA_LLM_MODEL, YADA_LLM_API_KEY, YADA_LLM_BASE_URL, YADA_LLM_MAX_TOKENS, YADA_LLM_TEMPERATURE, YADA_LLM_MAX_RETRIES, YADA_LLM_EFFORT, and YADA_LLM_PROMPT_CACHE.",
+      "Invalid provider configuration: check YADA_LLM_PROVIDER, YADA_LLM_MODEL, YADA_LLM_API_KEY, YADA_LLM_BASE_URL, YADA_LLM_MAX_TOKENS, YADA_LLM_TEMPERATURE, YADA_LLM_MAX_RETRIES, YADA_LLM_EFFORT, YADA_LLM_PROMPT_CACHE, and YADA_LLM_OPENAI_API.",
     );
   return result.data;
 }
