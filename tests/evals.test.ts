@@ -142,6 +142,7 @@ it("exits 2 on invalid --runs or --pricing and 1 when a run fails", async () => 
     cli(["--provider", "local", "--scenario", "multimodal"], {
       YADA_LLM_MODEL: "none",
       YADA_LLM_BASE_URL: "http://127.0.0.1:1/v1",
+      CI: "",
     }),
   ).rejects.toMatchObject({ code: 1 });
 }, 30_000);
