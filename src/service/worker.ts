@@ -26,6 +26,7 @@ import type { JobStore } from "../storage/jobs.js";
 import { isTerminal, type RunEvent } from "./contracts.js";
 import { quotaScopeKey, type QuotaOptions } from "./quota.js";
 import { eventKey, type EventBus } from "./events.js";
+import { webhookSender, type WebhookOptions } from "./webhooks.js";
 import { composeHooks, type AgentEvent, type RunHooks } from "../core/hooks.js";
 export type AgentProfile = Readonly<{
   provider: ProviderAdapter;
@@ -66,9 +67,11 @@ export function createWorker(options: {
   maxAttempts?: number;
   bus?: EventBus;
   quota?: QuotaOptions;
+  webhooks?: WebhookOptions;
   trace?: (event: Trace) => void | Promise<void>;
 }) {
   const shutdown = new AbortController();
+  const notify = options.webhooks && webhookSender(options.webhooks);
   let cursor = "";
   let scanning: Promise<{ done: Promise<unknown> }> | undefined;
   let loop: Promise<void> | undefined;
@@ -130,7 +133,23 @@ export function createWorker(options: {
         turns?: readonly Turn[],
         summary?: ConversationSummary,
       ]
-    ) => options.storage.jobs.update(identity, conversationId, job.id, ...args);
+    ) =>
+      options.storage.jobs
+        .update(identity, conversationId, job.id, ...args)
+        .then((updated) => {
+          const type = args[0].type;
+          if (
+            (isTerminal(type) || type === "awaiting_approval") &&
+            updated.events.at(-1)?.type === type
+          )
+            notify?.({
+              type,
+              conversationId,
+              runId: job.id,
+              status: updated.status,
+            });
+          return updated;
+        });
     let token = "";
     let sequence = job.events.length;
     let consumed = 0;

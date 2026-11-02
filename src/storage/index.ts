@@ -3,6 +3,7 @@ import { createActionStore, type ActionStore } from "./actions.js";
 import { createJobStore, type JobStore } from "./jobs.js";
 import {
   createConversationStore,
+  type ConversationQueries,
   type ConversationStore,
 } from "./conversations.js";
 export type {
@@ -27,7 +28,7 @@ export interface YadaStorage {
   jobs: JobStore;
   actions: ActionStore;
   retention: ReturnType<typeof createRetention>;
-  conversations: ConversationStore;
+  conversations: ConversationStore & ConversationQueries;
   oauth: McpOAuthStore;
   memory: MemoryStore;
   quota: QuotaStore;

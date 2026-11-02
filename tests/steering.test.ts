@@ -270,7 +270,10 @@ for (const driver of drivers)
         handler(
           new Request(`http://localhost/v1/conversations/chat/runs${path}`, {
             method: "POST",
-            headers: { authorization: token },
+            headers: {
+              authorization: token,
+              "content-type": "application/json",
+            },
             body: JSON.stringify(body),
           }),
         );
