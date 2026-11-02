@@ -36,6 +36,7 @@ try {
     "entries/storage",
     "entries/mcp",
     "entries/service",
+    "entries/otel",
   ])
     for (const extension of ["js", "d.ts"])
       assert(
@@ -78,7 +79,8 @@ import * as storageEntry from "@edgaralochi/yada/storage";
 import * as mcp from "@edgaralochi/yada/mcp";
 import * as skillsEntry from "@edgaralochi/yada/skills";
 import * as service from "@edgaralochi/yada/service";
-for (const entry of [providers, storageEntry, mcp, skillsEntry, service])
+import * as otel from "@edgaralochi/yada/otel";
+for (const entry of [providers, storageEntry, mcp, skillsEntry, service, otel])
   for (const key of Object.keys(entry)) assert.equal(entry[key], root[key], key);
 assert(Object.keys(client).length > 0);
 assert(Object.keys(widget).length > 0);
@@ -93,6 +95,7 @@ assert.match(await skills.tools[0].execute({name: "installed"}, {actorId: "test"
 await assert.rejects(createStorage({driver: "sqlite", filename: ":memory:", encryptionKey: "11".repeat(32)}), /npm install better-sqlite3/);
 const gemini = root.createProvider({provider: "gemini", apiKey: "key"});
 await assert.rejects(gemini.complete({system: "s", messages: [], tools: [], signal: AbortSignal.timeout(5000)}), /google-genai @langchain.core/);
+await assert.rejects(otel.otelTracer(), /npm install @opentelemetry\\/api/);
 `,
   );
   execute(process.execPath, ["smoke.mjs"], temporary);
@@ -123,7 +126,8 @@ import * as storage from "@edgaralochi/yada/storage";
 import * as mcp from "@edgaralochi/yada/mcp";
 import * as skills from "@edgaralochi/yada/skills";
 import * as service from "@edgaralochi/yada/service";
-void [runtime, client, widget, providers, storage, mcp, skills, service];
+import * as otel from "@edgaralochi/yada/otel";
+void [runtime, client, widget, providers, storage, mcp, skills, service, otel];
 `,
   );
   execute(
