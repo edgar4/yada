@@ -1,5 +1,9 @@
 import { abortable } from "../core/abort.js";
-import type { ActionExecutor, Suspension } from "../core/action.js";
+import {
+  elicitationTool,
+  type ActionExecutor,
+  type Suspension,
+} from "../core/action.js";
 import type { Identity } from "../core/contracts.js";
 import {
   operationId,
@@ -121,6 +125,55 @@ export function actionExecutor(
     return action?.status === "executing"
       ? { status: "reconciling", approvalId: id }
       : undefined;
+  };
+  execute.ask = (call) => {
+    let asked = 0;
+    return async (request) => {
+      const id = operationId(
+        identity,
+        runId,
+        `${call.id}:ask:${String(asked++)}`,
+      );
+      let state =
+        (await store.load(identity, id)) ??
+        (await store.propose(identity, {
+          id,
+          runId,
+          callId: call.id,
+          tool: elicitationTool,
+          toolVersion: "1",
+          args: request,
+          preview: JSON.stringify(request).slice(0, 32_000),
+          version: "1",
+          expiresAt: Date.now() + ttlMs,
+          status: "pending",
+        }));
+      if (state.status === "pending" && state.expiresAt <= Date.now())
+        state = await store.decide(identity, id, false);
+      if (state.status === "pending")
+        return { status: "awaiting_approval", approvalId: id };
+      if (state.status === "approved") {
+        try {
+          if (
+            await store.begin(
+              identity,
+              id,
+              leaseToken === undefined
+                ? undefined
+                : { runId, token: leaseToken },
+            )
+          )
+            await store.receipt(identity, id, "answered");
+        } catch {
+          throw new CheckpointError();
+        }
+        state = (await store.load(identity, id)) ?? state;
+      }
+      if (state.status === "declined") return { action: "decline" };
+      return state.content
+        ? { action: "accept", content: state.content }
+        : { action: "cancel" };
+    };
   };
   execute.withLease = (token) =>
     actionExecutor(store, identity, runId, ttlMs, token);

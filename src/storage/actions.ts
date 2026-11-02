@@ -23,6 +23,7 @@ export const actionSchema = z.object({
     "unknown",
   ]),
   receipt: z.string().max(32_000).optional(),
+  content: z.record(z.string(), z.unknown()).optional(),
 });
 export type Action = z.infer<typeof actionSchema>;
 export const operationId = (
@@ -57,7 +58,12 @@ const conversationOf = (runId: string) => {
 export interface ActionStore {
   load(identity: Identity, id: string): Promise<Action | undefined>;
   propose(identity: Identity, action: Action): Promise<Action>;
-  decide(identity: Identity, id: string, approved: boolean): Promise<Action>;
+  decide(
+    identity: Identity,
+    id: string,
+    approved: boolean,
+    content?: Record<string, unknown>,
+  ): Promise<Action>;
   begin(
     identity: Identity,
     id: string,
@@ -122,17 +128,18 @@ export function createActionStore(
           throw new Error("Action mismatch");
         return { value: state, result: state };
       }),
-    decide: (identity, id, approved) =>
+    decide: (identity, id, approved, content) =>
       records.mutate(key(identity, id), (value) => {
         const state = actionSchema.parse(value);
-        if (state.status === "pending")
+        if (state.status === "pending") {
           state.status =
             state.expiresAt <= Date.now()
               ? "expired"
               : approved
                 ? "approved"
                 : "declined";
-        else if (state.status !== (approved ? "approved" : "declined"))
+          if (state.status === "approved" && content) state.content = content;
+        } else if (state.status !== (approved ? "approved" : "declined"))
           throw new ActionConflict();
         return { value: state, result: state };
       }),

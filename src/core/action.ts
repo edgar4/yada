@@ -1,3 +1,4 @@
+import { Ajv } from "ajv";
 import { z } from "zod";
 import type { Identity, ToolSpec, ToolCall } from "./contracts.js";
 export type Preparation = Readonly<{ preview: string; version: string }>;
@@ -28,6 +29,27 @@ export type Suspension = Readonly<{
   status: "awaiting_approval" | "reconciling";
   approvalId: string;
 }>;
+export const elicitationTool = "mcp_elicitation";
+export type Elicitation = Readonly<{
+  message: string;
+  requestedSchema: Record<string, unknown>;
+}>;
+export type ElicitAnswer =
+  | Readonly<{ action: "accept"; content: Record<string, unknown> }>
+  | Readonly<{ action: "decline" | "cancel" }>;
+export type Ask = (request: Elicitation) => Promise<ElicitAnswer | Suspension>;
+export class Suspended extends Error {
+  constructor(readonly suspension: Suspension) {
+    super("Run suspended");
+  }
+}
+export function validElicitation(
+  action: Readonly<{ args: unknown }>,
+  content: unknown,
+) {
+  const { requestedSchema } = action.args as Elicitation;
+  return new Ajv({ strict: false }).validate(requestedSchema, content);
+}
 export type ActionExecutor = ((
   tool: WriteTool,
   call: ToolCall,
@@ -35,6 +57,7 @@ export type ActionExecutor = ((
 ) => Promise<string | Suspension>) & {
   unresolved?: (call: ToolCall) => Promise<Suspension | undefined>;
   withLease?: (token: string) => ActionExecutor;
+  ask?: (call: ToolCall) => Ask;
 };
 export function writeTool<S extends z.ZodType>(options: {
   name: string;
