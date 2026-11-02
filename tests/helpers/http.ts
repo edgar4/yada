@@ -126,3 +126,47 @@ export function stubFetch(
   );
   return calls;
 }
+export const responseBody = (
+  output: object[] = [
+    {
+      type: "message",
+      id: "m",
+      role: "assistant",
+      status: "completed",
+      content: [{ type: "output_text", text: "ok", annotations: [] }],
+    },
+  ],
+  extra: object = {},
+) => ({
+  id: "r",
+  object: "response",
+  created_at: 1,
+  model: "m",
+  status: "completed",
+  incomplete_details: null,
+  output,
+  usage: {
+    input_tokens: 10,
+    output_tokens: 5,
+    input_tokens_details: { cached_tokens: 4 },
+    output_tokens_details: { reasoning_tokens: 2 },
+    total_tokens: 15,
+  },
+  ...extra,
+});
+export const responsesReply = (...args: Parameters<typeof responseBody>) =>
+  json(responseBody(...args));
+export const responsesStream = (
+  deltas: string[],
+  ...args: Parameters<typeof responseBody>
+) =>
+  sseEvents([
+    ...deltas.map((delta): [string, object] => [
+      "response.output_text.delta",
+      { type: "response.output_text.delta", delta },
+    ]),
+    [
+      "response.completed",
+      { type: "response.completed", response: responseBody(...args) },
+    ],
+  ]);

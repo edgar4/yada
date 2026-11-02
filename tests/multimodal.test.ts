@@ -115,7 +115,11 @@ describe("providers", () => {
   });
   it("maps images for openai", async () => {
     const calls = stubFetch(() => chatReply());
-    const adapter = createProvider({ provider: "openai", apiKey: "key" });
+    const adapter = createProvider({
+      provider: "openai",
+      api: "chat",
+      apiKey: "key",
+    });
     expect(adapter.capabilities.vision).toBe(true);
     await adapter.complete(request);
     expect((calls[0]?.body["messages"] as unknown[])[1]).toEqual({
@@ -148,7 +152,11 @@ describe("providers", () => {
   });
   it("sends tool images in a following user message", async () => {
     const calls = stubFetch(() => chatReply());
-    await createProvider({ provider: "openai", apiKey: "key" }).complete({
+    await createProvider({
+      provider: "openai",
+      api: "chat",
+      apiKey: "key",
+    }).complete({
       ...request,
       messages: [
         { role: "user", content: "go" },
