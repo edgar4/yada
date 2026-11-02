@@ -1,4 +1,9 @@
-import { compactOldest, limitsSchema, type RunLimits } from "./limits.js";
+import {
+  compactOldest,
+  limitsSchema,
+  usageCostMicros,
+  type RunLimits,
+} from "./limits.js";
 import { Suspended, type ActionExecutor } from "./action.js";
 import type { AgentEvent, RunHooks } from "./hooks.js";
 import { abortable } from "./abort.js";
@@ -436,17 +441,7 @@ async function checkLimits(loop: Loop): Promise<RunResult | undefined> {
   }
   if (contextSize > limits.maxContextChars) return exceeded();
   if (limits.maxCostMicros !== undefined && limits.pricing && state.usage) {
-    const { inputMicrosPer1k, outputMicrosPer1k } = limits.pricing;
-    const { cacheReadTokens = 0, cacheWriteTokens = 0 } = state.usage;
-    const spent =
-      ((state.usage.inputTokens - cacheReadTokens - cacheWriteTokens) *
-        inputMicrosPer1k +
-        cacheReadTokens *
-          (limits.pricing.cacheReadMicrosPer1k ?? inputMicrosPer1k) +
-        cacheWriteTokens *
-          (limits.pricing.cacheWriteMicrosPer1k ?? inputMicrosPer1k) +
-        state.usage.outputTokens * outputMicrosPer1k) /
-      1000;
+    const spent = usageCostMicros(limits.pricing, state.usage);
     if (spent >= limits.maxCostMicros) return exceeded();
   }
   if (

@@ -1,0 +1,10 @@
+[
+  {
+    "server": {
+      "name": "fixture",
+      "command": "node",
+      "args": ["--import", "tsx", "tests/fixtures/mcp-server.ts"]
+    },
+    "call": { "tool": "lookup", "args": { "id": "a" } }
+  }
+]

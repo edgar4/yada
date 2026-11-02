@@ -11,10 +11,11 @@ import {
   type ToolCall,
 } from "../src/index.js";
 import type { ActionExecutor } from "../src/core/action.js";
+import type { Content } from "../src/core/contracts.js";
 
 export type Scenario = {
   name: string;
-  input: string;
+  input: Content;
   build: () => Promise<{
     tools: Tool[];
     system?: string;
@@ -52,6 +53,9 @@ const orders = readTool({
   authorize,
   execute: ({ id }) => Promise.resolve(`Order ${id}: shipped`),
 });
+
+const redSquare =
+  "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAF0lEQVR4nGP4z8BAEiJN9aiGUQ1DSgMAkPn/Afnh+ngAAAAASUVORK5CYII=";
 
 export const scenarios: Scenario[] = [
   {
@@ -196,5 +200,103 @@ export const scenarios: Scenario[] = [
       text: "7731",
       calls: [{ name: "dump" }],
     },
+  },
+  {
+    name: "reasoning replay",
+    input:
+      "Call get_code for 'alpha', then call redeem with exactly the code it returns.",
+    build: () =>
+      Promise.resolve({
+        tools: [
+          readTool({
+            name: "get_code",
+            description: "Get a one-time code for a name",
+            input: z.strictObject({ name: z.string() }),
+            authorize,
+            execute: () => Promise.resolve("code 8841"),
+          }),
+          readTool({
+            name: "redeem",
+            description: "Redeem a code",
+            input: z.strictObject({ code: z.string() }),
+            authorize,
+            execute: ({ code }) => Promise.resolve(`redeemed ${code}`),
+          }),
+        ],
+      }),
+    fake: (request, n) =>
+      n === 1
+        ? {
+            ...call("1", "get_code", { name: "alpha" }),
+            providerMetadata: { provider: "fake", data: { thinking: "t1" } },
+          }
+        : n === 2
+          ? request.messages.some(
+              (turn) =>
+                turn.role === "assistant" &&
+                turn.providerMetadata?.data["thinking"] === "t1",
+            )
+            ? call("2", "redeem", { code: "8841" })
+            : reply("reasoning was not replayed")
+          : reply("Redeemed 8841"),
+    expect: {
+      status: "completed",
+      text: "8841",
+      calls: [{ name: "get_code" }, { name: "redeem", args: { code: "8841" } }],
+    },
+  },
+  {
+    name: "parallel reads",
+    input:
+      "Look up the stock of items a1, b2 and c3 with the stock tool. Call it for all three at once.",
+    build: () =>
+      Promise.resolve({
+        tools: [
+          readTool({
+            name: "stock",
+            description: "Stock level for an item id",
+            input: z.strictObject({ id: z.string() }),
+            authorize,
+            execute: ({ id }) => Promise.resolve(`${id}: 5`),
+          }),
+        ],
+      }),
+    fake: (_request, n) =>
+      n === 1
+        ? {
+            content: "",
+            finishReason: "tool_calls",
+            toolCalls: ["a1", "b2", "c3"].map((id) => ({
+              id,
+              name: "stock",
+              args: { id },
+            })),
+          }
+        : reply("a1, b2 and c3 each have 5 in stock"),
+    expect: {
+      status: "completed",
+      text: "5",
+      calls: ["a1", "b2", "c3"].map((id) => ({ name: "stock", args: { id } })),
+    },
+  },
+  {
+    name: "multimodal",
+    input: [
+      { type: "text", text: "What single color is this image? One word." },
+      { type: "image", mimeType: "image/png", data: redSquare },
+    ],
+    build: () => Promise.resolve({ tools: [] }),
+    fake: (request) =>
+      reply(
+        request.messages.some(
+          (turn) =>
+            turn.role === "user" &&
+            Array.isArray(turn.content) &&
+            turn.content.some((part) => part.type === "image"),
+        )
+          ? "Red"
+          : "unknown",
+      ),
+    expect: { status: "completed", text: "red" },
   },
 ];
