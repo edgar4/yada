@@ -87,6 +87,35 @@ for (const driver of drivers)
       ]);
     });
 
+    it("continues when a message arrives during the final model call", async () => {
+      const s = await storageFixture(driver);
+      await submit(s);
+      const provider = createFakeProvider(async (_request, n) => {
+        if (n === 1) await steer(s, "m1", "One more thing");
+        return { ...done, content: n === 1 ? "First" : "Second" };
+      });
+      const worker = createWorker({
+        storage: s.storage,
+        profiles: { v1: { provider, tools: [look], system: "Help" } },
+      });
+      await worker.tick();
+      await worker.stop();
+      expect(userTexts(provider.requests[1]?.messages ?? [])).toEqual([
+        "Start",
+        "One more thing",
+      ]);
+      const job = await s.storage.jobs.load(s.identity, "chat", "one");
+      expect(job?.status).toBe("completed");
+      expect(job?.steering).toMatchObject([{ id: "m1", consumed: true }]);
+      const next = await s.storage.conversations.load(s.identity, "chat");
+      expect(next?.messages.map((turn) => turn.role)).toEqual([
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+      ]);
+    });
+
     it("resends idempotently and rejects reuse with different input", async () => {
       const s = await storageFixture(driver);
       await submit(s);

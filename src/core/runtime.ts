@@ -483,7 +483,10 @@ async function summarize(loop: Loop): Promise<RunResult | undefined> {
   const users = state.messages.flatMap((turn, index) =>
     turn.role === "user" ? [index] : [],
   );
-  const split = users.at(-(options.summarize?.keepTurns ?? 2)) ?? 0;
+  const split = Math.min(
+    users.at(-(options.summarize?.keepTurns ?? 2)) ?? 0,
+    users.at(-((state.steered?.length ?? 0) + 1)) ?? 0,
+  );
   const first = state.messages[0];
   const summarized =
     first?.role === "user" &&
@@ -581,7 +584,7 @@ async function classify(
           ? result.content
           : lastAssistantText(state.messages)
         : undefined;
-    if (text)
+    if (text) {
       state.messages.push({
         role: "assistant",
         content: text,
@@ -590,6 +593,12 @@ async function classify(
           ? { providerMetadata: result.providerMetadata }
           : {}),
       });
+      if (state.rounds < loop.maxRounds) {
+        const steered = state.steered?.length ?? 0;
+        const stopped = await drainSteering(loop);
+        if (stopped || (state.steered?.length ?? 0) > steered) return stopped;
+      }
+    }
     return loop.finish(
       text
         ? { status: "completed", text }
