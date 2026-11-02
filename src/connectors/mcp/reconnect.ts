@@ -126,6 +126,7 @@ export async function reconnectingMcp(
   });
   return {
     tools,
+    ...(current.skipped ? { skipped: current.skipped } : {}),
     isConnected: () => !closed && (current.isConnected?.() ?? true),
     prompts: async (identity, callSignal) => {
       await ready(callSignal ?? deadline());
