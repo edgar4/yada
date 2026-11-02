@@ -1,7 +1,7 @@
 ---
 layout: base
-title: "Yada — TypeScript runtime for in-app AI agents"
-description: "Yada is a TypeScript runtime for building AI agents inside your product. Connect a model, expose your APIs as typed tools and require user approval before every write."
+title: "Yada — open-source AI agent harness for your app"
+description: "Yada is a free, open-source AI agent harness for Node.js. Connect any model to your APIs so users can get real work done by chatting."
 ---
 
 <main id="main" tabindex="-1">
@@ -15,16 +15,15 @@ description: "Yada is a TypeScript runtime for building AI agents inside your pr
     </svg>
     <div class="wrap hero-grid">
       <div class="hero-copy">
-        <p class="kicker">TypeScript agent runtime for Node.js</p>
+        <p class="kicker">Open-source AI agent harness</p>
         <h1 id="hero-title">
-          Build an AI agent that works
-          <span>inside your product.</span>
+          Add an AI agent that gets real work done
+          <span>inside your app.</span>
         </h1>
         <p class="hero-description">
-          Yada is the server-side runtime for in-app agents. Connect a model,
-          turn your APIs and databases into typed tools, and let users approve
-          every change. It runs in your Node backend, behind your auth, with
-          your keys.
+          Yada is a free, open-source agent harness. Plug in a model, give it
+          your APIs as tools, and your users can search, book, apply or update
+          just by chatting.
         </p>
         <div class="hero-actions">
           <a class="button button-primary" href="#get-started">Get started</a
@@ -83,9 +82,9 @@ description: "Yada is a TypeScript runtime for building AI agents inside your pr
 
   <section class="runtime-strip" aria-labelledby="strip-title">
     <div class="wrap strip-inner">
-      <p id="strip-title">One runtime, three entry points</p>
+      <p id="strip-title">One harness, three entry points</p>
       <ul>
-        <li><code>yada</code> server runtime</li>
+        <li><code>yada</code> agent harness</li>
         <li><code>yada/client</code> browser SDK</li>
         <li><code>yada/widget</code> chat widget</li>
       </ul>
@@ -94,8 +93,11 @@ description: "Yada is a TypeScript runtime for building AI agents inside your pr
 
   <section class="section wrap" id="runtime" aria-labelledby="runtime-title">
     <div class="section-heading">
-      <h2 id="runtime-title">From a chat message to real work</h2>
-      <p>The model decides what to do. Your code decides what’s allowed.</p>
+      <h2 id="runtime-title">What an agent harness does</h2>
+      <p>
+        Chatbots talk. Agents act. Yada sits between the model and your app:
+        the model decides what to do, your code decides what’s allowed.
+      </p>
     </div>
     <ol class="lifecycle">
       <li>
@@ -106,9 +108,9 @@ description: "Yada is a TypeScript runtime for building AI agents inside your pr
           height="64"
           alt=""
         />
-        <h3>Pick a model</h3>
+        <h3>Pick any model</h3>
         <p>
-          Anthropic, OpenAI, Gemini and DeepSeek, or local models through Ollama
+          Anthropic, OpenAI, Gemini, DeepSeek, or local models through Ollama
           and llama.cpp. Switching is a config change, not a rewrite.
         </p>
       </li>
@@ -120,10 +122,10 @@ description: "Yada is a TypeScript runtime for building AI agents inside your pr
           height="64"
           alt=""
         />
-        <h3>Expose your tools</h3>
+        <h3>Give it your tools</h3>
         <p>
-          Wrap HTTP APIs, SQL queries or MCP servers as tools with Zod-validated
-          inputs. Authorization is checked before every call.
+          Turn HTTP APIs, SQL queries and MCP servers into tools the agent can
+          call. Inputs are validated and permissions checked on every call.
         </p>
       </li>
       <li>
@@ -134,10 +136,10 @@ description: "Yada is a TypeScript runtime for building AI agents inside your pr
           height="64"
           alt=""
         />
-        <h3>Approve the writes</h3>
+        <h3>Users approve writes</h3>
         <p>
-          Write tools pause with a preview. Nothing changes until an
-          authenticated user confirms.
+          Before anything is created, changed or deleted, the agent pauses with
+          a preview. Nothing runs until the user confirms.
         </p>
       </li>
       <li>
@@ -148,33 +150,74 @@ description: "Yada is a TypeScript runtime for building AI agents inside your pr
           height="64"
           alt=""
         />
-        <h3>Pick up where it stopped</h3>
+        <h3>Never lose a run</h3>
         <p>
-          Encrypted checkpoints and operation receipts in SQLite, PostgreSQL or
-          MySQL let runs resume after a crash or deploy.
+          Conversations and run state persist in SQLite, PostgreSQL or MySQL,
+          so agents resume after a crash or deploy.
         </p>
       </li>
     </ol>
+  </section>
+
+  <section class="talon section wrap" id="in-use" aria-labelledby="talon-title">
+    <div class="section-heading">
+      <h2 id="talon-title">Built into TalonHR</h2>
+      <p>
+        TalonHR, a recruitment platform, runs its AI agent on Yada. Job seekers
+        and employers get work done by chatting. Real screen recordings with
+        live model output on demo data, at 2× speed.
+      </p>
+    </div>
+    <div class="demo-grid">
+      <figure class="demo">
+        <video
+          controls
+          muted
+          playsinline
+          preload="none"
+          poster="{{ '/assets/demo/talon-applicant.jpg' | relative_url }}"
+          src="{{ '/assets/demo/talon-applicant.mp4' | relative_url }}"
+        ></video>
+        <figcaption>
+          <strong>Applicant</strong> finds part-time UX jobs in Berlin and
+          applies with a saved CV after approving.
+        </figcaption>
+      </figure>
+      <figure class="demo">
+        <video
+          controls
+          muted
+          playsinline
+          preload="none"
+          poster="{{ '/assets/demo/talon-employer.jpg' | relative_url }}"
+          src="{{ '/assets/demo/talon-employer.mp4' | relative_url }}"
+        ></video>
+        <figcaption>
+          <strong>Employer</strong> reviews candidates, moves one to
+          interviewing and schedules the interview, approving each change.
+        </figcaption>
+      </figure>
+    </div>
   </section>
 
   <section class="building-blocks wrap" aria-labelledby="blocks-title">
     <div class="blocks-intro">
       <h2 id="blocks-title">It only knows what you let it.</h2>
       <p>
-        Yada is Hebrew for “to know”. Here, that knowledge comes from you: the
-        tools you register, the data they can reach and the permissions of the
-        user asking. It’s a library inside your service, not a hosted platform.
+        Yada is Hebrew for “to know”. Your agent knows only the tools you
+        register, the data they reach and the permissions of the user asking.
+        It’s a library in your backend, not a hosted platform.
       </p>
       <a class="text-link" href="{{ '/architecture.html' | relative_url }}"
-        >How the runtime works <span aria-hidden="true">→</span></a
+        >How the harness works <span aria-hidden="true">→</span></a
       >
     </div>
     <div class="block-list">
       <div class="block-row">
         <h3>Your backend, your keys</h3>
         <p>
-          Provider credentials and tool handlers stay on your server. There’s no
-          hosted layer between your app and your model provider.
+          Model keys and tool code stay on your server. No hosted layer sits
+          between your app and your model provider.
         </p>
         <a href="{{ '/configuration.html' | relative_url }}"
           >Provider configuration <span aria-hidden="true">→</span></a
@@ -183,8 +226,8 @@ description: "Yada is a TypeScript runtime for building AI agents inside your pr
       <div class="block-row">
         <h3>Your auth, checked on every call</h3>
         <p>
-          Pass in the authenticated user and tenant. Yada rechecks authorization
-          before each tool runs and again before a write executes.
+          Pass in the signed-in user and tenant. Yada checks permissions before
+          each tool runs and again before a write executes.
         </p>
         <a href="{{ '/actions.html' | relative_url }}"
           >Approved actions <span aria-hidden="true">→</span></a
@@ -193,10 +236,9 @@ description: "Yada is a TypeScript runtime for building AI agents inside your pr
       <div class="block-row">
         <h3>Extend your agent with skills</h3>
         <p>
-          Add standard <code>SKILL.md</code> folders from Claude, Cursor or
-          Codex to your project's <code>skills/</code> directory. Yada loads
-          instructions and text references when needed. Scripts require host
-          tools.
+          Drop <code>SKILL.md</code> folders from Claude, Cursor or Codex into
+          <code>skills/</code>. The agent loads them when they’re relevant.
+          Scripts need host tools.
         </p>
         <a href="{{ '/skills.html' | relative_url }}"
           >Skills guide <span aria-hidden="true">→</span></a
@@ -206,7 +248,7 @@ description: "Yada is a TypeScript runtime for building AI agents inside your pr
         <h3>A chat UI that fits your product</h3>
         <p>
           Stream responses with the browser SDK, or drop in the accessible,
-          themeable chat web component.
+          themeable chat widget.
         </p>
         <a href="{{ '/browser.html' | relative_url }}"
           >Browser SDK and widget <span aria-hidden="true">→</span></a
@@ -224,14 +266,13 @@ description: "Yada is a TypeScript runtime for building AI agents inside your pr
       <div class="start-copy">
         <h2 id="start-title">Your agent, one command away.</h2>
         <p>
-          Start on Node 24. The initializer installs dependencies and creates
-          private config, SQLite storage, typed tools, a skills folder and the
-          chat widget, all wired together.
+          On Node 24, one command scaffolds a working agent: config, SQLite
+          storage, example tools, a skills folder and the chat widget, all wired
+          together.
         </p>
         <p>
-          Enter your provider credentials in <code>.env.starter</code>, then run
-          <code>npm start</code> from your new project. Password protection is
-          optional.
+          Add your model key to <code>.env.starter</code> and run
+          <code>npm start</code>. Password protection is optional.
         </p>
         <a class="text-link" href="{{ '/starter.html' | relative_url }}"
           >Full setup guide <span aria-hidden="true">→</span></a
@@ -276,7 +317,7 @@ YADA_LLM_API_KEY=your-provider-key</code></pre>
 
   <section class="section wrap" aria-labelledby="docs-title">
     <div class="docs-heading">
-      <h2 id="docs-title">Guides for every part of the runtime</h2>
+      <h2 id="docs-title">Guides for every part of the harness</h2>
       <p>Setup, skills, tools, approvals, storage and deployment.</p>
     </div>
     <div class="guide-grid">

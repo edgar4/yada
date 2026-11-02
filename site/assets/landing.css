@@ -442,3 +442,38 @@
     transform: none;
   }
 }
+.talon {
+  padding-top: 0;
+}
+.demo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.demo {
+  margin: 0;
+  background: var(--surface);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.demo video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  background: var(--ink-deep);
+}
+.demo figcaption {
+  padding: 20px 24px 24px;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+.demo strong {
+  color: var(--text);
+}
+@media (max-width: 760px) {
+  .demo-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
