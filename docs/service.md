@@ -43,8 +43,11 @@ All paths start with `/v1/conversations/{conversationId}/runs`. IDs are scoped t
 | GET    | `/{id}`                                 | Inspect the run                                                                                                                                                                                                                         |
 | GET    | `/{id}/events?after=0`                  | Stream versioned NDJSON events; replay from sequence cursor                                                                                                                                                                             |
 | POST   | `/{id}/cancel`                          | Persist a cancellation request                                                                                                                                                                                                          |
+| POST   | `/{id}/messages`                        | Steer a running run with `{ id, input }` (same content rules as submission); idempotent by `id`; returns 202. Returns 409 for a finished run, a reused `id` with different input, or more than 8 messages in one run                    |
 | GET    | `/{id}/approvals/{approvalId}`          | Read preview, status and expiry                                                                                                                                                                                                         |
 | POST   | `/{id}/approvals/{approvalId}/decision` | Submit `{ approved, remember? }`; `remember` is `"run"` or `"conversation"`. Returns 409 unless the run is awaiting that approval or when the opposite decision was already recorded; repeating an already applied decision returns 202 |
+
+Steering messages are stored on the run and delivered as user turns at the start of the next model round, after pending tool calls finish. A message sent while the run is `awaiting_approval` waits and is delivered after the decision; it does not resume the run. The worker marks a message consumed only after the checkpoint holding it is saved, and a redelivered message already in the checkpoint is skipped, so a crash never duplicates or loses it. A message that arrives during the final model call of a run is not delivered; the run completes without it.
 
 Generate a unique run ID before submission and reuse it when retrying that submission. Reusing it with changed input or profile returns 409. A conversation accepts one unfinished run at a time. Completed answers and conversation history are committed atomically, so recovery cannot append an answer twice. Network disconnection never cancels the run.
 
@@ -68,6 +71,7 @@ For clients in other languages (a Python package belongs in its own repository).
 | `GET /{id}`                                  | none                                                                 | 200 run with `status`, `outcome`, `events`, `history` (`{ role, content }` text turns) |
 | `GET /{id}/events?after={n}`                 | none                                                                 | 200 `application/x-ndjson`, one event per line, closes after a terminal event          |
 | `POST /{id}/cancel`                          | none                                                                 | 202 `{ "accepted": true }`                                                             |
+| `POST /{id}/messages`                        | `{ "id", "input" }`, message ID unique per message, resend on error  | 202 `{ "accepted": true }`; 409 once the run is finished or has 8 messages             |
 | `GET /{id}/approvals/{approvalId}`           | none                                                                 | 200 `{ id, preview, status, expiresAt }`                                               |
 | `POST /{id}/approvals/{approvalId}/decision` | `{ "approved": bool, "remember"?: "run" or "conversation" }`         | 202 `{ "accepted": true }`                                                             |
 
@@ -84,7 +88,7 @@ Errors are `{ "error": string }` with these statuses:
 | 429    | Reserved for host rate limiting; Yada's handler does not return it. Honor `Retry-After`, then retry                                         |
 | 503    | Temporary failure; retry with backoff                                                                                                       |
 
-Event lines are JSON objects `{ version: 1, sequence, type, at }` plus optional `text`, `code`, `approvalId`, `expiresAt`, `tool`, `failed`, `inputTokens`, `outputTokens`. Types: `queued`, `running`, `progress`, `awaiting_approval`, `reconciling`, `completed`, `failed`, `cancelled`, `tool_started`, `tool_finished`, `usage` and, only on a shared event bus, `text_delta`. Terminal types are `completed` (`text`), `failed` (`code`) and `cancelled`. `tests/fixtures/service-events.ndjson` holds a sample stream that the test suite validates against the event schema.
+Event lines are JSON objects `{ version: 1, sequence, type, at }` plus optional `text`, `code`, `approvalId`, `expiresAt`, `tool`, `failed`, `inputTokens`, `outputTokens`. Types: `queued`, `running`, `progress`, `awaiting_approval`, `reconciling`, `completed`, `failed`, `cancelled`, `tool_started`, `tool_finished`, `usage`, `steering_received` and, only on a shared event bus, `text_delta`. Terminal types are `completed` (`text`), `failed` (`code`) and `cancelled`. `tests/fixtures/service-events.ndjson` holds a sample stream that the test suite validates against the event schema.
 
 Submit and follow a run:
 
