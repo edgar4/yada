@@ -69,7 +69,12 @@ it.each(["openai", "gemini", "deepseek", "ollama", "llamacpp"] as const)(
     });
     vi.stubGlobal("fetch", fetchMock);
     const result = await run({
-      provider: createProvider({ provider, apiKey: "test", model: "test" }),
+      provider: createProvider({
+        provider,
+        apiKey: "test",
+        model: "test",
+        ...(provider === "openai" && { api: "chat" }),
+      }),
       tools: [
         readTool({
           name: "lookup",
@@ -115,7 +120,12 @@ it.each(["openai", "gemini", "deepseek", "ollama", "llamacpp"] as const)(
     vi.stubGlobal("fetch", fetchMock);
     expect(
       await run({
-        provider: createProvider({ provider, apiKey: "test", model: "test" }),
+        provider: createProvider({
+          provider,
+          apiKey: "test",
+          model: "test",
+          ...(provider === "openai" && { api: "chat" }),
+        }),
         tools: [],
         identity: { actorId: "a", tenantId: "t" },
         input: "Hi",

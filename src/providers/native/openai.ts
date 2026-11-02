@@ -4,6 +4,7 @@ import type {
   ChatCompletionCreateParamsNonStreaming,
   ChatCompletionMessageParam,
 } from "openai/resources/chat/completions";
+import type { ReasoningEffort } from "openai/resources/shared";
 import { z } from "zod";
 import { contentText } from "../../core/content.js";
 import { imageUrlParts, withTrailingImages } from "../shared.js";
@@ -27,6 +28,7 @@ export type OpenAISettings = Readonly<{
   vision?: boolean | undefined;
   maxTokensParam?: "max_completion_tokens" | "max_tokens";
   extraBody?: Record<string, unknown>;
+  effort?: ReasoningEffort | undefined;
 }>;
 
 const contentOf = (content: Content): string | ChatCompletionContentPart[] =>
@@ -37,7 +39,11 @@ function toMessage(turn: Turn, name: string): ChatCompletionMessageParam {
     case "user":
       return { role: "user", content: contentOf(turn.content) };
     case "assistant":
-      if (turn.providerMetadata && turn.providerMetadata.provider !== name)
+      if (
+        turn.providerMetadata &&
+        (turn.providerMetadata.provider !== name ||
+          turn.providerMetadata.data["api"] === "responses")
+      )
         throw new Error("Provider metadata mismatch");
       return {
         role: "assistant",
@@ -75,7 +81,7 @@ const toMessages = (
   ),
 ];
 
-type Completion = Readonly<{
+export type Completion = Readonly<{
   content: string;
   calls: readonly { id: string; name: string; arguments: string }[];
   finish: string | null | undefined;
@@ -100,7 +106,7 @@ const finishReasons: Record<string, ProviderResult["finishReason"]> = {
 
 const toolArgs = z.record(z.string(), z.unknown());
 
-function toResult(completion: Completion): ProviderResult {
+export function toResult(completion: Completion): ProviderResult {
   const length = completion.finish === "length";
   const toolCalls = (length ? [] : completion.calls).map((call) => {
     const args = toolArgs.safeParse(

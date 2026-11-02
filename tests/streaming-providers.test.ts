@@ -295,6 +295,7 @@ it.each([
       apiKey: "test",
       model: "test",
       ...(name === "anthropic" ? { thinkingDisplay: "summarized" } : {}),
+      ...(name === "openai" ? { api: "chat" } : {}),
     });
     const request = {
       system: "Help",
