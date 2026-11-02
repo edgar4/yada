@@ -85,6 +85,32 @@ const conversationOf = (runId: string) => {
     ? parsed[0]
     : runId;
 };
+export async function eraseGrants(
+  records: ReturnType<typeof recordStore>,
+  identity: Identity,
+  conversationId: string,
+) {
+  const grant = z.object({
+    key: z.string(),
+    tenantId: z.string(),
+    actorId: z.string(),
+    conversationId: z.string(),
+  });
+  for (let after = ""; ;) {
+    const rows = await records.scan("grant", after);
+    for (const row of rows) {
+      const parsed = grant.safeParse(row.value).data;
+      if (
+        parsed?.tenantId === identity.tenantId &&
+        parsed.actorId === identity.actorId &&
+        parsed.conversationId === conversationId
+      )
+        await records.remove(parsed.key);
+    }
+    if (rows.length < 100) return;
+    after = rows[rows.length - 1]?.id ?? "";
+  }
+}
 export interface ActionStore {
   load(identity: Identity, id: string): Promise<Action | undefined>;
   propose(identity: Identity, action: Action): Promise<Action>;
@@ -227,17 +253,23 @@ export function createActionStore(
     async remember(identity, action, scope) {
       if (action.status !== "approved")
         throw new Error("Only approved actions can be remembered");
-      await records.mutate(
-        grantKey(
-          identity,
-          scope,
-          action.runId,
-          action.tool,
-          action.toolVersion,
-          action.args,
-        ),
-        () => ({ value: true, result: undefined }),
+      const grant = grantKey(
+        identity,
+        scope,
+        action.runId,
+        action.tool,
+        action.toolVersion,
+        action.args,
       );
+      await records.mutate(grant, () => ({
+        value: {
+          key: grant,
+          tenantId: identity.tenantId,
+          actorId: identity.actorId,
+          conversationId: conversationOf(action.runId),
+        },
+        result: undefined,
+      }));
     },
     async remembered(identity, runId, tool, toolVersion, args) {
       for (const scope of ["run", "conversation"] as const)

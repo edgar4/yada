@@ -76,3 +76,11 @@ export const isTerminal = (status: string) =>
   status === "completed" || status === "failed" || status === "cancelled";
 export const isActivity = (type: string) =>
   (activityTypes as readonly string[]).includes(type);
+export class HttpError extends Error {
+  constructor(
+    readonly status: 400 | 404 | 410 | 415,
+    message: string,
+  ) {
+    super(message);
+  }
+}

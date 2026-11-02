@@ -2,6 +2,7 @@ import { z } from "zod";
 import { summaryPrefix, turnSchema } from "../core/checkpoint.js";
 import type { Identity, Turn } from "../core/contracts.js";
 import type { recordStore } from "./records.js";
+import { isTerminal } from "../service/contracts.js";
 export const identitySchema = z.strictObject({
   actorId: z.string().min(1),
   tenantId: z.string().min(1),
@@ -75,6 +76,22 @@ export type Conversation = Readonly<{
   revision: number;
   messages: readonly ConversationMessage[];
 }>;
+export type ConversationOverview = Readonly<{
+  id: string;
+  updatedAt: number;
+  status?: string;
+}>;
+export interface ConversationQueries {
+  list(
+    identity: Identity,
+    after?: string,
+    limit?: number,
+  ): Promise<{ conversations: ConversationOverview[]; next?: string }>;
+  inspect(
+    identity: Identity,
+    id: string,
+  ): Promise<{ erased: boolean; active: boolean; runIds: string[] }>;
+}
 export interface ConversationStore {
   load(identity: Identity, id: string): Promise<Conversation | undefined>;
   save(
@@ -99,10 +116,58 @@ export const messagesFrom = (value: unknown) =>
         ? value
         : z.object({ messages: z.unknown() }).parse(value).messages,
     );
+const overviewSchema = z.object({
+  id: z.string(),
+  identity: identitySchema,
+  deleted: z.boolean().default(false),
+  retiredRuns: z.array(z.string()).default([]),
+  jobs: z.array(
+    z.object({ id: z.string(), status: z.string(), updatedAt: z.number() }),
+  ),
+});
 export function createConversationStore(
   records: ReturnType<typeof recordStore>,
-): ConversationStore {
+): ConversationStore & ConversationQueries {
   return {
+    async list(identity, after = "", limit = 50) {
+      const conversations: ConversationOverview[] = [];
+      let cursor = after;
+      for (;;) {
+        const rows = await records.scan("conversation", cursor);
+        for (const row of rows) {
+          cursor = row.id;
+          const state = overviewSchema.safeParse(row.value).data;
+          if (
+            !state ||
+            state.deleted ||
+            state.identity.tenantId !== identity.tenantId ||
+            state.identity.actorId !== identity.actorId
+          )
+            continue;
+          const last = state.jobs.at(-1);
+          conversations.push({
+            id: state.id,
+            updatedAt: last?.updatedAt ?? 0,
+            ...(last ? { status: last.status } : {}),
+          });
+          if (conversations.length === limit)
+            return { conversations, next: cursor };
+        }
+        if (rows.length < 100) return { conversations };
+      }
+    },
+    async inspect(identity, id) {
+      const record = await records.read(conversationKey(identity, id));
+      const state = overviewSchema.safeParse(record?.value).data;
+      return {
+        erased: state?.deleted ?? false,
+        active: state?.jobs.some((job) => !isTerminal(job.status)) ?? false,
+        runIds: [
+          ...(state?.jobs.map((job) => job.id) ?? []),
+          ...(state?.retiredRuns ?? []),
+        ],
+      };
+    },
     async load(identity, id) {
       const record = await records.read(conversationKey(identity, id));
       if (

@@ -3,7 +3,7 @@ import type { Identity } from "../core/contracts.js";
 import { isTerminal } from "../service/contracts.js";
 import { conversationStateSchema } from "./jobs.js";
 import { conversationKey } from "./conversations.js";
-import { actionSchema, runTree } from "./actions.js";
+import { actionSchema, eraseGrants, runTree } from "./actions.js";
 import type { recordStore } from "./records.js";
 import { memoryKey } from "./memory.js";
 import { createRunStore } from "./runs.js";
@@ -67,6 +67,7 @@ export function createRetention(records: ReturnType<typeof recordStore>) {
         for (const id of tree.runIds)
           await records.remove(runKey(identity, id));
       }
+      await eraseGrants(records, identity, id);
       await records.mutate(key, (value) => ({
         value: {
           ...z.record(z.string(), z.unknown()).parse(value),

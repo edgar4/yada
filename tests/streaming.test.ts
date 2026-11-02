@@ -111,6 +111,7 @@ async function service(bus?: ReturnType<typeof createEventBus>) {
     );
   await call("", {
     method: "POST",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify({ id: "a", input: "Hi", profileId: "v1" }),
   });
   const read = async (response: Response) =>
