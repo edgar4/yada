@@ -443,4 +443,121 @@ describe("errors", () => {
       ),
     ).rejects.toThrow("Provider metadata mismatch");
   });
+
+  describe("server tools", () => {
+    const code = { executableCode: { language: "PYTHON", code: "print(1)" } };
+    const output = {
+      codeExecutionResult: { outcome: "OUTCOME_OK", output: "1" },
+    };
+    const grounding = {
+      webSearchQueries: ["yada"],
+      groundingChunks: [
+        { web: { uri: "https://a.example", title: "A" } },
+        { web: { uri: "https://a.example", title: "A again" } },
+        { web: { uri: "https://b.example", title: "B" } },
+      ],
+    };
+    const withTools = () =>
+      gemini({ serverTools: ["web_search", "code_execution"] });
+
+    it("declares tools and normalizes sources and call counts", async () => {
+      const calls = stubFetch(() =>
+        reply([code, output, { text: "Answer" }], {
+          finishReason: "STOP",
+          groundingMetadata: grounding,
+        }),
+      );
+      const result = await withTools().complete(request());
+      expect((calls[0]?.body["tools"] as object[]).slice(1)).toEqual([
+        { googleSearch: {} },
+        { codeExecution: {} },
+      ]);
+      expect(calls[0]?.body["tools"]).toHaveLength(3);
+      expect(result).toMatchObject({
+        content: "Answer",
+        toolCalls: [],
+        finishReason: "stop",
+        usage: { serverToolCalls: 2 },
+        providerMetadata: {
+          provider: "gemini",
+          data: {
+            parts: [code, output, { text: "Answer" }],
+            sources: [
+              { url: "https://a.example", title: "A" },
+              { url: "https://b.example", title: "B" },
+            ],
+          },
+        },
+      });
+    });
+
+    it("replays code execution parts", async () => {
+      const calls = stubFetch((n) =>
+        n === 1 ? reply([code, output, { text: "Answer" }]) : reply(),
+      );
+      const first = await withTools().complete(request());
+      await withTools().complete(
+        request([
+          { role: "user", content: "Hi" },
+          {
+            role: "assistant",
+            content: first.content,
+            toolCalls: [],
+            ...(first.providerMetadata && {
+              providerMetadata: first.providerMetadata,
+            }),
+          },
+          { role: "user", content: "More" },
+        ]),
+      );
+      expect(
+        (calls[1]?.body["contents"] as { parts: object[] }[])[1]?.parts,
+      ).toEqual([code, output, { text: "Answer" }]);
+    });
+
+    it("does not count toward tool-call limits", async () => {
+      const calls = stubFetch((n) =>
+        n === 1
+          ? reply(
+              [
+                code,
+                output,
+                { functionCall: { name: "lookup", args: { id: "a" } } },
+              ],
+              {
+                finishReason: "STOP",
+                groundingMetadata: grounding,
+              },
+            )
+          : reply([{ text: "Done" }]),
+      );
+      const execute = vi.fn(() => Promise.resolve("A"));
+      const result = await run({
+        provider: withTools(),
+        tools: [
+          readTool({
+            name: "lookup",
+            description: "Lookup",
+            input: z.strictObject({ id: z.string() }),
+            authorize: () => Promise.resolve(true),
+            execute,
+          }),
+        ],
+        identity: { actorId: "a", tenantId: "t" },
+        input: "Find",
+        system: "Help",
+        limits: { maxToolCalls: 1 },
+        signal: AbortSignal.timeout(5000),
+      });
+      expect(result).toEqual({ status: "completed", text: "Done" });
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(calls).toHaveLength(2);
+    });
+
+    it("rejects webSearch options", () => {
+      expect(() =>
+        gemini({ serverTools: ["web_search"], webSearch: { maxUses: 1 } }),
+      ).toThrow();
+    });
+  });
 });

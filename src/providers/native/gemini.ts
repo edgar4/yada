@@ -2,14 +2,17 @@ import type {
   Content as GeminiContent,
   GenerateContentConfig,
   GenerateContentResponse,
+  GroundingMetadata,
   GoogleGenAI,
   Part,
   ThinkingLevel,
+  Tool,
 } from "@google/genai";
 import { z } from "zod";
 import { contentText } from "../../core/content.js";
 import { optionalImport } from "../../optional.js";
-import { withTrailingImages } from "../shared.js";
+import { uniqueSources, withTrailingImages } from "../shared.js";
+import type { ServerToolSettings } from "../options.js";
 import type {
   Content,
   ProviderAdapter,
@@ -18,16 +21,17 @@ import type {
   Turn,
 } from "../../core/contracts.js";
 
-export type GeminiSettings = Readonly<{
-  apiKey: string;
-  model: string;
-  maxTokens: number;
-  maxRetries: number;
-  baseUrl?: string | undefined;
-  headers?: Record<string, string> | undefined;
-  temperature?: number | undefined;
-  effort?: "low" | "medium" | "high" | "xhigh" | "max" | undefined;
-}>;
+export type GeminiSettings = Pick<ServerToolSettings, "serverTools"> &
+  Readonly<{
+    apiKey: string;
+    model: string;
+    maxTokens: number;
+    maxRetries: number;
+    baseUrl?: string | undefined;
+    headers?: Record<string, string> | undefined;
+    temperature?: number | undefined;
+    effort?: "low" | "medium" | "high" | "xhigh" | "max" | undefined;
+  }>;
 
 const generatedPrefix = "gemini_call_";
 
@@ -129,6 +133,7 @@ type Completion = Readonly<{
   finish: string | undefined;
   blocked: boolean;
   usage: GenerateContentResponse["usageMetadata"];
+  grounding: readonly GroundingMetadata[];
 }>;
 
 function toResult({
@@ -136,6 +141,7 @@ function toResult({
   finish,
   blocked,
   usage,
+  grounding,
 }: Completion): ProviderResult {
   const length = finish === "MAX_TOKENS";
   const toolCalls = length
@@ -152,15 +158,28 @@ function toResult({
             ]
           : [],
       );
+  const sources = uniqueSources(
+    grounding.flatMap((metadata) =>
+      (metadata.groundingChunks ?? []).flatMap(({ web }) =>
+        web?.uri ? [{ url: web.uri, title: web.title ?? web.uri }] : [],
+      ),
+    ),
+  );
+  const serverToolCalls =
+    grounding.reduce(
+      (total, metadata) => total + (metadata.webSearchQueries?.length ?? 0),
+      0,
+    ) + parts.filter((part) => part.executableCode).length;
   return {
-    ...(usage && {
+    ...((usage || serverToolCalls) && {
       usage: {
-        inputTokens: usage.promptTokenCount ?? 0,
+        inputTokens: usage?.promptTokenCount ?? 0,
         outputTokens:
-          (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0),
-        ...(usage.cachedContentTokenCount && {
+          (usage?.candidatesTokenCount ?? 0) + (usage?.thoughtsTokenCount ?? 0),
+        ...(usage?.cachedContentTokenCount && {
           cacheReadTokens: usage.cachedContentTokenCount,
         }),
+        ...(serverToolCalls && { serverToolCalls }),
       },
     }),
     content: parts
@@ -177,9 +196,19 @@ function toResult({
             : finish === "STOP"
               ? "stop"
               : "other",
-    ...(parts.some((part) => part.thoughtSignature) && {
-      providerMetadata: { provider: "gemini", data: { parts } },
-    }),
+    ...(parts.some(
+      (part) =>
+        part.thoughtSignature ||
+        part.executableCode ||
+        part.codeExecutionResult,
+    ) || sources.length
+      ? {
+          providerMetadata: {
+            provider: "gemini",
+            data: { parts, ...(sources.length && { sources }) },
+          },
+        }
+      : {}),
   };
 }
 
@@ -205,6 +234,9 @@ const completion = (chunks: readonly GenerateContentResponse[]): Completion => {
       .at(-1),
     blocked: chunks.some((chunk) => chunk.promptFeedback?.blockReason),
     usage: chunks.flatMap((chunk) => chunk.usageMetadata ?? []).at(-1),
+    grounding: candidates.flatMap(
+      (candidate) => candidate.groundingMetadata ?? [],
+    ),
   };
 };
 
@@ -228,6 +260,26 @@ export function nativeGeminiAdapter(settings: GeminiSettings): ProviderAdapter {
     ));
   const params = (request: ProviderRequest) => {
     request.signal.throwIfAborted();
+    const tools: Tool[] = [
+      ...(request.tools.length
+        ? [
+            {
+              functionDeclarations: request.tools.map((tool) => ({
+                name: tool.name,
+                description: tool.description,
+                parametersJsonSchema: Object.fromEntries(
+                  Object.entries(tool.parameters).filter(
+                    ([key]) => key !== "$schema",
+                  ),
+                ),
+              })),
+            },
+          ]
+        : []),
+      ...(settings.serverTools ?? []).map((name): Tool =>
+        name === "web_search" ? { googleSearch: {} } : { codeExecution: {} },
+      ),
+    ];
     const config: GenerateContentConfig = {
       abortSignal: request.signal,
       systemInstruction: request.system,
@@ -235,21 +287,7 @@ export function nativeGeminiAdapter(settings: GeminiSettings): ProviderAdapter {
       ...(settings.temperature !== undefined && {
         temperature: settings.temperature,
       }),
-      ...(request.tools.length && {
-        tools: [
-          {
-            functionDeclarations: request.tools.map((tool) => ({
-              name: tool.name,
-              description: tool.description,
-              parametersJsonSchema: Object.fromEntries(
-                Object.entries(tool.parameters).filter(
-                  ([key]) => key !== "$schema",
-                ),
-              ),
-            })),
-          },
-        ],
-      }),
+      ...(tools.length && { tools }),
       ...(settings.effort && {
         thinkingConfig: {
           thinkingLevel: (settings.effort === "low" ||
