@@ -4,27 +4,32 @@ import type {
   ContentBlockParam,
   MessageCreateParamsNonStreaming,
   MessageParam,
+  ToolUnion,
 } from "@anthropic-ai/sdk/resources/messages";
 import { z } from "zod";
+import type { ServerToolSettings } from "../options.js";
+import { uniqueSources } from "../shared.js";
 import type {
   Content,
   ProviderAdapter,
+  ProviderDelta,
   ProviderRequest,
   ProviderResult,
   Turn,
 } from "../../core/contracts.js";
 
-export type AnthropicSettings = Readonly<{
-  apiKey: string;
-  model: string;
-  maxTokens: number;
-  maxRetries: number;
-  baseUrl?: string | undefined;
-  headers?: Record<string, string> | undefined;
-  effort?: "low" | "medium" | "high" | "xhigh" | "max" | undefined;
-  thinkingDisplay?: "summarized" | "omitted" | undefined;
-  promptCache?: "off" | "5m" | "1h" | undefined;
-}>;
+export type AnthropicSettings = ServerToolSettings &
+  Readonly<{
+    apiKey: string;
+    model: string;
+    maxTokens: number;
+    maxRetries: number;
+    baseUrl?: string | undefined;
+    headers?: Record<string, string> | undefined;
+    effort?: "low" | "medium" | "high" | "xhigh" | "max" | undefined;
+    thinkingDisplay?: "summarized" | "omitted" | undefined;
+    promptCache?: "off" | "5m" | "1h" | undefined;
+  }>;
 
 const blocksOf = (content: Content): ContentBlockParam[] =>
   typeof content === "string"
@@ -41,6 +46,8 @@ const blocksOf = (content: Content): ContentBlockParam[] =>
               },
             },
       );
+
+const maxContinuations = 3;
 
 const thinkingBlocks = z.array(
   z.looseObject({ type: z.enum(["thinking", "redacted_thinking"]) }),
@@ -131,9 +138,22 @@ function toResult(message: {
     cache_read_input_tokens?: number | null;
   };
 }): ProviderResult {
-  const thinking = message.content.filter(
-    (block) => block.type === "thinking" || block.type === "redacted_thinking",
+  const replay = message.content.some(
+    (block) =>
+      block.type === "thinking" ||
+      block.type === "redacted_thinking" ||
+      block.type === "server_tool_use",
   );
+  const sources = uniqueSources(
+    message.content.flatMap((block) =>
+      block.type === "web_search_tool_result" && Array.isArray(block.content)
+        ? block.content.map(({ url, title }) => ({ url, title }))
+        : [],
+    ),
+  );
+  const serverToolCalls = message.content.filter(
+    (block) => block.type === "server_tool_use",
+  ).length;
   const { usage } = message;
   return {
     usage: {
@@ -148,6 +168,7 @@ function toResult(message: {
       ...(usage.cache_creation_input_tokens && {
         cacheWriteTokens: usage.cache_creation_input_tokens,
       }),
+      ...(serverToolCalls && { serverToolCalls }),
     },
     content: message.content
       .flatMap((block) => (block.type === "text" ? [block.text] : []))
@@ -158,11 +179,14 @@ function toResult(message: {
         : [],
     ),
     finishReason: finishReasons[message.stop_reason ?? ""] ?? "other",
-    ...(thinking.length
+    ...(replay
       ? {
           providerMetadata: {
             provider: "anthropic",
-            data: { contentBlocks: message.content },
+            data: {
+              contentBlocks: message.content,
+              ...(sources.length && { sources }),
+            },
           },
         }
       : {}),
@@ -190,6 +214,27 @@ export function nativeAnthropicAdapter(
             type: "ephemeral" as const,
             ...(cache === "1h" && { ttl: cache }),
           };
+    const tools: ToolUnion[] = [
+      ...request.tools.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        input_schema: tool.parameters as { type: "object" },
+      })),
+      ...(settings.serverTools ?? []).map((name): ToolUnion =>
+        name === "web_search"
+          ? {
+              type: "web_search_20260318",
+              name,
+              ...(settings.webSearch?.maxUses && {
+                max_uses: settings.webSearch.maxUses,
+              }),
+              ...(settings.webSearch?.allowedDomains && {
+                allowed_domains: settings.webSearch.allowedDomains,
+              }),
+            }
+          : { type: "code_execution_20260521", name },
+      ),
+    ];
     return {
       model: settings.model,
       max_tokens: settings.maxTokens,
@@ -205,33 +250,42 @@ export function nativeAnthropicAdapter(
           : request.system,
       ...(cacheControl && { cache_control: cacheControl }),
       messages: toMessages(request.messages),
-      ...(request.tools.length && {
-        tools: request.tools.map((tool) => ({
-          name: tool.name,
-          description: tool.description,
-          input_schema: tool.parameters as { type: "object" },
-        })),
-      }),
+      ...(tools.length && { tools }),
       ...(settings.effort && { output_config: { effort: settings.effort } }),
       ...(settings.thinkingDisplay && {
         thinking: { type: "adaptive", display: settings.thinkingDisplay },
       }),
     };
   };
-  return {
-    name: "anthropic",
-    capabilities: { toolCalling: true, vision: true },
-    async complete(request) {
-      const message = await client.messages
-        .stream(params(request), { signal: request.signal })
-        .finalMessage();
-      request.signal.throwIfAborted();
-      return toResult(message);
-    },
-    async *stream(request) {
-      const stream = client.messages.stream(params(request), {
-        signal: request.signal,
-      });
+  async function* generate(
+    request: ProviderRequest,
+  ): AsyncGenerator<ProviderDelta, ProviderResult> {
+    const base = params(request);
+    const content: ContentBlock[] = [];
+    const usage = {
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 0,
+    };
+    for (let leg = 0; ; leg++) {
+      const stream = client.messages.stream(
+        {
+          ...base,
+          messages: [
+            ...base.messages,
+            ...(content.length
+              ? [
+                  {
+                    role: "assistant" as const,
+                    content: content as ContentBlockParam[],
+                  },
+                ]
+              : []),
+          ],
+        },
+        { signal: request.signal },
+      );
       for await (const event of stream)
         if (
           event.type === "content_block_delta" &&
@@ -240,7 +294,23 @@ export function nativeAnthropicAdapter(
           yield { type: "text", delta: event.delta.text };
       const message = await stream.finalMessage();
       request.signal.throwIfAborted();
-      return toResult(message);
+      content.push(...message.content);
+      for (const key of Object.keys(usage) as (keyof typeof usage)[])
+        usage[key] += message.usage[key] ?? 0;
+      if (message.stop_reason !== "pause_turn" || leg === maxContinuations)
+        return toResult({ ...message, content, usage });
+    }
+  }
+  return {
+    name: "anthropic",
+    capabilities: { toolCalling: true, vision: true },
+    async complete(request) {
+      const run = generate(request);
+      for (;;) {
+        const next = await run.next();
+        if (next.done) return next.value;
+      }
     },
+    stream: generate,
   };
 }
