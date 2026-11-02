@@ -78,7 +78,7 @@ YADA_LLM_MODEL=claude-opus-5-5
 YADA_LLM_API_KEY=your-anthropic-api-key
 ```
 
-Live requests use your provider account and may incur charges; keep `.env` private. For the full starter, run `npm run starter:init`, add credentials to `.env.starter`, then `npm run starter`.
+That is all Yada needs. `.env.example` also lists the optional settings (effort, temperature, prompt caching, provider-hosted web search and code execution) with their allowed values; see [configuration](docs/configuration.md#model-settings). Live requests use your provider account and may incur charges; keep `.env` private. For the full starter, run `npm run starter:init`, add credentials to `.env.starter`, then `npm run starter`.
 
 Before opening a pull request:
 
