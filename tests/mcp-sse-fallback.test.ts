@@ -61,3 +61,22 @@ it("does not fall back on authorization failures", async () => {
   const url = await legacyServer(401);
   await expect(connectMcp({ name: "legacy", url }, access)).rejects.toThrow();
 });
+
+it("does not fall back on other client errors", async () => {
+  const url = await legacyServer(422);
+  await expect(
+    connectMcp({ name: "legacy", url }, access),
+  ).rejects.toMatchObject({ code: 422 });
+});
+
+it("keeps the original error when the SSE fallback also fails", async () => {
+  http = createServer((_req, res) => res.writeHead(405).end());
+  await new Promise<void>((resolve) => http?.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${String((http.address() as AddressInfo).port)}/mcp`;
+  await expect(
+    connectMcp({ name: "legacy", url }, access),
+  ).rejects.toMatchObject({
+    code: 405,
+    cause: expect.any(Error) as Error,
+  });
+});
