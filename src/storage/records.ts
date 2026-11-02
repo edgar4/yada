@@ -23,6 +23,15 @@ export function isRetryable(error: unknown) {
     code === "ER_LOCK_WAIT_TIMEOUT"
   );
 }
+export function scopeFor(key: string) {
+  const [kind, ...parts] = z.array(z.string()).parse(JSON.parse(key));
+  const length = { conversation: 2, retired: 3 }[kind ?? ""];
+  return length === undefined
+    ? undefined
+    : createHash("sha256")
+        .update(JSON.stringify(parts.slice(0, length)))
+        .digest("hex");
+}
 export function recordStore(
   db: Knex,
   encryptionKey: string,
@@ -46,6 +55,7 @@ export function recordStore(
     const id = idFor(key);
     const encrypted = cipher.seal(id, value);
     const kind = z.array(z.string()).parse(JSON.parse(key))[0];
+    const scope = scopeFor(key);
     if (revision === 0) {
       await db("yada_records")
         .insert({
@@ -53,6 +63,7 @@ export function recordStore(
           value: encrypted,
           revision: 1,
           kind,
+          scope,
           active: active ?? false,
         })
         .onConflict("id")
@@ -67,6 +78,7 @@ export function recordStore(
           value: encrypted,
           revision: revision + 1,
           kind,
+          scope,
           ...(active === undefined ? {} : { active }),
         });
       if (updated !== 1) throw new StorageConflict();
@@ -93,9 +105,19 @@ export function recordStore(
     }
     throw new StorageConflict();
   }
-  async function scan(kind: string, after = "", limit = 100, active?: boolean) {
+  async function scan(
+    kind: string,
+    after = "",
+    limit = 100,
+    active?: boolean,
+    scopeKey?: string,
+  ) {
     const rows: unknown = await db("yada_records")
-      .where({ kind, ...(active === undefined ? {} : { active }) })
+      .where({
+        kind,
+        ...(active === undefined ? {} : { active }),
+        ...(scopeKey === undefined ? {} : { scope: scopeFor(scopeKey) }),
+      })
       .andWhere("id", ">", after)
       .orderBy("id")
       .limit(z.number().int().min(1).max(1000).parse(limit));

@@ -7,7 +7,11 @@ import {
   isRetryable,
   recordStore,
 } from "../src/storage/records.js";
-import { migrateDatabase, openDatabase } from "../src/storage/database.js";
+import {
+  backfillRecords,
+  migrateDatabase,
+  openDatabase,
+} from "../src/storage/database.js";
 import { conversationKey } from "../src/storage/conversations.js";
 import { createStorage } from "../src/storage/index.js";
 import {
@@ -88,7 +92,7 @@ for (const driver of drivers)
       ).toBe("queued");
     });
 
-    it("does not copy history into jobs and trims old terminal jobs", async () => {
+    it("does not copy history into jobs and retires old terminal jobs", async () => {
       const s = await storageFixture(driver);
       for (let index = 0; index < 23; index++) {
         const id = `job-${String(index)}`;
@@ -108,11 +112,8 @@ for (const driver of drivers)
             conversationKey(s.identity, "chat"),
           )
         )?.value as { jobs: Record<string, unknown>[] };
-        expect(raw.jobs[0]).toMatchObject({
-          events: [],
-          history: [],
-          outcome: { status: "completed" },
-        });
+        expect(raw.jobs).toHaveLength(20);
+        expect(raw.jobs[0]).toMatchObject({ id: "job-3" });
         expect(raw.jobs.at(-1)?.["events"]).not.toEqual([]);
         expect(raw.jobs.at(-1)).not.toHaveProperty("history");
       } finally {
@@ -121,6 +122,82 @@ for (const driver of drivers)
       const last = await s.storage.jobs.load(s.identity, "chat", "job-22");
       expect(last?.history).toHaveLength(44);
       expect(last).not.toHaveProperty("historyLength");
+      await expect(
+        s.storage.jobs.submit(s.identity, "chat", input("job-0")),
+      ).rejects.toThrow();
+      expect(
+        await s.storage.jobs.load(s.identity, "chat", "job-0"),
+      ).toBeUndefined();
+      await s.storage.retention.eraseConversation(s.identity, "chat");
+      const left = await openDatabase(s.config);
+      try {
+        expect(await left("yada_records").where({ kind: "retired" })).toEqual(
+          [],
+        );
+      } finally {
+        await left.destroy();
+      }
+    });
+
+    it("lists only the caller's conversations by indexed owner with cursors", async () => {
+      const s = await storageFixture(driver);
+      const other = { tenantId: "t2", actorId: "a2" };
+      for (let index = 0; index < 5; index++)
+        await s.storage.jobs.submit(
+          s.identity,
+          `c${String(index)}`,
+          input("r"),
+        );
+      await s.storage.jobs.submit(other, "x", input("r"));
+      const seen: string[] = [];
+      let after: string | undefined;
+      do {
+        const page = await s.storage.conversations.list(s.identity, after, 2);
+        seen.push(...page.conversations.map((item) => item.id));
+        after = page.next;
+      } while (after);
+      expect(seen.sort()).toEqual(["c0", "c1", "c2", "c3", "c4"]);
+    });
+
+    it("backfills owner scope and keeps legacy retired runs blocked after prune", async () => {
+      const s = await storageFixture(driver);
+      await s.storage.jobs.submit(s.identity, "chat", input("one"));
+      const db = await openDatabase(s.config);
+      try {
+        await db("yada_records").update({ scope: null });
+        await backfillRecords(db, s.config);
+        expect(await db("yada_records").whereNull("scope")).toEqual([]);
+      } finally {
+        await db.destroy();
+      }
+      expect(
+        (await s.storage.conversations.list(s.identity)).conversations,
+      ).toHaveLength(1);
+      await s.storage.jobs.update(
+        s.identity,
+        "chat",
+        "one",
+        done.event,
+        done.outcome,
+      );
+      const legacy = await openDatabase(s.config);
+      try {
+        const records = recordStore(legacy, s.config.encryptionKey);
+        const key = conversationKey(s.identity, "chat");
+        const record = await records.read(key);
+        await records.write(
+          key,
+          { ...(record?.value as object), retiredRuns: ["old"] },
+          record?.revision ?? 0,
+        );
+      } finally {
+        await legacy.destroy();
+      }
+      await s.storage.jobs.prune(s.identity, "chat", Date.now() + 1);
+      for (const id of ["old", "one"])
+        await expect(
+          s.storage.jobs.submit(s.identity, "chat", input(id)),
+        ).rejects.toThrow();
     });
 
     it("splits migration from open", async () => {
