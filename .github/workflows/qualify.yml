@@ -25,10 +25,6 @@ jobs:
   evals:
     runs-on: ubuntu-latest
     env:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
       PROVIDER: ${{ inputs.provider }}
       YADA_LLM_MODEL: ${{ inputs.model }}
       RUNS: ${{ inputs.runs }}
@@ -40,11 +36,15 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
-      - name: Select provider key
+      - name: Run evals
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: |
           key="$(echo "$PROVIDER" | tr a-z A-Z)_API_KEY"
-          echo "YADA_LLM_API_KEY=${!key}" >> "$GITHUB_ENV"
-      - run: npm run evals -- --provider "$PROVIDER" --runs "$RUNS" ${PRICING:+--pricing "$PRICING"} --out evals-results.json
+          YADA_LLM_API_KEY="${!key}" npm run evals -- --provider "$PROVIDER" --runs "$RUNS" ${PRICING:+--pricing "$PRICING"} --out evals-results.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
