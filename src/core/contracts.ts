@@ -55,7 +55,11 @@ export type ProviderResult = Readonly<{
 export type ProviderDelta = Readonly<{ type: "text"; delta: string }>;
 export interface ProviderAdapter {
   readonly name: string;
-  readonly capabilities: Readonly<{ toolCalling: boolean; vision?: boolean }>;
+  readonly capabilities: Readonly<{
+    toolCalling: boolean;
+    vision?: boolean;
+    retries?: boolean;
+  }>;
   complete(request: ProviderRequest): Promise<ProviderResult>;
   stream?(
     request: ProviderRequest,

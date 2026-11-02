@@ -305,7 +305,7 @@ export function nativeAnthropicAdapter(
   }
   return {
     name: "anthropic",
-    capabilities: { toolCalling: true, vision: true },
+    capabilities: { toolCalling: true, vision: true, retries: true },
     async complete(request) {
       const run = generate(request);
       for (;;) {

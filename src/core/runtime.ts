@@ -598,6 +598,54 @@ async function summarize(loop: Loop): Promise<RunResult | undefined> {
   await loop.save();
   return undefined;
 }
+const maxModelRetries = 2;
+const retryBaseMs = 500;
+const transientNames = new Set([
+  "TimeoutError",
+  "FetchError",
+  "APIConnectionError",
+  "APIConnectionTimeoutError",
+]);
+const transientCodes = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EAI_AGAIN",
+  "UND_ERR_SOCKET",
+]);
+function isTransient(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const { status, code, name } = error as Record<string, unknown>;
+  if (typeof status === "number")
+    return status === 408 || status === 429 || status >= 500;
+  return (
+    transientNames.has(String(name)) ||
+    (typeof code === "string" && transientCodes.has(code))
+  );
+}
+async function completeWithRetry(
+  provider: ProviderAdapter,
+  request: ProviderRequest,
+  signal: AbortSignal,
+): Promise<ProviderResult> {
+  for (let attempt = 0; ; attempt++)
+    try {
+      return await provider.complete(request);
+    } catch (error) {
+      if (
+        provider.capabilities.retries ||
+        signal.aborted ||
+        attempt >= maxModelRetries ||
+        !isTransient(error)
+      )
+        throw error;
+      const delay = retryBaseMs * 2 ** attempt * (0.5 + Math.random() / 2);
+      await abortable(
+        () => new Promise((resolve) => setTimeout(resolve, delay)),
+        signal,
+      );
+    }
+}
 async function modelCall(
   loop: Loop,
   request: ProviderRequest,
@@ -619,7 +667,11 @@ async function modelCall(
       }
       loop.emit({ type: "text_delta", delta: next.value.delta });
     }
-  } else result = await abortable(() => provider.complete(request), signal);
+  } else
+    result = await abortable(
+      () => completeWithRetry(provider, request, signal),
+      signal,
+    );
   signal.throwIfAborted();
   addUsage(state, result.usage);
   if (!call.purpose) await loop.save();

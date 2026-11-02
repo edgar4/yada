@@ -182,7 +182,11 @@ export function nativeOpenAIAdapter(settings: OpenAISettings): ProviderAdapter {
   };
   return {
     name: settings.name,
-    capabilities: { toolCalling: true, vision: settings.vision ?? false },
+    capabilities: {
+      toolCalling: true,
+      vision: settings.vision ?? false,
+      retries: true,
+    },
     async complete(request) {
       const response = await client.chat.completions.create(params(request), {
         signal: request.signal,

@@ -6,7 +6,7 @@ import { createFakeProvider } from "../src/index.js";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runScenario, summarize } from "../evals/run.js";
+import { runScenario, summarize } from "../src/evals/run.js";
 import { scenarios } from "../evals/scenarios.js";
 
 for (const scenario of scenarios)

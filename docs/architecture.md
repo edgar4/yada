@@ -28,7 +28,7 @@ Tool output over `maxToolOutput` (32,000) characters is truncated and ends with 
 
 Structured output: the `output` run option takes a Zod schema. The runtime appends its JSON Schema to the system prompt, parses the final text as JSON (a surrounding code fence is allowed), and returns the parsed value as `data` on the completed result next to `text`. On a validation failure it adds a user turn with the error and asks again, up to 2 retries (each a round), then fails with `invalid_response`. Retry turns are kept out of `runTurns`.
 
-Events reach `onEvent` in order, one at a time per run, and `run()` returns only after all have been delivered. Failures in `onEvent` are ignored. Model calls are not retried by the runtime: native adapters use their SDK's retries, and a custom adapter that needs retries should implement them itself.
+Events reach `onEvent` in order, one at a time per run, and `run()` returns only after all have been delivered. Failures in `onEvent` are ignored. Native adapters set `capabilities.retries` and use their SDK's retries; for other adapters the runtime retries transient failures (status 408, 429 or 5xx, network or timeout errors) up to 2 times with jittered exponential backoff, never after an abort, and without counting extra rounds.
 
 Termination: `stop` with text completes. `stop` with empty text after tool use completes with the latest non-empty assistant text of the run, otherwise fails with `invalid_response`. `length` and `other` fail with `invalid_response`. `refusal` (including content-filter and safety stops) fails with `refused`. Limits fail with `limit`.
 

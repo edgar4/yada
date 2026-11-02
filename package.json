@@ -95,6 +95,10 @@
       "types": "./dist/entries/langchain.d.ts",
       "import": "./dist/entries/langchain.js"
     },
+    "./evals": {
+      "types": "./dist/entries/evals.d.ts",
+      "import": "./dist/entries/evals.js"
+    },
     "./otel": {
       "types": "./dist/entries/otel.d.ts",
       "import": "./dist/entries/otel.js"

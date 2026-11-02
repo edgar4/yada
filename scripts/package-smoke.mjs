@@ -85,12 +85,15 @@ import * as skillsEntry from "@edgaralochi/yada/skills";
 import * as service from "@edgaralochi/yada/service";
 import * as otel from "@edgaralochi/yada/otel";
 import * as langchain from "@edgaralochi/yada/langchain";
+import * as evals from "@edgaralochi/yada/evals";
 for (const entry of [providers, storageEntry, mcp, skillsEntry, service])
   for (const key of Object.keys(entry)) assert.equal(entry[key], root[key], key);
 assert(Object.keys(client).length > 0);
 assert(Object.keys(widget).length > 0);
 assert(!("otelTracer" in root) && !("chatModelAdapter" in root) && !("chatModelAdapter" in providers));
 assert.equal(typeof langchain.chatModelAdapter, "function");
+assert.equal(typeof evals.runScenario, "function");
+assert.equal(typeof evals.summarize, "function");
 const provider = createFakeProvider(() => ({content: "installed", toolCalls: [], finishReason: "stop"}));
 const result = await run({provider, tools: [], identity: {actorId: "test", tenantId: "test"}, input: "test", system: "test", signal: AbortSignal.timeout(5000)});
 assert.deepEqual(result, {status: "completed", text: "installed"});
@@ -132,7 +135,8 @@ import * as storage from "@edgaralochi/yada/storage";
 import * as mcp from "@edgaralochi/yada/mcp";
 import * as skills from "@edgaralochi/yada/skills";
 import * as service from "@edgaralochi/yada/service";
-void [runtime, client, widget, providers, storage, mcp, skills, service];
+import * as evals from "@edgaralochi/yada/evals";
+void [runtime, client, widget, providers, storage, mcp, skills, service, evals];
 `,
   );
   execute(

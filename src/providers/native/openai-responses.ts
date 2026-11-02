@@ -214,7 +214,11 @@ export function nativeOpenAIResponsesAdapter(
   };
   return {
     name: settings.name,
-    capabilities: { toolCalling: true, vision: settings.vision ?? false },
+    capabilities: {
+      toolCalling: true,
+      vision: settings.vision ?? false,
+      retries: true,
+    },
     async complete(request) {
       const response = await client.responses.create(params(request), {
         signal: request.signal,

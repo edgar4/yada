@@ -308,7 +308,7 @@ export function nativeGeminiAdapter(settings: GeminiSettings): ProviderAdapter {
   };
   return {
     name: "gemini",
-    capabilities: { toolCalling: true, vision: true },
+    capabilities: { toolCalling: true, vision: true, retries: true },
     async complete(request) {
       const response = await (
         await load()

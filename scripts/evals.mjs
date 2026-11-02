@@ -5,7 +5,7 @@ import {
   createProvider,
   providerConfigFromEnv,
 } from "../src/index.ts";
-import { runScenario, summarize } from "../evals/run.ts";
+import { runScenario, summarize } from "../src/evals/run.ts";
 import { scenarios } from "../evals/scenarios.ts";
 
 const index = process.argv.indexOf("--provider");
