@@ -24,7 +24,13 @@ const image = {
 const anthropic = () =>
   createProvider({ provider: "anthropic", apiKey: "k", model: "c" });
 const openai = (extra: object = {}) =>
-  createProvider({ provider: "openai", apiKey: "k", model: "m", ...extra });
+  createProvider({
+    provider: "openai",
+    api: "chat",
+    apiKey: "k",
+    model: "m",
+    ...extra,
+  });
 
 describe("anthropic", () => {
   it("completes with a large max_tokens through streaming", async () => {

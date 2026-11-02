@@ -25,6 +25,7 @@ export const modelFields = {
 export const effort = z
   .enum(["low", "medium", "high", "xhigh", "max"])
   .optional();
+export const openaiApi = z.enum(["chat", "responses"]).optional();
 export const thinkingDisplay = z.enum(["summarized", "omitted"]).optional();
 export const promptCache = z.enum(["off", "5m", "1h"]).optional();
 export const modelOptions = z.strictObject({

@@ -37,12 +37,13 @@ Import the runtime from `@edgaralochi/yada`, the browser client from `@edgaraloc
 
 The core and the Anthropic and OpenAI-compatible providers need nothing else. Install only what you use:
 
-| Feature                    | Install                                               |
-| -------------------------- | ----------------------------------------------------- |
-| SQLite storage (default)   | `npm install better-sqlite3`                          |
-| PostgreSQL storage         | `npm install pg`                                      |
-| MySQL storage              | `npm install mysql2`                                  |
-| Gemini, `chatModelAdapter` | `npm install @langchain/core @langchain/google-genai` |
+| Feature                  | Install                       |
+| ------------------------ | ----------------------------- |
+| SQLite storage (default) | `npm install better-sqlite3`  |
+| PostgreSQL storage       | `npm install pg`              |
+| MySQL storage            | `npm install mysql2`          |
+| Gemini                   | `npm install @google/genai`   |
+| `chatModelAdapter`       | `npm install @langchain/core` |
 
 Using a feature without its package fails with an error naming what to install. See [provider configuration](docs/configuration.md) to choose a model.
 
@@ -91,9 +92,10 @@ Automated tests require no provider credentials.
 
 ## Upgrading from 0.2
 
-- `better-sqlite3`, `pg`, `mysql2` and the LangChain packages are optional peer dependencies; install the ones you use.
-- `@langchain/anthropic` and `@langchain/openai` are no longer used; Anthropic and OpenAI-compatible providers run on the official SDKs.
+- `better-sqlite3`, `pg`, `mysql2`, `@google/genai` (Gemini) and `@langchain/core` (`chatModelAdapter`) are optional peer dependencies; install the ones you use.
+- `@langchain/google-genai`, `@langchain/anthropic` and `@langchain/openai` are no longer used; Anthropic and OpenAI-compatible providers run on the official SDKs.
 - `ReadTool.execute` returns `Content` (a string or an array of text and image parts) instead of `string`.
+- Hosted `openai` uses the Responses API by default. Set `api: "chat"` (`YADA_LLM_OPENAI_API=chat`) to keep Chat Completions.
 - `temperature` is rejected for `anthropic`; use `effort` instead.
 - `maxContextChars` defaults to 256,000 and service `historyChars` to 128,000.
 - `maxRounds` defaults to 32 and `maxToolCalls` to 64, also for `runDurable` and worker profiles. Set `maxCostMicros` to bound spend. Durable runs suspended before the upgrade fail with `Run configuration mismatch` on resume unless their profile pins the old `maxRounds: 8` and `maxToolCalls: 16`.

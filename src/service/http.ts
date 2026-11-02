@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Identity } from "../core/contracts.js";
 import type { YadaStorage } from "../storage/index.js";
+import { elicitationTool, validElicitation } from "../core/action.js";
 import { ActionConflict } from "../storage/actions.js";
 import { JobConflict } from "../storage/jobs.js";
 import { contentText } from "../core/content.js";
@@ -106,6 +107,7 @@ export function createHandler(options: {
           .strictObject({
             approved: z.boolean(),
             remember: z.enum(["run", "conversation"]).optional(),
+            content: z.record(z.string(), z.unknown()).optional(),
           })
           .parse(await readJson(request));
         if (
@@ -122,10 +124,25 @@ export function createHandler(options: {
           if (applied) return json({ accepted: true }, 202);
           return json({ error: "Run is not awaiting this approval" }, 409);
         }
+        const content =
+          decision.content ??
+          (action.tool === elicitationTool && decision.approved
+            ? {}
+            : undefined);
+        if (
+          content &&
+          !(
+            action.tool === elicitationTool &&
+            decision.approved &&
+            validElicitation(action, content)
+          )
+        )
+          return json({ error: "Invalid content" }, 400);
         const decided = await options.storage.actions.decide(
           identity,
           approvalId,
           decision.approved,
+          content,
         );
         if (decision.remember && decided.status === "approved")
           await options.storage.actions.remember(

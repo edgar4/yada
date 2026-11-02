@@ -1,8 +1,10 @@
 import { limitsSchema } from "../core/limits.js";
 import { turnSchema } from "../core/checkpoint.js";
 import { run } from "../core/runtime.js";
-import type { RunStore } from "./runs.js";
-import type { Suspension } from "../core/action.js";
+import { RunLeaseError, subRunId, type RunStore } from "./runs.js";
+import { scopedExecutor, type Suspension } from "../core/action.js";
+import type { ChildRun, RunResult } from "../core/contracts.js";
+import { CheckpointError } from "../core/checkpoint.js";
 export async function runDurable(
   options: Omit<Parameters<typeof run>[0], "checkpoint" | "persist"> & {
     runId: string;
@@ -11,7 +13,7 @@ export async function runDurable(
     leaseMs?: number;
     onSuspend?: (result: Suspension, token: string) => Promise<void>;
   },
-) {
+): Promise<RunResult> {
   const {
     store,
     runId,
@@ -73,6 +75,27 @@ export async function runDurable(
     const result = await run({
       ...runtime,
       ...(executeWrite ? { executeWrite } : {}),
+      nest: async (call, child) => {
+        const childId = subRunId(runId, call.id);
+        try {
+          const result = await runDurable({
+            ...child,
+            runId: childId,
+            profileId,
+            store,
+            leaseMs,
+            ...(executeWrite
+              ? { executeWrite: scopedExecutor(executeWrite, call.id) }
+              : {}),
+          });
+          const usage = (await store.load(options.identity, childId))
+            ?.checkpoint?.usage;
+          return { result, usage: usage as ChildRun["usage"] };
+        } catch (error) {
+          if (error instanceof RunLeaseError) throw new CheckpointError();
+          throw error;
+        }
+      },
       signal,
       ...(state.checkpoint ? { checkpoint: state.checkpoint } : {}),
       persist: async (checkpoint) => {

@@ -1,3 +1,4 @@
+import { Ajv } from "ajv";
 import { z } from "zod";
 import type { Identity, ToolSpec, ToolCall } from "./contracts.js";
 export type Preparation = Readonly<{ preview: string; version: string }>;
@@ -28,6 +29,27 @@ export type Suspension = Readonly<{
   status: "awaiting_approval" | "reconciling";
   approvalId: string;
 }>;
+export const elicitationTool = "mcp_elicitation";
+export type Elicitation = Readonly<{
+  message: string;
+  requestedSchema: Record<string, unknown>;
+}>;
+export type ElicitAnswer =
+  | Readonly<{ action: "accept"; content: Record<string, unknown> }>
+  | Readonly<{ action: "decline" | "cancel" }>;
+export type Ask = (request: Elicitation) => Promise<ElicitAnswer | Suspension>;
+export class Suspended extends Error {
+  constructor(readonly suspension: Suspension) {
+    super("Run suspended");
+  }
+}
+export function validElicitation(
+  action: Readonly<{ args: unknown }>,
+  content: unknown,
+) {
+  const { requestedSchema } = action.args as Elicitation;
+  return new Ajv({ strict: false }).validate(requestedSchema, content);
+}
 export type ActionExecutor = ((
   tool: WriteTool,
   call: ToolCall,
@@ -35,7 +57,24 @@ export type ActionExecutor = ((
 ) => Promise<string | Suspension>) & {
   unresolved?: (call: ToolCall) => Promise<Suspension | undefined>;
   withLease?: (token: string) => ActionExecutor;
+  ask?: (call: ToolCall) => Ask;
 };
+export const subPrefix = (callId: string) => `sub:${callId}:`;
+export function scopedExecutor(
+  parent: ActionExecutor,
+  callId: string,
+): ActionExecutor {
+  const scope = (call: ToolCall) => ({
+    ...call,
+    id: subPrefix(callId) + call.id,
+  });
+  const execute: ActionExecutor = (tool, call, signal) =>
+    parent(tool, scope(call), signal);
+  const { unresolved, ask } = parent;
+  if (unresolved) execute.unresolved = (call) => unresolved(scope(call));
+  if (ask) execute.ask = (call) => ask(scope(call));
+  return execute;
+}
 export function writeTool<S extends z.ZodType>(options: {
   name: string;
   description: string;

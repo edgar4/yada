@@ -16,6 +16,7 @@ it.each([undefined, "custom-model"])(
       providerConfigFromEnv({
         YADA_LLM_PROVIDER: "openai",
         YADA_LLM_API_KEY: "key",
+        YADA_LLM_OPENAI_API: "chat",
         ...(model ? { YADA_LLM_MODEL: model } : {}),
       }),
     );
@@ -50,7 +51,11 @@ it("completes a tool round trip with OpenAI", async () => {
   );
   const execute = vi.fn(() => Promise.resolve("Available"));
   const result = await run({
-    provider: createProvider({ provider: "openai", apiKey: "key" }),
+    provider: createProvider({
+      provider: "openai",
+      api: "chat",
+      apiKey: "key",
+    }),
     tools: [
       readTool({
         name: "lookup",

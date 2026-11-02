@@ -1,5 +1,5 @@
 import { compactOldest, limitsSchema, type RunLimits } from "./limits.js";
-import type { ActionExecutor } from "./action.js";
+import { Suspended, type ActionExecutor } from "./action.js";
 import type { AgentEvent, RunHooks } from "./hooks.js";
 import { abortable } from "./abort.js";
 import { contentText, hasImages, mapText } from "./content.js";
@@ -10,6 +10,7 @@ import {
   type RunCheckpoint,
 } from "./checkpoint.js";
 import type {
+  ChildRun,
   Content,
   Identity,
   ProviderAdapter,
@@ -32,7 +33,7 @@ export type SummarizeOptions = Readonly<{
 }>;
 export const runTurns = (messages: readonly Turn[]) =>
   messages.slice(messages.map((turn) => turn.role).lastIndexOf("user"));
-type RunOptions = {
+export type RunOptions = {
   provider: ProviderAdapter;
   tools: readonly Tool[];
   identity: Identity;
@@ -48,6 +49,7 @@ type RunOptions = {
   persist?: (checkpoint: RunCheckpoint) => Promise<void>;
   hooks?: RunHooks;
   summarize?: SummarizeOptions;
+  nest?: (call: ToolCall, child: RunOptions) => Promise<ChildRun>;
 };
 type Loop = {
   options: RunOptions;
@@ -323,6 +325,7 @@ async function shapeOutput(
 }
 async function executeCall(loop: Loop, call: ToolCall): Promise<ToolOutcome> {
   const { options, signal, identity } = loop;
+  const { nest } = options;
   const stop = (result: TerminalResult) => ({ terminal: result });
   const tool = loop.visible.find((item) => item.spec.name === call.name);
   if (!tool && loop.tools.has(call.name) && !loop.fresh.has(call.id))
@@ -354,11 +357,23 @@ async function executeCall(loop: Loop, call: ToolCall): Promise<ToolOutcome> {
     return {
       failed: false,
       content: await abortable(
-        () => tool.execute(call.args, identity, signal),
+        () =>
+          tool.execute(call.args, identity, signal, {
+            addUsage: (usage) => {
+              addUsage(loop.state, usage);
+            },
+            maxOutput: loop.limits.maxToolOutput,
+            ...(nest ? { runChild: (child) => nest(call, child) } : {}),
+            ...(options.executeWrite?.ask
+              ? { ask: options.executeWrite.ask(call) }
+              : {}),
+          }),
         signal,
       ),
     };
   } catch (error) {
+    if (error instanceof Suspended) return { stop: error.suspension };
+    if (error instanceof CheckpointError) throw error;
     signal.throwIfAborted();
     return {
       failed: true,

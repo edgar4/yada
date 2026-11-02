@@ -38,20 +38,22 @@ Import `connectMcp` and `run` from Yada's public entry point. `identity` must co
 
 ## Configuration
 
-| Field             | Purpose                                                                                                                                                                    |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`            | Unique server namespace, such as `catalog`. Lowercase letters, digits, and underscores; starts with a letter, up to 32 characters.                                         |
-| `url`             | Remote MCP endpoint.                                                                                                                                                       |
-| `token`           | Optional bearer token issued for the MCP server, separate from your model API key.                                                                                         |
-| `readTools`       | Optional filter of tools your application has reviewed as read-only.                                                                                                       |
-| `confirmTools`    | Standard mutating tools (no prepare/receipt contract) to run after one human approval: a list of names, or `"*"`. See [Confirmed tools](#confirmed-tools).                 |
-| `resources`       | `true` adds the read tools `<server>__list_resources` and `<server>__read_resource`. See [Resources, prompts and catalog changes](#resources-prompts-and-catalog-changes). |
-| `writeTools`      | Explicit mapping of reviewed mutations to a version, preparation helper and receipt helper.                                                                                |
-| `headers`         | Optional extra HTTP headers. `authorization` is rejected when `token` or OAuth is used.                                                                                    |
-| `command`, `args` | Local server executable and arguments, instead of `url` and `token`.                                                                                                       |
-| `env`, `cwd`      | Optional stdio environment variables (merged over the SDK default environment) and working directory.                                                                      |
-| `stderr`          | Stdio only: `"ignore"` (default) or `"inherit"`.                                                                                                                           |
-| `timeoutMs`       | Optional per-server deadline for connection, discovery and calls, 1,000 to 600,000 ms; default 30,000.                                                                     |
+| Field             | Purpose                                                                                                                                                                         |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`            | Unique server namespace, such as `catalog`. Lowercase letters, digits, and underscores; starts with a letter, up to 32 characters.                                              |
+| `url`             | Remote MCP endpoint.                                                                                                                                                            |
+| `token`           | Optional bearer token issued for the MCP server, separate from your model API key.                                                                                              |
+| `readTools`       | Optional filter of tools your application has reviewed as read-only.                                                                                                            |
+| `confirmTools`    | Standard mutating tools (no prepare/receipt contract) to run after one human approval: a list of names, or `"*"`. See [Confirmed tools](#confirmed-tools).                      |
+| `resources`       | `true` adds the read tools `<server>__list_resources` and `<server>__read_resource`. See [Resources, prompts and catalog changes](#resources-prompts-and-catalog-changes).      |
+| `sampling`        | `true` lets the server call `sampling/createMessage`. See [Sampling and elicitation](#sampling-and-elicitation). Default `false`; the capability is only declared when enabled. |
+| `elicitation`     | `true` lets the server call `elicitation/create` (form mode). Default `false`.                                                                                                  |
+| `writeTools`      | Explicit mapping of reviewed mutations to a version, preparation helper and receipt helper.                                                                                     |
+| `headers`         | Optional extra HTTP headers. `authorization` is rejected when `token` or OAuth is used.                                                                                         |
+| `command`, `args` | Local server executable and arguments, instead of `url` and `token`.                                                                                                            |
+| `env`, `cwd`      | Optional stdio environment variables (merged over the SDK default environment) and working directory.                                                                           |
+| `stderr`          | Stdio only: `"ignore"` (default) or `"inherit"`.                                                                                                                                |
+| `timeoutMs`       | Optional per-server deadline for connection, discovery and calls, 1,000 to 600,000 ms; default 30,000.                                                                          |
 
 For a local server:
 
@@ -96,6 +98,14 @@ Discovery follows pagination with bounded page/tool counts and rejects duplicate
 Inputs are validated against the advertised JSON Schema before transmission. Draft 7 and draft 2020-12 schemas are supported; external references are not fetched and asynchronous schema extensions are rejected. Tool arguments and rendered results are bounded to 32,000 UTF-8 bytes. Structured read results become JSON text; text blocks are joined in order. A read tool that returns `isError: true` yields `{"error":"tool_failed","message":...}` (message bounded to 4,000 characters) so the model can react; write-path errors still fail. Non-text blocks render as placeholders: `[image: mime]`, `[audio: mime]`, `[resource: uri]`, `[resource_link: uri name]`. Declared output schemas are validated against the discovered schema, including tools from earlier discovery pages.
 
 Connection setup defaults to the server's `timeoutMs`, which can be overridden with the third `connectMcp` argument. Discovery and calls use `timeoutMs` as the request timeout and honor cancellation signals. Always close connections after use. Image blocks in read results become image parts when they are png, jpeg, webp or gif, within 5 MB, and at most 4 per result; otherwise (and for audio) they render as `[image: mime]` placeholders. External tool content remains untrusted data.
+
+## Sampling and elicitation
+
+Servers can ask the client for help in the middle of a tool call. Both are off by default and only declared to the server when enabled. They apply to read tools called inside a run; a request from a write or confirmed tool, or outside a run, is declined. While either is enabled, read calls on that connection run one at a time.
+
+**Sampling.** Pass the run's provider as `provider` in the access options of `connectMcp`. A `sampling/createMessage` request is answered by that provider with the server's messages (text only) and system prompt, no tools. Usage is added to the run, so cost limits apply. The reply is cut to the smaller of `maxToolOutput` and four characters per requested `maxTokens`, and reports `stopReason: "maxTokens"` when cut. Providers have no output-token parameter, so this is an approximation. Without a provider, or for non-text content, the request is rejected with code `-1`.
+
+**Elicitation.** A form request becomes an approval through the [durable approval flow](actions.md#mcp-elicitation): the run suspends as `awaiting_approval`, the preview carries the message and requested schema, and the tool call is re-issued when the run resumes. `decline` answers the server with `decline`; expiry or cancellation answers with `cancel`. URL-mode requests are declined.
 
 ## Approved writes
 

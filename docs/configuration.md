@@ -50,7 +50,7 @@ When switching providers, replace all three values: provider, its model ID, and 
 | `llamacpp`          | Select the served model alias | Optional server API key       |
 | `openai-compatible` | Required; also set `baseUrl`  | Optional gateway API key      |
 
-Gemini and `chatModelAdapter` are built on LangChain, which is an optional peer dependency: run `npm install @langchain/core @langchain/google-genai` before selecting `gemini`. The other providers use their native SDKs, which ship with Yada. Without the packages, the first Gemini request fails with an error naming them.
+Gemini uses the official `@google/genai` SDK, an optional peer dependency: run `npm install @google/genai` before selecting `gemini`. `chatModelAdapter` needs `@langchain/core`. The other providers use their native SDKs, which ship with Yada. Without the package, the first Gemini request fails with an error naming it.
 
 Local and OpenAI-compatible providers do not accept images unless the config sets `vision: true`.
 
@@ -72,7 +72,7 @@ YADA_LLM_API_KEY=your-google-ai-studio-api-key
 
 Use the provider's exact API model ID when overriding the default. The selected model must support text and function calling for tool workflows. Provider access and model availability depend on your account. Hosted adapters require API-key authentication. Azure OpenAI and Vertex AI are not configured by this interface.
 
-Anthropic, OpenAI, DeepSeek, Ollama, llama.cpp and OpenAI-compatible servers use native adapters on the official `@anthropic-ai/sdk` and `openai` SDKs (Messages and Chat Completions; hosted OpenAI sends `max_completion_tokens`, other servers `max_tokens`). Gemini uses LangChain. Any other LangChain chat model can be wrapped with `chatModelAdapter`. The default `gpt-6-luna` supports function calling there only with reasoning disabled, so Yada sends `reasoning_effort: none` when you use the default model; set your own `model` to avoid this. Gemini tool-call signatures are retained across turns within a run. Provider metadata cannot be reused with another provider. Transient failures are retried by the provider SDK with backoff (`maxRetries`, default 2). Aborted runs are never retried; remaining failures return through the runtime's error contract.
+Anthropic, OpenAI, DeepSeek, Ollama, llama.cpp and OpenAI-compatible servers use native adapters on the official `@anthropic-ai/sdk` and `openai` SDKs (Messages, Responses and Chat Completions; hosted OpenAI in Chat Completions mode sends `max_completion_tokens`, other servers `max_tokens`). Gemini uses a native adapter on `@google/genai` (`generateContent` and `generateContentStream`). Any LangChain chat model can be wrapped with `chatModelAdapter`. The default `gpt-6-luna` supports function calling there only with reasoning disabled, so Yada sends `reasoning_effort: none` when you use the default model; set your own `model` to avoid this. Gemini omits tool call IDs on some models, so Yada generates `gemini_call_N` IDs and leaves them out of the request; thought signatures are kept in provider metadata and replayed with the same turn's function calls. Safety, recitation and prohibited-content finish reasons end the run as `refusal`; usage includes thinking tokens in the output count and cached tokens as `cacheReadTokens`. Provider metadata cannot be reused with another provider. Transient failures are retried by the provider SDK with backoff (`maxRetries`, default 2). Aborted runs are never retried; remaining failures return through the runtime's error contract.
 
 Model references: [OpenAI GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) and [Google Gemini 3.8 Flash](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash).
 
@@ -113,11 +113,19 @@ createProvider({
 
 Thinking and redacted thinking blocks are kept in provider metadata and sent back unchanged on later tool rounds, as Anthropic requires. `effort` and `thinkingDisplay` are accepted only for `anthropic`. `temperature` is rejected for `anthropic` because the Messages API no longer accepts it.
 
+## Gemini effort
+
+`effort` (`YADA_LLM_EFFORT`) is also accepted for `gemini` and sent as `thinkingConfig.thinkingLevel`: `low` and `medium` map to `LOW` and `MEDIUM`; `high`, `xhigh` and `max` map to `HIGH`, the highest level Gemini offers. Without `effort` the model's default thinking applies. `thinkingDisplay` and `promptCache` remain Anthropic-only.
+
 ## Anthropic prompt caching
 
 The Anthropic provider caches the prompt prefix by default, so each tool round rereads the system prompt, tools and history from the cache instead of paying full input price. It sends a top-level `cache_control` (cached up to the latest message) and a breakpoint on the system prompt, so the system prompt and tools stay cached across conversations. Set `promptCache` (`YADA_LLM_PROMPT_CACHE`) to `"5m"` (default), `"1h"` or `"off"`. Use `"off"` for gateways that reject `cache_control`. `promptCache` is accepted only for `anthropic`; OpenAI caches long prompts automatically.
 
 Usage reports `inputTokens` as the total including cached tokens, plus `cacheReadTokens` and `cacheWriteTokens` when the provider returns them (Anthropic both, OpenAI-compatible servers `cacheReadTokens`).
+
+## OpenAI API and reasoning
+
+Hosted `openai` uses the Responses API by default; `openai-compatible`, `ollama` and `llamacpp` use Chat Completions. Choose with `api: "chat" | "responses"` (`YADA_LLM_OPENAI_API`). Responses requests set `store: false` and ask for `reasoning.encrypted_content`; reasoning items are kept in provider metadata and replayed before their tool calls on later rounds. Set `effort` (`YADA_LLM_EFFORT`) to send `reasoning.effort` (Chat Completions: `reasoning_effort`). Metadata from Responses cannot be replayed in Chat Completions mode.
 
 ## OpenAI-compatible endpoints
 

@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { AIMessageChunk } from "@langchain/core/messages";
 import {
   contentText,
   contextWindow,
@@ -15,7 +13,7 @@ import { checkpointSchema } from "../src/core/checkpoint.js";
 import { maxImageChars } from "../src/core/content.js";
 import { readResult } from "../src/connectors/mcp/rpc.js";
 import { jobInputSchema } from "../src/service/contracts.js";
-import { chatReply, claudeReply, stubFetch } from "./helpers/http.js";
+import { chatReply, claudeReply, json, stubFetch } from "./helpers/http.js";
 import { storageFixture } from "./helpers/storage.js";
 import { createHandler } from "../src/service/http.js";
 const identity = { actorId: "a", tenantId: "t" };
@@ -86,10 +84,6 @@ describe("providers", () => {
     tools: [],
     signal: new AbortController().signal,
   };
-  const reply = new AIMessageChunk({
-    content: "ok",
-    response_metadata: { finishReason: "STOP" },
-  });
   const png = "data:image/png;base64,aGVsbG8=";
   it("maps images for anthropic", async () => {
     const calls = stubFetch(() => claudeReply());
@@ -115,7 +109,11 @@ describe("providers", () => {
   });
   it("maps images for openai", async () => {
     const calls = stubFetch(() => chatReply());
-    const adapter = createProvider({ provider: "openai", apiKey: "key" });
+    const adapter = createProvider({
+      provider: "openai",
+      api: "chat",
+      apiKey: "key",
+    });
     expect(adapter.capabilities.vision).toBe(true);
     await adapter.complete(request);
     expect((calls[0]?.body["messages"] as unknown[])[1]).toEqual({
@@ -127,28 +125,34 @@ describe("providers", () => {
     });
   });
   it("maps images for gemini", async () => {
-    const invoke = vi
-      .spyOn(
-        ChatGoogleGenerativeAI.prototype as unknown as {
-          invoke: (messages: unknown) => unknown;
-        },
-        "invoke",
-      )
-      .mockResolvedValue(reply);
+    const calls = stubFetch(() =>
+      json({
+        candidates: [
+          {
+            content: { role: "model", parts: [{ text: "ok" }] },
+            finishReason: "STOP",
+          },
+        ],
+      }),
+    );
     const adapter = createProvider({ provider: "gemini", apiKey: "key" });
     expect(adapter.capabilities.vision).toBe(true);
     await adapter.complete(request);
-    expect(
-      (invoke.mock.calls[0]?.[0] as { content: unknown }[] | undefined)?.[1]
-        ?.content,
-    ).toEqual([
-      { type: "text", text: "look" },
-      { type: "image_url", image_url: { url: png } },
-    ]);
+    expect((calls[0]?.body["contents"] as unknown[])[0]).toEqual({
+      role: "user",
+      parts: [
+        { text: "look" },
+        { inlineData: { mimeType: "image/png", data: png.split(",")[1] } },
+      ],
+    });
   });
   it("sends tool images in a following user message", async () => {
     const calls = stubFetch(() => chatReply());
-    await createProvider({ provider: "openai", apiKey: "key" }).complete({
+    await createProvider({
+      provider: "openai",
+      api: "chat",
+      apiKey: "key",
+    }).complete({
       ...request,
       messages: [
         { role: "user", content: "go" },

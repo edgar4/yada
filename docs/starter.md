@@ -15,7 +15,7 @@ npx @edgaralochi/yada init my-agent
 cd my-agent
 ```
 
-The generated `package.json` declares `better-sqlite3` for the default SQLite storage; add `pg`, `mysql2` or the LangChain packages if you switch to PostgreSQL, MySQL or Gemini. The initializer installs dependencies and creates the starter source, `.env.starter` with a private encryption key, `.gitignore`, and a `skills/` folder. Set your provider credentials, then run `npm start`. The generated app uses the same starter implementation as this repository and pins the Yada version used to initialize it.
+The generated `package.json` declares `better-sqlite3` for the default SQLite storage; add `pg`, `mysql2` or `@google/genai` if you switch to PostgreSQL, MySQL or Gemini. The initializer installs dependencies and creates the starter source, `.env.starter` with a private encryption key, `.gitignore`, and a `skills/` folder. Set your provider credentials, then run `npm start`. The generated app uses the same starter implementation as this repository and pins the Yada version used to initialize it.
 
 Omitting the directory creates `yada-agent`. The destination must not exist and its parent directory must exist; existing files and projects are never overwritten. To use it alongside an existing application, choose a new subdirectory.
 

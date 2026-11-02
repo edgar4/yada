@@ -58,7 +58,8 @@ it.each([
   { YADA_LLM_TEMPERATURE: "3" },
   { YADA_LLM_MAX_RETRIES: "11" },
   { YADA_LLM_MAX_RETRIES: "-1" },
-  { YADA_LLM_EFFORT: "high" },
+  { YADA_LLM_PROVIDER: "deepseek", YADA_LLM_EFFORT: "high" },
+  { YADA_LLM_PROVIDER: "gemini", YADA_LLM_OPENAI_API: "chat" },
   { YADA_LLM_PROVIDER: "anthropic", YADA_LLM_TEMPERATURE: "0.5" },
   { YADA_LLM_PROVIDER: "anthropic", YADA_LLM_EFFORT: "nope" },
   { YADA_LLM_BASE_URL: "ftp://example.com" },
@@ -73,7 +74,8 @@ it.each([
   { provider: "openai-compatible", model: "m" },
   { provider: "openai-compatible", baseUrl: "http://localhost:1/v1" },
   { provider: "openai", apiKey: "k", headers: { a: 1 } },
-  { provider: "openai", apiKey: "k", effort: "high" },
+  { provider: "deepseek", apiKey: "k", effort: "high" },
+  { provider: "deepseek", apiKey: "k", api: "chat" },
   { provider: "openai", apiKey: "k", thinkingDisplay: "omitted" },
   { provider: "anthropic", apiKey: "k", effort: "extreme" },
   { provider: "anthropic", apiKey: "k", thinkingDisplay: "full" },
@@ -189,6 +191,7 @@ it("applies the default max tokens and a custom base URL to hosted providers", a
   );
   await createProvider({
     provider: "openai",
+    api: "chat",
     apiKey: "k",
     baseUrl: "https://proxy.example.com/v1",
   }).complete({
@@ -320,9 +323,14 @@ it("uses the documented OpenAI default with reasoning disabled", async () => {
     tools: [],
     signal: AbortSignal.timeout(5000),
   };
-  await createProvider({ provider: "openai", apiKey: "k" }).complete(request);
   await createProvider({
     provider: "openai",
+    api: "chat",
+    apiKey: "k",
+  }).complete(request);
+  await createProvider({
+    provider: "openai",
+    api: "chat",
     apiKey: "k",
     model: "x",
   }).complete(request);

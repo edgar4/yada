@@ -2,7 +2,14 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { Identity } from "../core/contracts.js";
 import type { recordStore } from "./records.js";
-import { withRunLease, RunLeaseError, type RunOwnership } from "./runs.js";
+import {
+  withRunLease,
+  RunLeaseError,
+  subRunId,
+  type RunOwnership,
+  type RunStore,
+} from "./runs.js";
+import { subPrefix } from "../core/action.js";
 export const actionSchema = z.object({
   id: z.string(),
   runId: z.string(),
@@ -23,6 +30,7 @@ export const actionSchema = z.object({
     "unknown",
   ]),
   receipt: z.string().max(32_000).optional(),
+  content: z.record(z.string(), z.unknown()).optional(),
 });
 export type Action = z.infer<typeof actionSchema>;
 export const operationId = (
@@ -35,6 +43,29 @@ export const operationId = (
       JSON.stringify([identity.tenantId, identity.actorId, runId, callId]),
     )
     .digest("hex");
+export async function runTree(
+  runs: Pick<RunStore, "load">,
+  identity: Identity,
+  rootId: string,
+  pendingOnly = false,
+) {
+  const tree = { runIds: [] as string[], actionIds: [] as string[] };
+  const walk = async (runId: string, prefix: string): Promise<void> => {
+    tree.runIds.push(runId);
+    const checkpoint = (await runs.load(identity, runId))?.checkpoint;
+    const calls = pendingOnly
+      ? (checkpoint?.pending ?? [])
+      : (checkpoint?.messages ?? []).flatMap((turn) =>
+          turn.role === "assistant" ? turn.toolCalls : [],
+        );
+    for (const call of calls) {
+      tree.actionIds.push(operationId(identity, rootId, prefix + call.id));
+      await walk(subRunId(runId, call.id), prefix + subPrefix(call.id));
+    }
+  };
+  await walk(rootId, "");
+  return tree;
+}
 export type RememberScope = "run" | "conversation";
 export const unknownOutcome =
   "Action outcome unknown; it may or may not have been applied. Do not retry automatically.";
@@ -57,7 +88,12 @@ const conversationOf = (runId: string) => {
 export interface ActionStore {
   load(identity: Identity, id: string): Promise<Action | undefined>;
   propose(identity: Identity, action: Action): Promise<Action>;
-  decide(identity: Identity, id: string, approved: boolean): Promise<Action>;
+  decide(
+    identity: Identity,
+    id: string,
+    approved: boolean,
+    content?: Record<string, unknown>,
+  ): Promise<Action>;
   begin(
     identity: Identity,
     id: string,
@@ -122,17 +158,18 @@ export function createActionStore(
           throw new Error("Action mismatch");
         return { value: state, result: state };
       }),
-    decide: (identity, id, approved) =>
+    decide: (identity, id, approved, content) =>
       records.mutate(key(identity, id), (value) => {
         const state = actionSchema.parse(value);
-        if (state.status === "pending")
+        if (state.status === "pending") {
           state.status =
             state.expiresAt <= Date.now()
               ? "expired"
               : approved
                 ? "approved"
                 : "declined";
-        else if (state.status !== (approved ? "approved" : "declined"))
+          if (state.status === "approved" && content) state.content = content;
+        } else if (state.status !== (approved ? "approved" : "declined"))
           throw new ActionConflict();
         return { value: state, result: state };
       }),
