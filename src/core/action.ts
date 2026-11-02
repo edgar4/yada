@@ -59,6 +59,22 @@ export type ActionExecutor = ((
   withLease?: (token: string) => ActionExecutor;
   ask?: (call: ToolCall) => Ask;
 };
+export const subPrefix = (callId: string) => `sub:${callId}:`;
+export function scopedExecutor(
+  parent: ActionExecutor,
+  callId: string,
+): ActionExecutor {
+  const scope = (call: ToolCall) => ({
+    ...call,
+    id: subPrefix(callId) + call.id,
+  });
+  const execute: ActionExecutor = (tool, call, signal) =>
+    parent(tool, scope(call), signal);
+  const { unresolved, ask } = parent;
+  if (unresolved) execute.unresolved = (call) => unresolved(scope(call));
+  if (ask) execute.ask = (call) => ask(scope(call));
+  return execute;
+}
 export function writeTool<S extends z.ZodType>(options: {
   name: string;
   description: string;

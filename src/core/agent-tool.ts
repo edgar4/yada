@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Identity, ProviderAdapter, ReadTool, Tool } from "./contracts.js";
 import type { RunHooks } from "./hooks.js";
 import type { RunLimits } from "./limits.js";
+import { Suspended } from "./action.js";
 import { run } from "./runtime.js";
 import { readTool } from "./tool.js";
 const maxDepth = 2;
@@ -17,8 +18,6 @@ export function agentTool(options: {
   hooks?: RunHooks;
   authorize?: (identity: Identity) => Promise<boolean>;
 }): ReadTool {
-  if (options.tools.some((tool) => tool.effect === "write"))
-    throw new Error("Sub-agents cannot use write tools");
   const depth =
     1 +
     Math.max(
@@ -31,8 +30,8 @@ export function agentTool(options: {
     description: options.description,
     input: z.strictObject({ task: z.string().min(1) }),
     authorize: options.authorize ?? (() => Promise.resolve(true)),
-    execute: async ({ task }, identity, signal) => {
-      const result = await run({
+    execute: async ({ task }, identity, signal, toolRun) => {
+      const child = {
         provider: options.provider,
         tools: options.tools,
         identity,
@@ -42,8 +41,17 @@ export function agentTool(options: {
         ...(options.limits ? { limits: options.limits } : {}),
         ...(options.maxRounds ? { maxRounds: options.maxRounds } : {}),
         ...(options.hooks ? { hooks: options.hooks } : {}),
-      });
+      };
+      const { result, usage } = toolRun?.runChild
+        ? await toolRun.runChild(child)
+        : { result: await run(child), usage: undefined };
       signal.throwIfAborted();
+      if (
+        result.status === "awaiting_approval" ||
+        result.status === "reconciling"
+      )
+        throw new Suspended(result);
+      toolRun?.addUsage(usage);
       if (result.status === "completed") return result.text;
       return JSON.stringify({
         error: "agent_failed",
