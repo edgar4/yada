@@ -87,7 +87,7 @@ for (const driver of drivers)
         system: "p",
         runId: "p",
         profileId: "v1",
-        leaseMs: 100,
+        leaseMs: 1000,
         store: s.storage.runs,
         signal: AbortSignal.timeout(5000),
         executeWrite: actionExecutor(s.storage.actions, s.identity, "p"),
@@ -125,6 +125,7 @@ for (const driver of drivers)
       await expect(
         runDurable(
           options(tool, {
+            leaseMs: 100,
             store: failSave(s.storage.runs, "p", (c) =>
               c.messages.some((m) => m.role === "tool"),
             ),
@@ -148,6 +149,7 @@ for (const driver of drivers)
       await expect(
         runDurable(
           options(tool, {
+            leaseMs: 100,
             store: failSave(s.storage.runs, childId, (c) => c.rounds === 2),
           }),
         ),
