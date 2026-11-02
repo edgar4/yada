@@ -18,6 +18,7 @@ export type AgentEvent =
     }>
   | Readonly<{
       type: "model_finished";
+      purpose?: "summary";
       usage?: ProviderResult["usage"];
       finishReason: ProviderResult["finishReason"];
     }>

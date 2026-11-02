@@ -20,9 +20,10 @@ export async function runDurable(
     onSuspend,
     ...runtime
   } = options;
+  const limits = limitsSchema.parse(options.limits ?? {});
   const request = {
     input: options.input,
-    limits: limitsSchema.parse(options.limits ?? {}),
+    limits,
     history: turnSchema.array().parse(options.history ?? []),
     system: options.system,
     profileId,
@@ -37,8 +38,8 @@ export async function runDurable(
         }),
       )
       .sort(),
-    maxRounds: options.maxRounds ?? 8,
-    maxToolCalls: options.maxToolCalls ?? 16,
+    maxRounds: options.maxRounds ?? limits.maxRounds,
+    maxToolCalls: options.maxToolCalls ?? limits.maxToolCalls,
   };
   const state = await store.claim(options.identity, runId, request, leaseMs);
   if (state.checkpoint?.outcome) return state.checkpoint.outcome;

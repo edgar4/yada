@@ -65,7 +65,10 @@ describe("anthropic", () => {
       ]),
     );
     expect(calls[0]?.body).toMatchObject({
-      system: "Help",
+      system: [
+        { type: "text", text: "Help", cache_control: { type: "ephemeral" } },
+      ],
+      cache_control: { type: "ephemeral" },
       max_tokens: 8192,
       tools: [
         {
@@ -227,6 +230,32 @@ describe("anthropic", () => {
     ).rejects.toThrow("mismatch");
   });
 
+  it("configures prompt caching and reports cached tokens", async () => {
+    const calls = stubFetch(() =>
+      claudeReply(undefined, undefined, {
+        input_tokens: 10,
+        output_tokens: 1,
+        cache_read_input_tokens: 70,
+        cache_creation_input_tokens: 20,
+      }),
+    );
+    const cached = (promptCache: "off" | "1h") =>
+      createProvider({ provider: "anthropic", apiKey: "k", promptCache });
+    expect((await cached("1h").complete(request())).usage).toEqual({
+      inputTokens: 100,
+      outputTokens: 1,
+      cacheReadTokens: 70,
+      cacheWriteTokens: 20,
+    });
+    expect(calls[0]?.body).toMatchObject({
+      system: [{ cache_control: { type: "ephemeral", ttl: "1h" } }],
+      cache_control: { type: "ephemeral", ttl: "1h" },
+    });
+    await cached("off").complete(request());
+    expect(calls[1]?.body["system"]).toBe("Help");
+    expect(calls[1]?.body).not.toHaveProperty("cache_control");
+  });
+
   it("applies base URL, headers and reports usage", async () => {
     const calls = stubFetch(() => claudeReply());
     const result = await createProvider({
@@ -369,6 +398,35 @@ describe("openai-compatible", () => {
     expect(await openai().complete(request())).toMatchObject({
       finishReason: "tool_calls",
       toolCalls: [{ id: "c" }],
+    });
+  });
+
+  it("reports cached prompt tokens", async () => {
+    stubFetch(() =>
+      json({
+        id: "c",
+        object: "chat.completion",
+        created: 1,
+        model: "m",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "stop",
+            message: { role: "assistant", content: "ok" },
+          },
+        ],
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 2,
+          total_tokens: 102,
+          prompt_tokens_details: { cached_tokens: 64 },
+        },
+      }),
+    );
+    expect((await openai().complete(request())).usage).toEqual({
+      inputTokens: 100,
+      outputTokens: 2,
+      cacheReadTokens: 64,
     });
   });
 

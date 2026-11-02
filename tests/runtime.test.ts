@@ -154,6 +154,12 @@ describe("standalone runtime", () => {
       text: "Done",
     });
   });
+  it("allows 32 rounds by default", async () => {
+    const calls = (count: number) =>
+      setup(Array.from({ length: count }, () => invocation)).options;
+    expect(await run(calls(31))).toEqual({ status: "completed", text: "Done" });
+    expect(await run(calls(32))).toEqual({ status: "failed", code: "limit" });
+  });
   it("resumes a pending failed call with a persisted failure count", async () => {
     const s = setup();
     s.execute.mockRejectedValue(new Error("x"));

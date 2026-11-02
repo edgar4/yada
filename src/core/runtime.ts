@@ -23,6 +23,15 @@ import type {
 } from "./contracts.js";
 const toolError = (error: string, message: string) =>
   JSON.stringify({ error, message });
+const summaryPrefix = "[summary of earlier conversation]\n";
+const summarySystem =
+  "Summarize this conversation for an assistant that will continue it. Keep the facts, decisions, tool results and open questions it still needs. Reply with the summary only.";
+export type SummarizeOptions = Readonly<{
+  provider?: ProviderAdapter;
+  keepTurns?: number;
+}>;
+export const runTurns = (messages: readonly Turn[]) =>
+  messages.slice(messages.map((turn) => turn.role).lastIndexOf("user"));
 type RunOptions = {
   provider: ProviderAdapter;
   tools: readonly Tool[];
@@ -38,6 +47,7 @@ type RunOptions = {
   checkpoint?: RunCheckpoint;
   persist?: (checkpoint: RunCheckpoint) => Promise<void>;
   hooks?: RunHooks;
+  summarize?: SummarizeOptions;
 };
 type Loop = {
   options: RunOptions;
@@ -82,6 +92,12 @@ async function runLoop(options: RunOptions): Promise<RunResult> {
     maxToolCalls < 1
   )
     throw new Error("Invalid run limits");
+  const keepTurns = options.summarize?.keepTurns;
+  if (
+    keepTurns !== undefined &&
+    (!Number.isSafeInteger(keepTurns) || keepTurns < 1)
+  )
+    throw new Error("Invalid summarize options");
   const identity = Object.freeze({ ...options.identity });
   const tools = new Map(options.tools.map((tool) => [tool.spec.name, tool]));
   if (tools.size !== options.tools.length)
@@ -358,20 +374,32 @@ async function checkLimits(loop: Loop): Promise<RunResult | undefined> {
   const exceeded = () => loop.finish({ status: "failed", code: "limit" });
   if (state.rounds >= loop.maxRounds) return exceeded();
   loop.signal.throwIfAborted();
-  let contextSize =
+  const size = () =>
     options.system.length +
     JSON.stringify(state.messages).length +
     JSON.stringify(loop.visible.map((tool) => tool.spec)).length;
+  let contextSize = size();
   if (contextSize > limits.maxContextChars)
     contextSize -= compactOldest(
       state.messages,
       contextSize - limits.maxContextChars,
     );
+  if (contextSize > limits.maxContextChars && options.summarize) {
+    const stopped = await summarize(loop);
+    if (stopped) return stopped;
+    contextSize = size();
+  }
   if (contextSize > limits.maxContextChars) return exceeded();
   if (limits.maxCostMicros !== undefined && limits.pricing && state.usage) {
     const { inputMicrosPer1k, outputMicrosPer1k } = limits.pricing;
+    const { cacheReadTokens = 0, cacheWriteTokens = 0 } = state.usage;
     const spent =
-      (state.usage.inputTokens * inputMicrosPer1k +
+      ((state.usage.inputTokens - cacheReadTokens - cacheWriteTokens) *
+        inputMicrosPer1k +
+        cacheReadTokens *
+          (limits.pricing.cacheReadMicrosPer1k ?? inputMicrosPer1k) +
+        cacheWriteTokens *
+          (limits.pricing.cacheWriteMicrosPer1k ?? inputMicrosPer1k) +
         state.usage.outputTokens * outputMicrosPer1k) /
       1000;
     if (spent >= limits.maxCostMicros) return exceeded();
@@ -384,6 +412,75 @@ async function checkLimits(loop: Loop): Promise<RunResult | undefined> {
     if (reserved > limits.maxCostMicros) return exceeded();
     state.reservedCostMicros = reserved;
   }
+  return undefined;
+}
+function addUsage(state: RunCheckpoint, usage: ProviderResult["usage"]) {
+  if (!usage) return;
+  const total = { ...state.usage };
+  for (const [key, value] of Object.entries(usage))
+    total[key as keyof typeof total] =
+      (total[key as keyof typeof total] ?? 0) + value;
+  state.usage = total as NonNullable<RunCheckpoint["usage"]>;
+}
+const transcriptLine = (turn: Turn) =>
+  turn.role === "assistant"
+    ? `assistant: ${[
+        turn.content,
+        ...turn.toolCalls.map(
+          (call) => `[called ${call.name} ${JSON.stringify(call.args)}]`,
+        ),
+      ]
+        .filter(Boolean)
+        .join("\n")}`
+    : `${turn.role === "tool" ? `tool ${turn.name}` : "user"}: ${contentText(turn.content)}`;
+async function summarize(loop: Loop): Promise<RunResult | undefined> {
+  const { state, signal, options } = loop;
+  const users = state.messages.flatMap((turn, index) =>
+    turn.role === "user" ? [index] : [],
+  );
+  const split = users.at(-(options.summarize?.keepTurns ?? 2)) ?? 0;
+  const first = state.messages[0];
+  const summarized =
+    first?.role === "user" &&
+    typeof first.content === "string" &&
+    first.content.startsWith(summaryPrefix);
+  if (split < (summarized ? 2 : 1)) return undefined;
+  const provider = options.summarize?.provider ?? options.provider;
+  const result = await abortable(
+    () =>
+      provider.complete({
+        system: summarySystem,
+        messages: [
+          {
+            role: "user",
+            content: state.messages
+              .slice(0, split)
+              .map(transcriptLine)
+              .join("\n\n"),
+          },
+        ],
+        tools: [],
+        signal,
+      }),
+    signal,
+  );
+  signal.throwIfAborted();
+  addUsage(state, result.usage);
+  loop.emit({
+    type: "model_finished",
+    purpose: "summary",
+    ...(result.usage ? { usage: result.usage } : {}),
+    finishReason: result.finishReason,
+  });
+  if (result.finishReason === "refusal")
+    return loop.finish({ status: "failed", code: "refused" });
+  if (result.finishReason !== "stop" || !result.content.trim())
+    return loop.finish({ status: "failed", code: "invalid_response" });
+  state.messages.splice(0, split, {
+    role: "user",
+    content: summaryPrefix + result.content,
+  });
+  await loop.save();
   return undefined;
 }
 async function callModel(loop: Loop): Promise<ProviderResult> {
@@ -413,12 +510,7 @@ async function callModel(loop: Loop): Promise<ProviderResult> {
     }
   } else result = await abortable(() => provider.complete(request), signal);
   signal.throwIfAborted();
-  if (result.usage)
-    state.usage = {
-      inputTokens: (state.usage?.inputTokens ?? 0) + result.usage.inputTokens,
-      outputTokens:
-        (state.usage?.outputTokens ?? 0) + result.usage.outputTokens,
-    };
+  addUsage(state, result.usage);
   await options.hooks?.afterModel?.(result);
   loop.emit({
     type: "model_finished",

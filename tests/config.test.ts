@@ -65,6 +65,19 @@ it("rejects blank SDK keys", () => {
   );
 });
 
+it("accepts prompt caching only for anthropic", () => {
+  expect(
+    providerConfigFromEnv({
+      YADA_LLM_PROVIDER: "anthropic",
+      YADA_LLM_API_KEY: "k",
+      YADA_LLM_PROMPT_CACHE: "1h",
+    }),
+  ).toMatchObject({ promptCache: "1h" });
+  expect(() =>
+    createProvider({ provider: "openai", apiKey: "k", promptCache: "5m" }),
+  ).toThrow("Invalid provider configuration");
+});
+
 it("ignores explicitly undefined options", () => {
   expect(() =>
     createProvider({

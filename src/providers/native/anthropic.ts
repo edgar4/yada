@@ -23,6 +23,7 @@ export type AnthropicSettings = Readonly<{
   headers?: Record<string, string> | undefined;
   effort?: "low" | "medium" | "high" | "xhigh" | "max" | undefined;
   thinkingDisplay?: "summarized" | "omitted" | undefined;
+  promptCache?: "off" | "5m" | "1h" | undefined;
 }>;
 
 const blocksOf = (content: Content): ContentBlockParam[] =>
@@ -141,6 +142,12 @@ function toResult(message: {
         (usage.cache_creation_input_tokens ?? 0) +
         (usage.cache_read_input_tokens ?? 0),
       outputTokens: usage.output_tokens,
+      ...(usage.cache_read_input_tokens && {
+        cacheReadTokens: usage.cache_read_input_tokens,
+      }),
+      ...(usage.cache_creation_input_tokens && {
+        cacheWriteTokens: usage.cache_creation_input_tokens,
+      }),
     },
     content: message.content
       .flatMap((block) => (block.type === "text" ? [block.text] : []))
@@ -175,10 +182,28 @@ export function nativeAnthropicAdapter(
     request: ProviderRequest,
   ): MessageCreateParamsNonStreaming => {
     request.signal.throwIfAborted();
+    const cache = settings.promptCache ?? "5m";
+    const cacheControl =
+      cache === "off"
+        ? undefined
+        : {
+            type: "ephemeral" as const,
+            ...(cache === "1h" && { ttl: cache }),
+          };
     return {
       model: settings.model,
       max_tokens: settings.maxTokens,
-      system: request.system,
+      system:
+        cacheControl && request.system
+          ? [
+              {
+                type: "text",
+                text: request.system,
+                cache_control: cacheControl,
+              },
+            ]
+          : request.system,
+      ...(cacheControl && { cache_control: cacheControl }),
       messages: toMessages(request.messages),
       ...(request.tools.length && {
         tools: request.tools.map((tool) => ({
