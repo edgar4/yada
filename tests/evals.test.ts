@@ -145,3 +145,29 @@ it("exits 2 on invalid --runs or --pricing and 1 when a run fails", async () => 
     }),
   ).rejects.toMatchObject({ code: 1 });
 }, 30_000);
+
+it("refuses live providers in CI unless manually dispatched", async () => {
+  const live = {
+    YADA_LLM_MODEL: "none",
+    YADA_LLM_BASE_URL: "http://127.0.0.1:1/v1",
+  };
+  await expect(
+    cli(["--provider", "local"], { ...live, CI: "true" }),
+  ).rejects.toMatchObject({ code: 2 });
+  await expect(
+    cli(["--provider", "local", "--scenario", "multimodal"], {
+      ...live,
+      CI: "true",
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+    }),
+  ).rejects.toMatchObject({ code: 1 });
+}, 30_000);
+
+it("runs the qualification workflow only on manual dispatch", async () => {
+  const workflow = await readFile(
+    fileURLToPath(new URL("../.github/workflows/qualify.yml", import.meta.url)),
+    "utf8",
+  );
+  expect(workflow).toMatch(/^on:\n {2}workflow_dispatch:/m);
+  expect(workflow).not.toMatch(/^\s+(push|pull_request|schedule):/m);
+}, 30_000);
