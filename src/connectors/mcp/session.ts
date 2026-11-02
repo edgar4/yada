@@ -4,7 +4,12 @@ import {
   ToolListChangedNotificationSchema,
   type Tool as RemoteTool,
 } from "@modelcontextprotocol/sdk/types.js";
-import type { Identity, ReadTool, Tool } from "../../core/contracts.js";
+import type {
+  Identity,
+  ProviderAdapter,
+  ReadTool,
+  Tool,
+} from "../../core/contracts.js";
 import { abortable } from "../../core/abort.js";
 import { confirmTool } from "../../core/policy.js";
 import {
@@ -13,6 +18,7 @@ import {
   type McpReadConfig,
   type McpSettings,
 } from "./config.js";
+import { clientRequests } from "./client-requests.js";
 import { canonical, discoverMcpTools } from "./discovery.js";
 import { promptApi, resourceTools, type McpPrompt } from "./resources.js";
 import { mcpInvoker, readResult } from "./rpc.js";
@@ -20,6 +26,7 @@ import { mcpWriteTool } from "./write.js";
 export type McpAccess = Readonly<{
   identity: Identity;
   authorize: (identity: Identity, tool: string) => Promise<boolean>;
+  provider?: ProviderAdapter;
 }>;
 export type McpConnection<T extends Tool = ReadTool> = Readonly<{
   tools: readonly T[];
@@ -62,7 +69,18 @@ export async function connectParsed(
   signal: AbortSignal,
 ): Promise<McpConnection<Tool>> {
   const owner = Object.freeze({ ...access.identity });
-  const client = new Client({ name: "yada", version: clientVersion });
+  const client = new Client(
+    { name: "yada", version: clientVersion },
+    settings.sampling || settings.elicitation
+      ? {
+          capabilities: {
+            ...(settings.sampling ? { sampling: {} } : {}),
+            ...(settings.elicitation ? { elicitation: { form: {} } } : {}),
+          },
+        }
+      : undefined,
+  );
+  const within = clientRequests(client, settings, access.provider);
   let closed = false;
   let connected = false;
   client.onclose = () => {
@@ -206,9 +224,11 @@ export async function connectParsed(
       effect: "read",
       spec: spec(remote),
       authorize: (identity) => authorize(identity, remote.name),
-      async execute(args, identity, callSignal) {
+      async execute(args, identity, callSignal, run) {
         return readResult(
-          await rpc.read(remote.name, args, identity, callSignal),
+          await within(run, () =>
+            rpc.read(remote.name, args, identity, callSignal),
+          ),
         );
       },
     });

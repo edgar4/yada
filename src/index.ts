@@ -18,6 +18,9 @@ export type {
   ActionContext,
   Preparation,
   Suspension,
+  Ask,
+  Elicitation,
+  ElicitAnswer,
 } from "./core/action.js";
 export { confirmTool, applyToolPolicy } from "./core/policy.js";
 export type { ToolPolicy } from "./core/policy.js";

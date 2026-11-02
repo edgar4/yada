@@ -31,3 +31,15 @@ Persist operation receipts in the system that owns the mutation. If the backend 
 A decision may include `remember: "run" | "conversation"`. Later actions with the same tool name, tool version and identical arguments are approved automatically within that run, or within any run of that same conversation. Grants belong to the authenticated tenant and actor and never apply to another conversation or identity. Auto-approved actions still recheck authorization and prepared state before executing. Declined or expired decisions are never remembered. Conversation grants have no expiry; they last until the conversation is erased, so offer `"conversation"` only for low-risk tools.
 
 Set the approval lifetime with the `ttlMs` argument of `actionExecutor` or the worker profile `approvalTtlMs`. A run waiting for approval is woken when that lifetime ends.
+
+## MCP elicitation
+
+When an [MCP server](mcp.md#sampling-and-elicitation) with `elicitation: true` asks the user a question during a read tool call, the run suspends as `awaiting_approval` with an action whose preview is the JSON of `{ message, requestedSchema }`. The decision body takes an optional `content` object:
+
+```json
+{ "approved": true, "content": { "name": "Ada" } }
+```
+
+Approval requires `content` to validate against the requested schema (JSON Schema, Ajv); otherwise the endpoint returns `400` and the approval stays pending. `content` is rejected on any other action. Declining answers the server with `decline`; expiry answers with `cancel`.
+
+On resume the tool call is re-issued, so the server asks again and receives the stored answer. Each question has an operation ID derived from the run, tool call and question index; the answer is claimed through the same lease-fenced transition as writes, so a worker that lost its lease cannot answer. Elicited values live only in the action record (encrypted with the rest of the storage) and are never put in events, logs or the preview endpoint.

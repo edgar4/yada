@@ -1,5 +1,5 @@
 import { compactOldest, limitsSchema, type RunLimits } from "./limits.js";
-import type { ActionExecutor } from "./action.js";
+import { Suspended, type ActionExecutor } from "./action.js";
 import type { AgentEvent, RunHooks } from "./hooks.js";
 import { abortable } from "./abort.js";
 import { contentText, hasImages, mapText } from "./content.js";
@@ -354,11 +354,21 @@ async function executeCall(loop: Loop, call: ToolCall): Promise<ToolOutcome> {
     return {
       failed: false,
       content: await abortable(
-        () => tool.execute(call.args, identity, signal),
+        () =>
+          tool.execute(call.args, identity, signal, {
+            addUsage: (usage) => {
+              addUsage(loop.state, usage);
+            },
+            maxOutput: loop.limits.maxToolOutput,
+            ...(options.executeWrite?.ask
+              ? { ask: options.executeWrite.ask(call) }
+              : {}),
+          }),
         signal,
       ),
     };
   } catch (error) {
+    if (error instanceof Suspended) return { stop: error.suspension };
     signal.throwIfAborted();
     return {
       failed: true,

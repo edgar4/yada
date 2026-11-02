@@ -14,6 +14,8 @@ const common = {
   readTools: toolNames.optional(),
   confirmTools: z.union([z.literal("*"), toolNames]).optional(),
   resources: z.boolean().optional(),
+  sampling: z.boolean().optional(),
+  elicitation: z.boolean().optional(),
   writeTools: z
     .record(
       z.string().min(1),
