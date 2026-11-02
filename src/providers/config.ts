@@ -5,7 +5,8 @@ import { createGeminiProvider } from "./gemini.js";
 import { createDeepSeekProvider } from "./deepseek.js";
 import { createLocalProvider, localOptions } from "./local.js";
 import { defined, modelFields, settingFields } from "./options.js";
-import type { ProviderAdapter } from "../core/contracts.js";
+import { transient } from "../core/transient.js";
+import type { ProviderAdapter, ProviderRequest } from "../core/contracts.js";
 const factories = {
   anthropic: createAnthropicProvider,
   openai: createOpenAIProvider,
@@ -88,19 +89,23 @@ function parseConfig(input: ProviderConfig) {
   );
 }
 
-const retryable = (error: unknown) => {
-  const status = (error as { status?: unknown } | null)?.status;
-  return typeof status === "number"
-    ? status === 408 || status === 429 || status >= 500
-    : error instanceof Error && /Connection|Timeout/.test(error.name);
-};
-
 function withFallback(
   primary: ProviderAdapter,
   fallback: ProviderAdapter,
 ): ProviderAdapter {
+  const stripped = (request: ProviderRequest): ProviderRequest => ({
+    ...request,
+    messages: request.messages.map((turn) => {
+      if (turn.role !== "assistant" || !turn.providerMetadata) return turn;
+      return {
+        role: turn.role,
+        content: turn.content,
+        toolCalls: turn.toolCalls,
+      };
+    }),
+  });
   const failover = (error: unknown, signal: AbortSignal) => {
-    if (signal.aborted || !retryable(error)) throw error;
+    if (signal.aborted || !transient(error)) throw error;
   };
   const primaryStream = primary.stream?.bind(primary);
   const fallbackStream = fallback.stream?.bind(fallback);
@@ -111,7 +116,7 @@ function withFallback(
         return await primary.complete(request);
       } catch (error) {
         failover(error, request.signal);
-        return fallback.complete(request);
+        return fallback.complete(stripped(request));
       }
     },
     ...(primaryStream &&
@@ -129,7 +134,7 @@ function withFallback(
           } catch (error) {
             if (started) throw error;
             failover(error, request.signal);
-            return yield* fallbackStream(request);
+            return yield* fallbackStream(stripped(request));
           }
         },
       }),

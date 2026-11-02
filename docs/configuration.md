@@ -90,13 +90,15 @@ Yada routes requests to `https://api.deepseek.com` using Chat Completions with t
 
 All providers accept these optional settings. `baseUrl` must be an `http(s)` URL without credentials, query or fragment, and is trusted server configuration.
 
-| Setting (code / env)                   | Default                           | Meaning                                             |
-| -------------------------------------- | --------------------------------- | --------------------------------------------------- |
-| `maxTokens` / `YADA_LLM_MAX_TOKENS`    | 8192 hosted, server default local | Maximum output tokens per model call.               |
-| `temperature` / `YADA_LLM_TEMPERATURE` | provider default                  | Sampling temperature, 0 to 2.                       |
-| `maxRetries` / `YADA_LLM_MAX_RETRIES`  | 2                                 | Retries for transient errors, 0 to 10.              |
-| `baseUrl` / `YADA_LLM_BASE_URL`        | provider default                  | Override the API endpoint (proxy, gateway, region). |
-| `headers` (code only)                  | none                              | Extra HTTP headers as a record of strings.          |
+| Setting (code / env)                        | Default                             | Meaning                                                                                                                                                                                      |
+| ------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `maxTokens` / `YADA_LLM_MAX_TOKENS`         | 8192 hosted, server default local   | Maximum output tokens per model call. 32000 when `effort` is `high` or above on Anthropic, OpenAI and Gemini.                                                                                |
+| `timeoutMs` / `YADA_LLM_TIMEOUT_MS`         | 120000 (all providers, incl. local) | Per-request timeout in milliseconds.                                                                                                                                                         |
+| `fallbackModel` / `YADA_LLM_FALLBACK_MODEL` | none                                | Model of the same provider retried once after a transient error (5xx, 408, 429, connection, timeout) before any output. Provider metadata such as thinking signatures is not replayed to it. |
+| `temperature` / `YADA_LLM_TEMPERATURE`      | provider default                    | Sampling temperature, 0 to 2.                                                                                                                                                                |
+| `maxRetries` / `YADA_LLM_MAX_RETRIES`       | 2                                   | Retries for transient errors, 0 to 10.                                                                                                                                                       |
+| `baseUrl` / `YADA_LLM_BASE_URL`             | provider default                    | Override the API endpoint (proxy, gateway, region).                                                                                                                                          |
+| `headers` (code only)                       | none                                | Extra HTTP headers as a record of strings.                                                                                                                                                   |
 
 ## Model settings
 

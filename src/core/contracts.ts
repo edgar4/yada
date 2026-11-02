@@ -83,6 +83,7 @@ export type ToolRun = Readonly<{
   addUsage: (usage: ProviderResult["usage"]) => void;
   maxOutput: number;
   limits?: RunLimits;
+  remainingCostMicros?: number | undefined;
   runChild?: (options: RunOptions) => Promise<ChildRun>;
 }>;
 export type ChildRun = Readonly<{

@@ -56,15 +56,24 @@ export const modelOptions = z
   })
   .transform((options) => ({
     ...options,
-    maxTokens:
-      options.maxTokens ??
-      (options.effort && options.effort !== "low" && options.effort !== "medium"
-        ? thinkingMaxTokens
-        : defaultMaxTokens),
     maxRetries: options.maxRetries ?? defaultMaxRetries,
     timeoutMs: options.timeoutMs ?? defaultTimeoutMs,
   }));
 export type ModelOptions = z.input<typeof modelOptions>;
+
+export function parseModelOptions(config: ModelOptions, effortTokens = false) {
+  const options = modelOptions.parse(config);
+  const deep =
+    effortTokens &&
+    options.effort !== undefined &&
+    options.effort !== "low" &&
+    options.effort !== "medium";
+  return {
+    ...options,
+    maxTokens:
+      options.maxTokens ?? (deep ? thinkingMaxTokens : defaultMaxTokens),
+  };
+}
 export function defined<T extends object>(value: T) {
   return Object.fromEntries(
     Object.entries(value).filter(([, v]) => v !== undefined),

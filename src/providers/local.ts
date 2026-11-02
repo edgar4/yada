@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { nativeOpenAIAdapter } from "./native/openai.js";
-import { defaultMaxRetries, settingFields, tuning } from "./options.js";
+import {
+  defaultMaxRetries,
+  defaultTimeoutMs,
+  settingFields,
+  tuning,
+} from "./options.js";
 export const localOptions = z
   .strictObject({
     provider: z.enum(["ollama", "llamacpp", "openai-compatible"]),
@@ -24,6 +29,7 @@ export function createLocalProvider(config: z.input<typeof localOptions>) {
     ...options,
     name: provider,
     maxRetries: options.maxRetries ?? defaultMaxRetries,
+    timeoutMs: options.timeoutMs ?? defaultTimeoutMs,
     baseUrl: options.baseUrl ?? defaultUrls[provider],
   });
 }

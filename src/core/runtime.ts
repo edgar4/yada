@@ -10,6 +10,7 @@ import type { AgentEvent, ModelCall, RunHooks } from "./hooks.js";
 import { abortable } from "./abort.js";
 import { contentText, hasImages, mapText, messagesSize } from "./content.js";
 import { InvalidArguments } from "./tool.js";
+import { transient } from "./transient.js";
 import {
   checkpointSchema,
   CheckpointError,
@@ -99,6 +100,7 @@ const causeText = (error: unknown) =>
         .replace(/\b[\w+/=.~-]{32,}\b/g, "[redacted]")
         .slice(0, 500)
     : undefined;
+const hookDrainMs = 5000;
 export async function run(options: RunOptions): Promise<RunResult> {
   let queue: Promise<void> = Promise.resolve();
   const emit = (event: AgentEvent) => {
@@ -115,7 +117,14 @@ export async function run(options: RunOptions): Promise<RunResult> {
       emit({ type: "run_suspended", result });
     return result;
   } finally {
-    await queue;
+    let timer: NodeJS.Timeout | undefined;
+    await Promise.race([
+      queue,
+      new Promise((resolve) => {
+        timer = setTimeout(resolve, hookDrainMs);
+      }),
+    ]);
+    clearTimeout(timer);
   }
 }
 async function runLoop(
@@ -446,10 +455,11 @@ async function executeCall(loop: Loop, call: ToolCall): Promise<ToolOutcome> {
       ? { failed: false, content }
       : { stop: content };
   }
-  const toolSignal = AbortSignal.any([
-    signal,
-    AbortSignal.timeout(tool.timeoutMs ?? loop.limits.toolTimeoutMs),
-  ]);
+  const timeoutMs = tool.timeoutMs ?? loop.limits.toolTimeoutMs;
+  const toolSignal =
+    timeoutMs === Infinity
+      ? signal
+      : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
   try {
     return {
       failed: false,
@@ -461,6 +471,7 @@ async function executeCall(loop: Loop, call: ToolCall): Promise<ToolOutcome> {
             },
             maxOutput: loop.limits.maxToolOutput,
             limits: loop.limits,
+            remainingCostMicros: remainingCost(loop),
             ...(nest ? { runChild: (child) => nest(call, child) } : {}),
             ...(options.executeWrite?.ask
               ? { ask: options.executeWrite.ask(call) }
@@ -513,6 +524,17 @@ async function checkLimits(loop: Loop): Promise<RunResult | undefined> {
   if (contextSize > limits.maxContextChars) return exceeded();
   return reserveCost(loop);
 }
+function remainingCost({ state, limits }: Loop) {
+  if (limits.maxCostMicros === undefined) return undefined;
+  const spent =
+    limits.pricing && state.usage
+      ? usageCostMicros(limits.pricing, state.usage)
+      : 0;
+  return Math.max(
+    0,
+    Math.floor(limits.maxCostMicros - spent - (state.reservedCostMicros ?? 0)),
+  );
+}
 function reserveCost(loop: Loop): Promise<RunResult> | undefined {
   const { state, limits } = loop;
   const exceeded = () => loop.finish({ status: "failed", code: "limit" });
@@ -550,7 +572,7 @@ const transcriptLine = (turn: Turn) =>
         .join("\n")}`
     : `${turn.role === "tool" ? `tool ${turn.name}` : "user"}: ${contentText(turn.content)}`;
 async function summarize(loop: Loop): Promise<RunResult | undefined> {
-  const { state, options } = loop;
+  const { state, options, limits } = loop;
   const users = userIndexes(state.messages);
   const split = Math.min(
     users.at(-(options.summarize?.keepTurns ?? 2)) ?? 0,
@@ -577,8 +599,9 @@ async function summarize(loop: Loop): Promise<RunResult | undefined> {
           role: "user",
           content: state.messages
             .slice(from, to)
-            .map(transcriptLine)
-            .join("\n\n"),
+            .map((turn) => transcriptLine(turn).slice(0, limits.maxToolOutput))
+            .join("\n\n")
+            .slice(-Math.floor(limits.maxContextChars * 0.75)),
         },
       ],
       tools: [],
@@ -600,29 +623,6 @@ async function summarize(loop: Loop): Promise<RunResult | undefined> {
 }
 const maxModelRetries = 2;
 const retryBaseMs = 500;
-const transientNames = new Set([
-  "TimeoutError",
-  "FetchError",
-  "APIConnectionError",
-  "APIConnectionTimeoutError",
-]);
-const transientCodes = new Set([
-  "ECONNRESET",
-  "ECONNREFUSED",
-  "ETIMEDOUT",
-  "EAI_AGAIN",
-  "UND_ERR_SOCKET",
-]);
-function isTransient(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) return false;
-  const { status, code, name } = error as Record<string, unknown>;
-  if (typeof status === "number")
-    return status === 408 || status === 429 || status >= 500;
-  return (
-    transientNames.has(String(name)) ||
-    (typeof code === "string" && transientCodes.has(code))
-  );
-}
 async function completeWithRetry(
   provider: ProviderAdapter,
   request: ProviderRequest,
@@ -632,19 +632,49 @@ async function completeWithRetry(
     try {
       return await provider.complete(request);
     } catch (error) {
-      if (
-        provider.capabilities.retries ||
-        signal.aborted ||
-        attempt >= maxModelRetries ||
-        !isTransient(error)
-      )
-        throw error;
-      const delay = retryBaseMs * 2 ** attempt * (0.5 + Math.random() / 2);
-      await abortable(
-        () => new Promise((resolve) => setTimeout(resolve, delay)),
-        signal,
-      );
+      await backoff(provider, error, attempt, signal);
     }
+}
+async function backoff(
+  provider: ProviderAdapter,
+  error: unknown,
+  attempt: number,
+  signal: AbortSignal,
+) {
+  if (
+    provider.capabilities.retries ||
+    signal.aborted ||
+    attempt >= maxModelRetries ||
+    !transient(error)
+  )
+    throw error;
+  const delay = retryBaseMs * 2 ** attempt * (0.5 + Math.random() / 2);
+  await abortable(
+    () => new Promise((resolve) => setTimeout(resolve, delay)),
+    signal,
+  );
+}
+async function* streamWithRetry(
+  provider: ProviderAdapter,
+  request: ProviderRequest,
+  signal: AbortSignal,
+): AsyncGenerator<{ delta: string }, ProviderResult> {
+  for (let attempt = 0; ; attempt++) {
+    let started = false;
+    try {
+      const chunks = provider.stream?.(request);
+      if (!chunks) return await provider.complete(request);
+      for (;;) {
+        const next = await chunks.next();
+        if (next.done) return next.value;
+        started = true;
+        yield next.value;
+      }
+    } catch (error) {
+      if (started) throw error;
+      await backoff(provider, error, attempt, signal);
+    }
+  }
 }
 async function modelCall(
   loop: Loop,
@@ -658,7 +688,7 @@ async function modelCall(
   if (edited) request = { ...edited, signal };
   let result: ProviderResult;
   if (!call.purpose && provider.stream && hooks?.onEvent) {
-    const chunks = provider.stream(request);
+    const chunks = streamWithRetry(provider, request, signal);
     for (;;) {
       const next = await abortable(() => chunks.next(), signal);
       if (next.done) {

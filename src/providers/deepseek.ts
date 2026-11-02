@@ -1,7 +1,7 @@
 import { nativeOpenAIAdapter } from "./native/openai.js";
-import { modelOptions, type ModelOptions } from "./options.js";
+import { parseModelOptions, type ModelOptions } from "./options.js";
 export function createDeepSeekProvider(config: ModelOptions) {
-  const options = modelOptions.parse(config);
+  const options = parseModelOptions(config);
   return nativeOpenAIAdapter({
     ...options,
     name: "deepseek",

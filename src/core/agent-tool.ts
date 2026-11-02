@@ -15,6 +15,7 @@ export function agentTool(options: {
   system: string;
   limits?: RunLimits;
   maxRounds?: number;
+  timeoutMs?: number;
   hooks?: RunHooks;
   authorize?: (identity: Identity) => Promise<boolean>;
 }): ReadTool {
@@ -29,9 +30,23 @@ export function agentTool(options: {
     name: options.name,
     description: options.description,
     input: z.strictObject({ task: z.string().min(1) }),
+    timeoutMs: options.timeoutMs ?? Infinity,
     authorize: options.authorize ?? (() => Promise.resolve(true)),
     execute: async ({ task }, identity, signal, toolRun) => {
-      const limits = options.limits ?? toolRun?.limits;
+      const inherited = options.limits ?? toolRun?.limits;
+      const remaining = toolRun?.remainingCostMicros;
+      const limits =
+        inherited &&
+        remaining !== undefined &&
+        (inherited.pricing || inherited.costPerCallMicros)
+          ? {
+              ...inherited,
+              maxCostMicros: Math.min(
+                inherited.maxCostMicros ?? remaining,
+                remaining,
+              ),
+            }
+          : inherited;
       const child = {
         provider: options.provider,
         tools: options.tools,
