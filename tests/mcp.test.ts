@@ -39,7 +39,9 @@ async function setup(
     { name: "test", version: "1" },
     { capabilities: { tools: {} } },
   );
-  const calls = vi.fn(
+  const calls = vi.fn<
+    (request?: { params: { name: string } }) => CallToolResult
+  >(
     () =>
       options.result ?? {
         content: [{ type: "text" as const, text: "Available" }],
@@ -275,4 +277,44 @@ it("automatically discovers read-only tools without a filter", async () => {
   const c = await s.connect();
   cleanups.push(c.close);
   expect(c.tools.map((t) => t.spec.name)).toEqual(["catalog__lookup"]);
+});
+it("sanitizes and dedupes exposed names while calling the remote name", async () => {
+  const s = await setup({
+    tools: [
+      { ...tool, name: "a.b" },
+      { ...tool, name: "a_b" },
+      { ...tool, name: "a b" },
+    ],
+    autoDiscover: true,
+  });
+  const c = await s.connect();
+  cleanups.push(c.close);
+  expect(c.tools.map((t) => t.spec.name)).toEqual([
+    "catalog__a_b",
+    "catalog__a_b_2",
+    "catalog__a_b_3",
+  ]);
+  await c.tools[0]?.execute({ id: "x" }, owner, AbortSignal.timeout(1000));
+  expect(s.calls.mock.calls[0]?.[0]?.params.name).toBe("a.b");
+});
+it("reports tools hidden by the read-only default", async () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  const s = await setup({
+    tools: [tool, { ...tool, name: "delete", annotations: undefined }],
+    autoDiscover: true,
+  });
+  const c = await s.connect();
+  cleanups.push(c.close);
+  expect(c.tools.map((t) => t.spec.name)).toEqual(["catalog__lookup"]);
+  expect(c.skipped).toHaveLength(1);
+  expect(c.skipped?.[0]?.tool).toBe("delete");
+  expect(c.skipped?.[0]?.reason).toContain("readTools");
+  expect(String(warn.mock.calls[0]?.[0])).toContain("delete");
+  warn.mockRestore();
+});
+it("names the missing tool in errors", async () => {
+  const s = await setup({ tools: [{ ...tool, name: "other" }] });
+  await expect(s.connect()).rejects.toThrow(
+    "Configured MCP tool not found: lookup",
+  );
 });

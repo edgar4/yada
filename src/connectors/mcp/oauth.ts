@@ -39,6 +39,7 @@ export type McpOAuth = Readonly<{
   identity: Identity;
   complete: (params: URLSearchParams, signal?: AbortSignal) => Promise<void>;
   disconnect: () => Promise<void>;
+  cancelPending: () => Promise<void>;
   coordinate?: <T>(
     operation: () => Promise<T>,
     signal?: AbortSignal,
@@ -53,7 +54,18 @@ export function createMcpOAuth(options: {
   identity: Identity;
   store: McpOAuthStore;
   redirect: (url: URL) => Promise<void>;
+  clientId?: string;
+  clientSecret?: string;
+  clientAuthMethod?: "client_secret_basic" | "client_secret_post";
+  clientMetadataUrl?: string;
 }): McpOAuth {
+  if (options.clientSecret && !options.clientId)
+    throw new Error("OAuth clientSecret requires clientId");
+  if (options.clientMetadataUrl) {
+    const metadata = new URL(options.clientMetadataUrl);
+    if (metadata.protocol !== "https:" || metadata.pathname === "/")
+      throw new Error("Invalid OAuth client metadata URL");
+  }
   const server = new URL(options.serverUrl);
   const redirect = new URL(options.redirectUrl);
   for (const url of [server, redirect])
@@ -140,9 +152,22 @@ export function createMcpOAuth(options: {
       redirect_uris: [redirect.href],
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
-      token_endpoint_auth_method: "none",
+      token_endpoint_auth_method: options.clientSecret
+        ? (options.clientAuthMethod ?? "client_secret_basic")
+        : "none",
     },
-    clientInformation: async () => (await load()).client,
+    ...(options.clientMetadataUrl
+      ? { clientMetadataUrl: options.clientMetadataUrl }
+      : {}),
+    clientInformation: async () =>
+      options.clientId
+        ? {
+            client_id: options.clientId,
+            ...(options.clientSecret
+              ? { client_secret: options.clientSecret }
+              : {}),
+          }
+        : (await load()).client,
     saveClientInformation: (client) => update({ client }),
     tokens: async () => (await load()).tokens,
     saveTokens: (tokens) => update({ tokens }),
@@ -254,5 +279,6 @@ export function createMcpOAuth(options: {
       }, signal);
     },
     disconnect: () => update({ tokens: undefined, pending: undefined }),
+    cancelPending: () => update({ pending: undefined }),
   };
 }

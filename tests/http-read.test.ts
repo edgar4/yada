@@ -114,3 +114,51 @@ it("requires an explicitly reviewed OpenAPI GET operation and query mapping", as
     ).execute({ id: "a" }, identity, signal()),
   ).rejects.toThrow("Unreviewed");
 });
+it("resolves async identity headers and encoded path templates", async () => {
+  const fetchMock = vi.fn(() => Promise.resolve(new Response("ok")));
+  vi.stubGlobal("fetch", fetchMock);
+  const headers = vi.fn((who: typeof identity) =>
+    Promise.resolve({ "x-tenant": who.tenantId }),
+  );
+  const tool = httpReadTool({
+    ...httpOptions,
+    path: "/orders/{id}",
+    pathParameters: (args: { id: string }) => ({ id: args.id }),
+    parameters: () => ({}),
+    headers,
+  });
+  await tool.execute({ id: "a/b?c" }, identity, signal());
+  const [url, init] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
+  expect(url.href).toBe("https://example.test/orders/a%2Fb%3Fc");
+  expect(new Headers(init.headers).get("x-tenant")).toBe("t");
+  await expect(tool.execute({ id: ".." }, identity, signal())).rejects.toThrow(
+    "path parameters",
+  );
+  expect(() => httpReadTool({ ...httpOptions, path: "/orders/{id}" })).toThrow(
+    "Invalid HTTP path",
+  );
+});
+it("accepts reviewed OpenAPI path templates", () => {
+  const document = (location: string) => ({
+    openapi: "3.0.0",
+    paths: {
+      "/orders/{id}": {
+        get: {
+          operationId: "getOrder",
+          parameters: [{ in: location, name: "id" }],
+        },
+      },
+    },
+  });
+  const options = {
+    ...httpOptions,
+    path: "/orders/{id}",
+    operationId: "getOrder",
+    pathParameters: (args: { id: string }) => ({ id: args.id }),
+    parameters: () => ({}),
+  };
+  expect(() => reviewedOpenApiGet(document("path"), options)).not.toThrow();
+  expect(() => reviewedOpenApiGet(document("query"), options)).toThrow(
+    "mismatch",
+  );
+});

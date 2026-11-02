@@ -110,12 +110,39 @@ export function mcpServersFromEnv(
 ): McpConfig[] {
   const raw = env["YADA_MCP_SERVERS"];
   if (raw === undefined || raw.trim() === "") return [];
+  const fail = (detail: string): never => {
+    throw new Error(`Invalid YADA_MCP_SERVERS configuration: ${detail}`);
+  };
+  let json: unknown;
   try {
-    const servers = z.array(mcpConfig).parse(JSON.parse(raw));
-    if (new Set(servers.map((server) => server.name)).size !== servers.length)
-      throw new Error("Duplicate MCP server names");
-    return servers;
+    json = JSON.parse(raw);
   } catch {
-    throw new Error("Invalid YADA_MCP_SERVERS configuration");
+    return fail("not valid JSON");
   }
+  const parsed = z.array(mcpConfig).safeParse(json);
+  if (!parsed.success)
+    return fail(
+      issues(parsed.error.issues)
+        .map(({ path, message }) => `${path.join(".") || "(root)"}: ${message}`)
+        .join("; "),
+    );
+  const servers = parsed.data;
+  if (new Set(servers.map((server) => server.name)).size !== servers.length)
+    fail("duplicate server names");
+  return servers;
+}
+function issues(list: readonly z.core.$ZodIssue[]): {
+  path: PropertyKey[];
+  message: string;
+}[] {
+  return list.flatMap((issue) => {
+    if (issue.code !== "invalid_union")
+      return [{ path: issue.path, message: issue.message }];
+    const branches = issue.errors.map(issues);
+    const best = branches.reduce((a, b) => (b.length < a.length ? b : a));
+    return best.map((item) => ({
+      ...item,
+      path: [...issue.path, ...item.path],
+    }));
+  });
 }

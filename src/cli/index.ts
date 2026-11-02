@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { createStarter, runCommand } from "./init.js";
+import { qualifyMcp, qualifyUsage } from "./qualify-mcp.js";
 
 const usage =
-  "Usage: yada init [directory] [--no-install]\nCreates a new standalone agent (default directory: yada-agent).";
+  "Usage: yada init [directory] [--no-install]\nCreates a new standalone agent (default directory: yada-agent).\n" +
+  qualifyUsage;
 try {
   const args = process.argv.slice(2);
   if (
@@ -10,6 +12,8 @@ try {
     (args.length === 1 && ["--help", "-h"].includes(args[0] ?? ""))
   ) {
     console.log(usage);
+  } else if (args[0] === "qualify-mcp") {
+    process.exitCode = await qualifyMcp(args.slice(1));
   } else {
     const [command, ...rest] = args;
     const positional = rest.filter((arg) => !arg.startsWith("-"));

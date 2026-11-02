@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
@@ -30,6 +31,7 @@ export type McpAccess = Readonly<{
 }>;
 export type McpConnection<T extends Tool = ReadTool> = Readonly<{
   tools: readonly T[];
+  skipped?: readonly Readonly<{ tool: string; reason: string }>[];
   close: () => Promise<void>;
   isConnected?: () => boolean;
   timeoutMs?: number;
@@ -41,7 +43,11 @@ export type McpConnection<T extends Tool = ReadTool> = Readonly<{
     signal?: AbortSignal,
   ) => Promise<string>;
 }>;
-export const clientVersion = "0.2.0";
+export const clientVersion = (
+  createRequire(import.meta.url)("../../../package.json") as {
+    version: string;
+  }
+).version;
 export function connectMcpTransport(
   config: McpReadConfig,
   access: McpAccess,
@@ -108,20 +114,21 @@ export async function connectParsed(
     const select = (catalog: Map<string, RemoteTool>) => {
       const required = (name: string) => {
         const tool = catalog.get(name);
-        if (!tool) throw new Error("Configured MCP tool not found");
+        if (!tool) throw new Error(`Configured MCP tool not found: ${name}`);
         return tool;
       };
       for (const [name, mapping] of writes) {
         if (required(name).annotations?.readOnlyHint === true)
-          throw new Error("MCP write tool is marked as read-only");
+          throw new Error(`MCP write tool is marked as read-only: ${name}`);
         for (const helper of [mapping.prepareTool, mapping.receiptTool])
           if (required(helper).annotations?.readOnlyHint !== true)
-            throw new Error("MCP helper is not marked as read-only");
+            throw new Error(`MCP helper is not marked as read-only: ${helper}`);
       }
       const listed = Array.isArray(settings.confirmTools)
         ? settings.confirmTools
         : [];
       const reads: RemoteTool[] = [];
+      const skipped: { tool: string; reason: string }[] = [];
       const confirms = listed.map(required);
       for (const tool of catalog.values()) {
         if (
@@ -135,19 +142,26 @@ export async function connectParsed(
           settings.readTools ? settings.readTools.includes(tool.name) : readOnly
         ) {
           if (tool.annotations?.readOnlyHint === false)
-            throw new Error("MCP tool is marked as mutating");
+            throw new Error(`MCP tool is marked as mutating: ${tool.name}`);
           reads.push(tool);
         } else if (settings.confirmTools === "*" && !readOnly)
           confirms.push(tool);
+        else
+          skipped.push({
+            tool: tool.name,
+            reason: settings.readTools
+              ? "not listed in readTools"
+              : "not annotated readOnlyHint: true; add it to readTools or confirmTools",
+          });
       }
-      if (settings.readTools && reads.length !== settings.readTools.length)
-        throw new Error("Configured MCP tool not found");
+      const missing = settings.readTools?.find((name) => !catalog.has(name));
+      if (missing) throw new Error(`Configured MCP tool not found: ${missing}`);
       const selected = [
         ...reads,
         ...confirms,
         ...[...writes.keys(), ...helpers].map(required),
       ];
-      return { reads, confirms, selected, required };
+      return { reads, confirms, selected, required, skipped };
     };
     const fingerprint = (tools: readonly RemoteTool[]) =>
       canonical(
@@ -169,7 +183,7 @@ export async function connectParsed(
           )
           .sort((a, b) => a.name.localeCompare(b.name)),
       );
-    const { reads, confirms, selected, required } = select(
+    const { reads, confirms, selected, required, skipped } = select(
       await discoverMcpTools(client, signal, settings.timeoutMs),
     );
     const expected = fingerprint(selected);
@@ -206,14 +220,20 @@ export async function connectParsed(
         return base.read(...args);
       },
     };
+    const exposed = new Map<string, string>();
     const spec = (remote: RemoteTool) => {
-      const name = `${settings.name}__${remote.name}`;
+      let name = exposed.get(remote.name);
+      if (!name) {
+        const base = `${settings.name}__${remote.name.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+        name = base;
+        for (let n = 2; [...exposed.values()].includes(name); n++)
+          name = `${base}_${String(n)}`;
+        exposed.set(remote.name, name);
+      }
       if (name.length > 64)
         throw new Error(
-          "MCP tool name exceeds the 64-character limit for server name plus tool name",
+          `MCP tool name exceeds the 64-character limit for server name plus tool name: ${remote.name}`,
         );
-      if (!/^[a-zA-Z0-9_-]+$/.test(name))
-        throw new Error("Unsupported MCP tool name");
       return {
         name,
         description: remote.description ?? "",
@@ -266,8 +286,13 @@ export async function connectParsed(
       tools.push(...extra);
     }
     tools.push(...writeTools);
+    if (!settings.readTools && skipped.length)
+      console.warn(
+        `MCP server "${settings.name}" did not expose ${String(skipped.length)} tool(s); set readTools or confirmTools to expose them:\n${skipped.map((item) => `  ${item.tool}: ${item.reason}`).join("\n")}`,
+      );
     return {
       tools,
+      skipped,
       close,
       isConnected: () => connected && !closed && !stale,
       timeoutMs: settings.timeoutMs,
