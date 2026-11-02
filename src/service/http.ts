@@ -223,9 +223,10 @@ export function createHandler(options: {
         const state = await options.storage.conversations.inspect(
           identity,
           conversationId,
+          input.id,
         );
         if (state.erased) throw new HttpError(410, "Conversation erased");
-        if (quota && !state.active && !state.runIds.includes(input.id)) {
+        if (quota && !state.active && !state.submitted) {
           const denied = await options.storage.quota.consume(
             quotaScopeKey(identity, quota),
             quota,

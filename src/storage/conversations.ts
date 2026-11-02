@@ -90,7 +90,8 @@ export interface ConversationQueries {
   inspect(
     identity: Identity,
     id: string,
-  ): Promise<{ erased: boolean; active: boolean; runIds: string[] }>;
+    runId?: string,
+  ): Promise<{ erased: boolean; active: boolean; submitted: boolean }>;
 }
 export interface ConversationStore {
   load(identity: Identity, id: string): Promise<Conversation | undefined>;
@@ -168,16 +169,21 @@ export function createConversationStore(
         if (rows.length < 100) return { conversations };
       }
     },
-    async inspect(identity, id) {
+    async inspect(identity, id, runId) {
       const record = await records.read(conversationKey(identity, id));
       const state = overviewSchema.safeParse(record?.value).data;
+      const runIds = [
+        ...(state?.jobs.map((job) => job.id) ?? []),
+        ...(state?.retiredRuns ?? []),
+      ];
       return {
         erased: state?.deleted ?? false,
         active: state?.jobs.some((job) => !isTerminal(job.status)) ?? false,
-        runIds: [
-          ...(state?.jobs.map((job) => job.id) ?? []),
-          ...(state?.retiredRuns ?? []),
-        ],
+        submitted:
+          runId !== undefined &&
+          (runIds.includes(runId) ||
+            (await records.read(retiredKey(identity, id, runId))) !==
+              undefined),
       };
     },
     async load(identity, id) {
