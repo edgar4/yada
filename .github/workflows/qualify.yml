@@ -24,9 +24,8 @@ permissions:
 jobs:
   evals:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.provider }}
     env:
-      PROVIDER: ${{ inputs.provider }}
+      YADA_LLM_PROVIDER: ${{ inputs.provider }}
       YADA_LLM_MODEL: ${{ inputs.model }}
       RUNS: ${{ inputs.runs }}
       PRICING: ${{ inputs.pricing }}
@@ -40,7 +39,7 @@ jobs:
       - name: Run evals
         env:
           YADA_LLM_API_KEY: ${{ secrets.YADA_LLM_API_KEY }}
-        run: npm run evals -- --provider "$PROVIDER" --runs "$RUNS" ${PRICING:+--pricing "$PRICING"} --out evals-results.json
+        run: npm run evals -- --provider "$YADA_LLM_PROVIDER" --runs "$RUNS" ${PRICING:+--pricing "$PRICING"} --out evals-results.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
