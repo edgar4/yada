@@ -1,10 +1,10 @@
-import { contentText } from "../core/content.js";
 import {
   BrowserClient,
   type Job,
   type JobInput,
   type RunEvent,
 } from "../client/index.js";
+import { contentText } from "../client/validate.js";
 
 const defaultLabels = {
   title: "Assistant",
@@ -408,6 +408,8 @@ export function defineYadaWidget(name = "yada-chat"): void {
           if (turn.role === "user" || turn.role === "assistant")
             this.appendMessage(contentText(turn.content), turn.role);
         this.appendMessage(contentText(job.input), "user");
+        for (const message of job.steering)
+          this.appendMessage(contentText(message.input), "user");
         this.active = true;
         this.update();
         void this.start(false, job);

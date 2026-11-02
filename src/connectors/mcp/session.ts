@@ -43,11 +43,20 @@ export type McpConnection<T extends Tool = ReadTool> = Readonly<{
     signal?: AbortSignal,
   ) => Promise<string>;
 }>;
-export const clientVersion = (
-  createRequire(import.meta.url)("../../../package.json") as {
-    version: string;
+export const clientVersion = (() => {
+  try {
+    return (
+      createRequire(import.meta.url)("../../../package.json") as {
+        version: string;
+      }
+    ).version;
+  } catch {
+    return "unknown";
   }
-).version;
+})();
+export const exposedToolName = (server: string, tool: string) =>
+  `${server}__${tool.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+const warnedServers = new Set<string>();
 export function connectMcpTransport(
   config: McpReadConfig,
   access: McpAccess,
@@ -224,7 +233,7 @@ export async function connectParsed(
     const spec = (remote: RemoteTool) => {
       let name = exposed.get(remote.name);
       if (!name) {
-        const base = `${settings.name}__${remote.name.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+        const base = exposedToolName(settings.name, remote.name);
         name = base;
         for (let n = 2; [...exposed.values()].includes(name); n++)
           name = `${base}_${String(n)}`;
@@ -286,10 +295,16 @@ export async function connectParsed(
       tools.push(...extra);
     }
     tools.push(...writeTools);
-    if (!settings.readTools && skipped.length)
+    if (
+      !settings.readTools &&
+      skipped.length &&
+      !warnedServers.has(settings.name)
+    ) {
+      warnedServers.add(settings.name);
       console.warn(
         `MCP server "${settings.name}" did not expose ${String(skipped.length)} tool(s); set readTools or confirmTools to expose them:\n${skipped.map((item) => `  ${item.tool}: ${item.reason}`).join("\n")}`,
       );
+    }
     return {
       tools,
       skipped,

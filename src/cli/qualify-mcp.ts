@@ -3,7 +3,9 @@ import {
   connectMcp,
   type McpConnection,
   type McpReadConfig,
+  type Tool,
 } from "../index.js";
+import { exposedToolName } from "../connectors/mcp/session.js";
 
 type Entry = {
   server: McpReadConfig;
@@ -72,17 +74,22 @@ export async function qualifyMcp(args: string[]): Promise<number> {
     if (!connection) continue;
     const open = connection;
     const invoke = async (name: string, toolArgs?: unknown) => {
-      const found = open.tools.find(
-        (tool) => tool.spec.name === `${server.name}__${name}`,
+      const exposed = exposedToolName(server.name, name);
+      const found = (open.tools as readonly Tool[]).find(
+        (tool) => tool.spec.name === exposed,
       );
       if (!found) throw new Error(`Tool ${name} not found`);
-      return text(
-        await found.execute(
-          toolArgs ?? {},
-          identity,
-          AbortSignal.timeout(timeout),
-        ),
-      ).slice(0, 200);
+      const signal = AbortSignal.timeout(timeout);
+      const result =
+        found.effect === "write"
+          ? await found.execute(toolArgs ?? {}, {
+              identity,
+              signal,
+              operationId: "qualify",
+              version: found.version,
+            })
+          : await found.execute(toolArgs ?? {}, identity, signal);
+      return text(result).slice(0, 200);
     };
     if (call)
       result.steps["call"] = await timed(() => invoke(call.tool, call.args));

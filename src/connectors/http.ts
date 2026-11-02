@@ -12,7 +12,9 @@ export function httpReadTool<S extends z.ZodType>(options: {
   input: S;
   origin: string;
   path: string;
-  parameters: (args: z.output<S>) => Readonly<Record<string, string>>;
+  parameters: (
+    args: z.output<S>,
+  ) => Readonly<Record<string, string | undefined>>;
   pathParameters?: (args: z.output<S>) => Readonly<Record<string, string>>;
   authorize: (identity: Identity) => Promise<boolean>;
   headers?: Headers_ | ((identity: Identity) => Headers_ | Promise<Headers_>);
@@ -71,7 +73,7 @@ export function httpReadTool<S extends z.ZodType>(options: {
       if (target.origin !== origin.origin)
         throw new Error("Invalid HTTP path parameters");
       for (const [key, value] of Object.entries(options.parameters(args)))
-        target.searchParams.set(key, value);
+        if (value !== undefined) target.searchParams.set(key, value);
       const response = await fetch(target, {
         method: "GET",
         headers: new Headers(

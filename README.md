@@ -33,17 +33,18 @@ Set your provider credentials in `.env`, then run `npm start`. See the [starter 
 npm install @edgaralochi/yada
 ```
 
-Import the runtime from `@edgaralochi/yada`, the browser client from `@edgaralochi/yada/client` and the widget from `@edgaralochi/yada/widget`. Narrower entry points are `/providers`, `/storage`, `/mcp`, `/skills` and `/service`; the root exports all of them.
+Import the runtime from `@edgaralochi/yada`, the browser client from `@edgaralochi/yada/client` and the widget from `@edgaralochi/yada/widget` (or the prebuilt `@edgaralochi/yada/widget.js` script). Narrower entry points are `/providers`, `/storage`, `/mcp`, `/skills`, `/service`, `/langchain`, `/otel` and `/evals`; the root exports all of them.
 
 The core and the Anthropic and OpenAI-compatible providers need nothing else. Install only what you use:
 
-| Feature                                            | Install                       |
-| -------------------------------------------------- | ----------------------------- |
-| SQLite storage (default)                           | `npm install better-sqlite3`  |
-| PostgreSQL storage                                 | `npm install pg`              |
-| MySQL storage                                      | `npm install mysql2`          |
-| Gemini                                             | `npm install @google/genai`   |
-| `chatModelAdapter` (`@edgaralochi/yada/langchain`) | `npm install @langchain/core` |
+| Feature                                            | Install                          |
+| -------------------------------------------------- | -------------------------------- |
+| SQLite storage (default)                           | `npm install better-sqlite3`     |
+| PostgreSQL storage                                 | `npm install pg`                 |
+| MySQL storage                                      | `npm install mysql2`             |
+| Gemini                                             | `npm install @google/genai`      |
+| `chatModelAdapter` (`@edgaralochi/yada/langchain`) | `npm install @langchain/core`    |
+| `otelTracer` (`@edgaralochi/yada/otel`)            | `npm install @opentelemetry/api` |
 
 ### Use Yada in your backend
 

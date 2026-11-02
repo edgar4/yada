@@ -1,31 +1,27 @@
-import { z } from "zod";
 import {
-  eventSchema,
-  isTerminal,
-  jobInputSchema,
-  jobSchema,
-  steeringInputSchema,
-  type Job,
-  type JobInput,
-  type RunEvent,
-} from "../service/contracts.js";
+  parseApproval,
+  parseEvent,
+  parseJob,
+  parseJobInput,
+  parseSteering,
+  ValidationError,
+} from "./validate.js";
+import type { Job, JobInput, RunEvent } from "../service/contracts.js";
 
 export type { Job, JobInput, RunEvent };
-export const approvalSchema = z.strictObject({
-  id: z.string(),
-  preview: z.string(),
-  status: z.enum([
-    "pending",
-    "approved",
-    "declined",
-    "executing",
-    "completed",
-    "expired",
-    "unknown",
-  ]),
-  expiresAt: z.number(),
-});
-export type Approval = z.infer<typeof approvalSchema>;
+export type Approval = Readonly<{
+  id: string;
+  preview: string;
+  status:
+    | "pending"
+    | "approved"
+    | "declined"
+    | "executing"
+    | "completed"
+    | "expired"
+    | "unknown";
+  expiresAt: number;
+}>;
 export type ClientOptions = Readonly<{
   baseUrl: string;
   fetch?: typeof fetch;
@@ -48,9 +44,12 @@ export class ClientError extends Error {
     this.name = "ClientError";
   }
 }
-const terminal = (event: RunEvent) => isTerminal(event.type);
+const terminal = (event: RunEvent) =>
+  event.type === "completed" ||
+  event.type === "failed" ||
+  event.type === "cancelled";
 const retryable = (error: unknown) =>
-  !(error instanceof z.ZodError) &&
+  !(error instanceof ValidationError) &&
   (!(error instanceof ClientError) ||
     (error.status !== undefined && error.status >= 500));
 const wait = (ms: number, signal?: AbortSignal) =>
@@ -155,7 +154,7 @@ export class BrowserClient {
     input: JobInput["input"],
     id: string = crypto.randomUUID(),
   ): JobInput {
-    return jobInputSchema.parse({ id, profileId, input });
+    return parseJobInput({ id, profileId, input });
   }
 
   async createRun(
@@ -163,10 +162,10 @@ export class BrowserClient {
     input: JobInput,
     signal?: AbortSignal,
   ): Promise<Job> {
-    const body = JSON.stringify(jobInputSchema.parse(input));
+    const body = JSON.stringify(parseJobInput(input));
     for (let attempt = 0; ; attempt++) {
       try {
-        return jobSchema.parse(
+        return parseJob(
           await this.json(this.path(conversationId), "POST", body, signal),
         );
       } catch (error) {
@@ -186,7 +185,7 @@ export class BrowserClient {
     runId: string,
     signal?: AbortSignal,
   ): Promise<Job> {
-    return jobSchema.parse(
+    return parseJob(
       await this.json(
         this.path(conversationId, runId),
         "GET",
@@ -216,7 +215,7 @@ export class BrowserClient {
     id: string = crypto.randomUUID(),
     signal?: AbortSignal,
   ): Promise<void> {
-    const body = JSON.stringify(steeringInputSchema.parse({ id, input }));
+    const body = JSON.stringify(parseSteering({ id, input }));
     for (let attempt = 0; ; attempt++) {
       try {
         await this.json(
@@ -244,7 +243,7 @@ export class BrowserClient {
     approvalId: string,
     signal?: AbortSignal,
   ): Promise<Approval> {
-    return approvalSchema.parse(
+    return parseApproval(
       await this.json(
         `${this.path(conversationId, runId)}/approvals/${encodeURIComponent(approvalId)}`,
         "GET",
@@ -296,7 +295,7 @@ export class BrowserClient {
         for await (const line of lines(response, 65_536)) {
           let event: RunEvent;
           try {
-            event = eventSchema.parse(JSON.parse(line));
+            event = parseEvent(JSON.parse(line));
           } catch {
             throw new ClientError("Invalid run event");
           }

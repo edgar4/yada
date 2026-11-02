@@ -92,17 +92,23 @@ export async function connectMcp(
     fetch: guardedFetch,
   });
   if (oauth) coordinateOAuthTransport(streamable, oauth);
+  let original: unknown;
   try {
     return await connectParsed(settings, access, streamable, signal);
   } catch (error) {
     const code = error instanceof StreamableHTTPError ? (error.code ?? 0) : 0;
-    if (oauth || code < 400 || code >= 500 || code === 401 || code === 403)
-      throw error;
+    if (oauth || ![400, 404, 405].includes(code)) throw error;
+    original = error;
   }
   // eslint-disable-next-line @typescript-eslint/no-deprecated -- legacy servers only speak SSE
   const legacy = new SSEClientTransport(endpoint, {
     fetch: guardedFetch,
     eventSourceInit: { fetch: guardedFetch },
   });
-  return connectParsed(settings, access, legacy, signal);
+  try {
+    return await connectParsed(settings, access, legacy, signal);
+  } catch (error) {
+    if (original instanceof Error) original.cause = error;
+    throw original;
+  }
 }

@@ -60,4 +60,6 @@ Pass any provider from `createProvider` instead of the fake one to run against a
 npm run qualify:mcp -- evals/mcp-servers.example.json --out mcp-results.json
 ```
 
+The same check ships in the package CLI: `npx yada qualify-mcp servers.json --out results.json`.
+
 The file is an array of `{ "server": <MCP config>, "call"?: { "tool", "args" }, "prompts"?: true }`. `server` is a normal [MCP server config](mcp.md) (`command`/`args` or `url`, `headers`, `resources`); `resources: true` runs `list_resources`, `call.tool` is the bare tool name. The example file lists only the in-repo fixture. Keep files for public servers (for example `npx -y <server-package>` or a streamable HTTP `url`) and any credentials outside the repository; do not commit tokens.

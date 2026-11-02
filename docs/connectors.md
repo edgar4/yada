@@ -16,7 +16,7 @@ const lookupOrder = httpReadTool({
   origin: "https://api.example.com",
   path: "/orders/{id}",
   pathParameters: (args) => ({ id: args.id }),
-  parameters: (args) => (args.expand ? { expand: args.expand } : {}),
+  parameters: (args) => ({ expand: args.expand }),
   headers: async (identity) => ({
     authorization: `Bearer ${await tokenFor(identity)}`,
   }),

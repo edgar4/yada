@@ -33,6 +33,7 @@ async function setup(
     pages?: boolean;
     repeat?: boolean;
     autoDiscover?: boolean;
+    name?: string;
   } = {},
 ) {
   const server = new McpServer(
@@ -63,7 +64,7 @@ async function setup(
   const connect = () =>
     connectMcpTransport(
       {
-        name: "catalog",
+        name: options.name ?? "catalog",
         url: "https://example.test/mcp",
         ...(options.autoDiscover ? {} : { readTools: ["lookup"] }),
       },
@@ -302,14 +303,18 @@ it("reports tools hidden by the read-only default", async () => {
   const s = await setup({
     tools: [tool, { ...tool, name: "delete", annotations: undefined }],
     autoDiscover: true,
+    name: "hidden",
   });
   const c = await s.connect();
   cleanups.push(c.close);
-  expect(c.tools.map((t) => t.spec.name)).toEqual(["catalog__lookup"]);
+  expect(c.tools.map((t) => t.spec.name)).toEqual(["hidden__lookup"]);
   expect(c.skipped).toHaveLength(1);
   expect(c.skipped?.[0]?.tool).toBe("delete");
   expect(c.skipped?.[0]?.reason).toContain("readTools");
   expect(String(warn.mock.calls[0]?.[0])).toContain("delete");
+  const again = await s.connect();
+  cleanups.push(again.close);
+  expect(warn).toHaveBeenCalledOnce();
   warn.mockRestore();
 });
 it("names the missing tool in errors", async () => {
