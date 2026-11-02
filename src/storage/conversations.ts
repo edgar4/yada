@@ -2,7 +2,7 @@ import { z } from "zod";
 import { summaryPrefix, turnSchema } from "../core/checkpoint.js";
 import type { Identity, Turn } from "../core/contracts.js";
 import type { recordStore } from "./records.js";
-import { isTerminal } from "../service/contracts.js";
+import { isTerminal } from "../service/terminal.js";
 export const identitySchema = z.strictObject({
   actorId: z.string().min(1),
   tenantId: z.string().min(1),
@@ -91,7 +91,12 @@ export interface ConversationQueries {
     identity: Identity,
     id: string,
     runId?: string,
-  ): Promise<{ erased: boolean; active: boolean; submitted: boolean }>;
+  ): Promise<{
+    exists: boolean;
+    erased: boolean;
+    active: boolean;
+    submitted: boolean;
+  }>;
 }
 export interface ConversationStore {
   load(identity: Identity, id: string): Promise<Conversation | undefined>;
@@ -142,29 +147,30 @@ export function createConversationStore(
   records: ReturnType<typeof recordStore>,
 ): ConversationStore & ConversationQueries {
   return {
-    async list(identity, after = "", limit = 50) {
+    async list(identity, after, limit = 50) {
       const conversations: ConversationOverview[] = [];
-      let cursor = after;
+      const [at, ...rest] = after?.split(":") ?? [];
+      let cursor =
+        at === undefined ? undefined : { at: Number(at), id: rest.join(":") };
       for (;;) {
-        const rows = await records.scan(
+        const rows = await records.recent(
           "conversation",
+          conversationKey(identity, "-"),
           cursor,
           100,
-          undefined,
-          conversationKey(identity, "-"),
         );
         for (const row of rows) {
-          cursor = row.id;
+          cursor = { at: row.at, id: row.id };
           const state = overviewSchema.safeParse(row.value).data;
           if (!state || state.deleted) continue;
-          const last = state.jobs.at(-1);
+          const job = state.jobs.at(-1);
           conversations.push({
             id: state.id,
-            updatedAt: last?.updatedAt ?? 0,
-            ...(last ? { status: last.status } : {}),
+            updatedAt: job?.updatedAt ?? 0,
+            ...(job ? { status: job.status } : {}),
           });
           if (conversations.length === limit)
-            return { conversations, next: cursor };
+            return { conversations, next: [row.at, row.id].join(":") };
         }
         if (rows.length < 100) return { conversations };
       }
@@ -177,6 +183,7 @@ export function createConversationStore(
         ...(state?.retiredRuns ?? []),
       ];
       return {
+        exists: record !== undefined,
         erased: state?.deleted ?? false,
         active: state?.jobs.some((job) => !isTerminal(job.status)) ?? false,
         submitted:

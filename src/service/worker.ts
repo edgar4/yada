@@ -24,6 +24,7 @@ import { RunLeaseError, type RunOwnership } from "../storage/runs.js";
 import type { YadaStorage } from "../storage/index.js";
 import type { JobStore } from "../storage/jobs.js";
 import { isTerminal, type RunEvent } from "./contracts.js";
+import { resumeDecided } from "./recovery.js";
 import { quotaScopeKey, type QuotaOptions } from "./quota.js";
 import { eventKey, type EventBus } from "./events.js";
 import { webhookSender, type WebhookOptions } from "./webhooks.js";
@@ -84,12 +85,25 @@ export function createWorker(options: {
   };
   async function schedule() {
     if (running.size >= concurrency) return { done: Promise.resolve() };
-    const page = await options.storage.jobs.pending(cursor);
+    const page = await options.storage.jobs.pending(cursor, () => {
+      trace({ event: "run_retry", status: "corrupt_record", elapsedMs: 0 });
+    });
     const started: Promise<void>[] = [];
     let consumed = true;
     for (const entry of page.jobs) {
       if (shutdown.signal.aborted) break;
       if (!Object.hasOwn(options.profiles, entry.job.profileId)) continue;
+      if (
+        entry.job.status === "awaiting_approval" &&
+        entry.job.availableAt > Date.now() &&
+        !(await resumeDecided(
+          options.storage,
+          entry.identity,
+          entry.conversationId,
+          entry.job,
+        ).catch(() => false))
+      )
+        continue;
       const key = JSON.stringify([
         entry.identity.tenantId,
         entry.identity.actorId,
