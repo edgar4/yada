@@ -152,6 +152,7 @@ export function nativeOpenAIResponsesAdapter(
   const client = new OpenAI({
     apiKey: settings.apiKey ?? "unused",
     maxRetries: settings.maxRetries,
+    ...(settings.timeoutMs && { timeout: settings.timeoutMs }),
     ...(settings.baseUrl && { baseURL: settings.baseUrl }),
     ...(settings.headers && { defaultHeaders: settings.headers }),
   });

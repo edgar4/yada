@@ -93,8 +93,7 @@ const skills = await loadSkills({directories: ["skills"], authorize: async () =>
 assert.match(skills.system, /Verify packaged skills/);
 assert.match(await skills.tools[0].execute({name: "installed"}, {actorId: "test", tenantId: "test"}, AbortSignal.timeout(5000)), /Use the installed runtime/);
 await assert.rejects(createStorage({driver: "sqlite", filename: ":memory:", encryptionKey: "11".repeat(32)}), /npm install better-sqlite3/);
-const gemini = root.createProvider({provider: "gemini", apiKey: "key"});
-await assert.rejects(gemini.complete({system: "s", messages: [], tools: [], signal: AbortSignal.timeout(5000)}), /npm install @google\\/genai/);
+assert.throws(() => root.createProvider({provider: "gemini", apiKey: "key"}), /npm install @google\\/genai/);
 await assert.rejects(otel.otelTracer(), /npm install @opentelemetry\\/api/);
 `,
   );

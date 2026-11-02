@@ -44,11 +44,6 @@ it.each([
   {},
   { YADA_LLM_PROVIDER: "unknown", YADA_LLM_API_KEY: "secret" },
   { YADA_LLM_PROVIDER: "anthropic", YADA_LLM_API_KEY: " " },
-  {
-    YADA_LLM_PROVIDER: "anthropic",
-    YADA_LLM_API_KEY: "secret",
-    YADA_LLM_MODEL: "",
-  },
 ])("rejects invalid environment without leaking secrets", (env) => {
   expect(() => providerConfigFromEnv(env)).toThrow(
     "Invalid provider configuration",

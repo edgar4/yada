@@ -25,6 +25,7 @@ export type OpenAISettings = Readonly<{
   maxTokens?: number | undefined;
   temperature?: number | undefined;
   maxRetries: number;
+  timeoutMs?: number | undefined;
   vision?: boolean | undefined;
   maxTokensParam?: "max_completion_tokens" | "max_tokens";
   extraBody?: Record<string, unknown>;
@@ -149,6 +150,7 @@ export function nativeOpenAIAdapter(settings: OpenAISettings): ProviderAdapter {
   const client = new OpenAI({
     apiKey: settings.apiKey ?? "unused",
     maxRetries: settings.maxRetries,
+    ...(settings.timeoutMs && { timeout: settings.timeoutMs }),
     ...(settings.baseUrl && { baseURL: settings.baseUrl }),
     ...(settings.headers && { defaultHeaders: settings.headers }),
   });
