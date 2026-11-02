@@ -23,9 +23,11 @@ try {
   for (const { path } of packed.files)
     assert.match(
       path,
-      /^(?:dist\/|docs\/|examples\/starter\/|README\.md$|LICENSE$|package\.json$)/,
+      /^(?:dist\/|docs\/|examples\/starter\/|README\.md$|LICENSE$|\.env\.example$|package\.json$)/,
     );
-  assert(!packed.files.some(({ path }) => /(?:^|\/)\.env/.test(path)));
+  assert(
+    !packed.files.some(({ path }) => /(?:^|\/)\.env(?!\.example$)/.test(path)),
+  );
   assert(packed.files.some(({ path }) => path === "dist/yada-widget.js"));
   assert(packed.files.some(({ path }) => path === "LICENSE"));
   for (const entry of [
@@ -168,10 +170,7 @@ void [runtime, client, widget, providers, storage, mcp, skills, service];
     await readFile(join(starter, "skills/README.md"), "utf8"),
     /SKILL.md/,
   );
-  assert.match(
-    await readFile(join(starter, ".gitignore"), "utf8"),
-    /\.env\.starter/,
-  );
+  assert.match(await readFile(join(starter, ".gitignore"), "utf8"), /^\.env$/m);
   execute(
     npm,
     ["install", "--no-audit", "--no-fund", join(temporary, packed.filename)],

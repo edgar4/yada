@@ -40,7 +40,7 @@ try {
       }
     }
     console.log(
-      `Created ${directory}. Set your provider credentials in .env.starter, then run ${rest.includes("--no-install") ? "npm install and " : ""}npm start from that directory.`,
+      `Created ${directory}. Set your provider credentials in .env, then run ${rest.includes("--no-install") ? "npm install and " : ""}npm start from that directory.`,
     );
   }
 } catch (error) {

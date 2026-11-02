@@ -15,7 +15,7 @@ npx @edgaralochi/yada init my-agent
 cd my-agent
 ```
 
-The generated `package.json` declares `better-sqlite3` for the default SQLite storage; add `pg`, `mysql2` or `@google/genai` if you switch to PostgreSQL, MySQL or Gemini. The initializer installs dependencies and creates the starter source, `.env.starter` with a private encryption key, `.gitignore`, and a `skills/` folder. Set your provider credentials, then run `npm start`. The generated app uses the same starter implementation as this repository and pins the Yada version used to initialize it.
+The generated `package.json` declares `better-sqlite3` for the default SQLite storage; add `pg`, `mysql2` or `@google/genai` if you switch to PostgreSQL, MySQL or Gemini. The initializer installs dependencies and creates the starter source, `.env` with a private encryption key, `.gitignore`, and a `skills/` folder. Set your provider credentials, then run `npm start`. The generated app uses the same starter implementation as this repository and pins the Yada version used to initialize it.
 
 Omitting the directory creates `yada-agent`. The destination must not exist and its parent directory must exist; existing files and projects are never overwritten. To use it alongside an existing application, choose a new subdirectory.
 
@@ -30,10 +30,11 @@ npm ci
 npm run starter:init
 ```
 
-Open the generated `.env.starter` and set your provider configuration:
+This creates `.env` from [`.env.example`](../.env.example), the same file the rest of the docs use, and adds a generated `YADA_STORAGE_KEY`. If `.env` already exists, only the key is added. Set your provider configuration:
 
 ```dotenv
 YADA_LLM_PROVIDER=anthropic
+YADA_LLM_MODEL=claude-opus-5-5
 YADA_LLM_API_KEY=your-provider-api-key
 ```
 
@@ -45,7 +46,7 @@ npm run starter
 
 Open `http://localhost:3000` to open the chat directly. Ask “What time is it?” or “How do I configure this starter?” to exercise its tools. Provider calls use your provider account. See [provider configuration](configuration.md) for OpenAI, Gemini, DeepSeek, Ollama and llama.cpp settings.
 
-Initialization generates the storage encryption key in a private file. It refuses to overwrite existing configuration. Retain that file securely: changing the storage key prevents access to existing records. SQLite data lives in `work/starter/yada.sqlite`; no database server is needed.
+Initialization generates the storage encryption key in `.env` and never replaces an existing key. Retain that file securely: changing the storage key prevents access to existing records. SQLite data lives in `work/starter/yada.sqlite`; no database server is needed.
 
 ## Configuration
 
@@ -69,7 +70,7 @@ Skills are discovered automatically from project skill folders. See [skills](ski
 
 By default, the starter opens without login. Leave `YADA_STARTER_PASSWORD` unset or empty for this mode. Anyone who can reach the starter can use its provider account, access the shared workspace and invoke its configured tools. Use password protection or your host’s authentication when access should be restricted.
 
-To enable login, add `YADA_STARTER_PASSWORD` with a 24–256 character password to `.env.starter` and restart. Remove it or set it empty to disable login. Signed session cookies expire after eight hours, are HttpOnly and SameSite=Strict, and use Secure on HTTPS. Login attempts are limited to 10 per minute per client address (the proxy's last `X-Forwarded-For` entry when behind a local reverse proxy). Mutations require the configured browser origin. In password-protected mode, logout revokes that session; restarting the server invalidates sessions and requires login again. Without a password, the chat opens directly and has no sign-out button.
+To enable login, add `YADA_STARTER_PASSWORD` with a 24–256 character password to `.env` and restart. Remove it or set it empty to disable login. Signed session cookies expire after eight hours, are HttpOnly and SameSite=Strict, and use Secure on HTTPS. Login attempts are limited to 10 per minute per client address (the proxy's last `X-Forwarded-For` entry when behind a local reverse proxy). Mutations require the configured browser origin. In password-protected mode, logout revokes that session; restarting the server invalidates sessions and requires login again. Without a password, the chat opens directly and has no sign-out button.
 
 Conversations and unfinished runs remain durable across restarts. Reloading the browser resumes its saved run instead of submitting it again. Logging out disconnects the interface; use **Cancel run** to cancel work already submitted.
 

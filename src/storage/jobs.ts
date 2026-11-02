@@ -10,6 +10,7 @@ import {
   type SteeringInput,
   type Job,
   type RunEvent,
+  HttpError,
 } from "../service/contracts.js";
 import {
   conversationKey,
@@ -121,7 +122,7 @@ export function createJobStore(
   ) => {
     const state = stateFrom(value, identity, conversationId);
     const job = state.jobs.find((item) => item.id === id);
-    if (!job) throw new Error("Run not found");
+    if (!job) throw new HttpError(404, "Run not found");
     return { state, job };
   };
   const view = (state: ConversationState, job: StoredJob): Job => {
@@ -253,7 +254,7 @@ export function createJobStore(
       return records.transact(async (tx) => {
         const record = await tx.read(key);
         const state = stateFrom(record?.value, identity, conversationId);
-        if (state.deleted) throw new Error("Conversation erased");
+        if (state.deleted) throw new HttpError(410, "Conversation erased");
         if (state.retiredRuns.includes(parsed.id)) throw new JobConflict();
         const existing = state.jobs.find((job) => job.id === parsed.id);
         if (existing) {

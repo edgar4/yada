@@ -176,7 +176,7 @@ for (const driver of drivers)
           expect(response.headers.get("cache-control")).toBe("no-store");
           expect(await response.text()).not.toContain(config.password);
         }
-        expect((await send("/.env.starter")).status).toBe(404);
+        expect((await send("/.env")).status).toBe(404);
         expect((await send("/../config.ts")).status).toBe(404);
         expect(provider.requests).toHaveLength(2);
       } finally {

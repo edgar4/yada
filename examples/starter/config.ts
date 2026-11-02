@@ -38,7 +38,7 @@ export function starterConfigFromEnv(
     provider = providerConfigFromEnv(env);
   } catch (error) {
     if (!env["YADA_LLM_API_KEY"]?.trim() && !env["YADA_LLM_BASE_URL"])
-      throw new Error("Set YADA_LLM_API_KEY in .env.starter", {
+      throw new Error("Set YADA_LLM_API_KEY in .env", {
         cause: error,
       });
     throw error;

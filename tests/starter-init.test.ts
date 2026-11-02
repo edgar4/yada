@@ -1,7 +1,7 @@
 import { it, expect } from "vitest";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,10 +20,14 @@ it("generates private configuration once without printing secrets or overwriting
         { cwd: directory },
       );
     const result = await initialize();
-    const filename = join(directory, ".env.starter");
+    const filename = join(directory, ".env");
     const contents = await readFile(filename, "utf8");
     expect(contents).not.toContain("YADA_STARTER_PASSWORD=");
-    expect(contents).not.toContain("YADA_LLM_MODEL");
+    expect(contents).toContain(
+      (
+        await readFile(new URL("../.env.example", import.meta.url), "utf8")
+      ).trimEnd(),
+    );
     expect(contents).toMatch(/YADA_STORAGE_KEY=[a-f0-9]{64}\n/);
     for (const line of contents
       .split("\n")
@@ -33,6 +37,11 @@ it("generates private configuration once without printing secrets or overwriting
       expect((await stat(filename)).mode & 0o777).toBe(0o600);
     await expect(initialize()).rejects.toThrow();
     expect(await readFile(filename, "utf8")).toBe(contents);
+    await writeFile(filename, "YADA_LLM_PROVIDER=openai\n");
+    await initialize();
+    expect(await readFile(filename, "utf8")).toMatch(
+      /^YADA_LLM_PROVIDER=openai\nYADA_STORAGE_KEY=[a-f0-9]{64}\n$/,
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

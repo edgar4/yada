@@ -6,7 +6,7 @@ description: "Package and deploy Yada using installable ESM tarballs, a local Do
 
 # Packaging and deployment
 
-Yada requires Node 24 and uses ESM. Install the public MIT-licensed package from npm:
+Yada requires Node 24 or newer and uses ESM. Install the public MIT-licensed package from npm:
 
 ```sh
 npm install @edgaralochi/yada

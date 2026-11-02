@@ -19,7 +19,7 @@
     "test:deployment": "node scripts/deployment-smoke.mjs",
     "starter:init": "node examples/starter/init.mjs",
     "starter:build": "npm run build && node examples/starter/build.mjs",
-    "starter": "npm run starter:build && node --env-file=.env.starter --import tsx examples/starter/server.ts"
+    "starter": "npm run starter:build && node --env-file=.env --import tsx examples/starter/server.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.129.0",
@@ -105,6 +105,7 @@
     "docs",
     "README.md",
     "LICENSE",
+    ".env.example",
     "examples/starter",
     "!examples/starter/**/.env*",
     "!examples/starter/**/*.sqlite*",

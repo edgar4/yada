@@ -67,6 +67,10 @@ export async function createStarter(directory: string) {
   }
   try {
     await copyFile(join(packageRoot, "LICENSE"), join(destination, "LICENSE"));
+    await copyFile(
+      join(packageRoot, ".env.example"),
+      join(destination, ".env.example"),
+    );
     await cp(join(packageRoot, "examples/starter"), destination, {
       recursive: true,
       filter: (source) =>
@@ -87,7 +91,7 @@ export async function createStarter(directory: string) {
           scripts: {
             build: "node build.mjs",
             start:
-              "npm run build && node --env-file=.env.starter --import tsx server.ts",
+              "npm run build && node --env-file=.env --import tsx server.ts",
           },
           dependencies: {
             [manifest.name]: manifest.version,
