@@ -8,8 +8,6 @@ import { operationId } from "../src/storage/actions.js";
 import { createFakeProvider } from "../src/providers/fake.js";
 import { RunLeaseError } from "../src/storage/runs.js";
 import { openDatabase } from "../src/storage/database.js";
-import { recordStore } from "../src/storage/records.js";
-import { createJobStore } from "../src/storage/jobs.js";
 
 const done = () =>
   createFakeProvider(() => ({
@@ -26,12 +24,13 @@ const failing = (
   ...storage,
   runs: { ...storage.runs, claim: () => Promise.reject(error) },
 });
-const queueKey = JSON.stringify(["job_queue"]);
-async function queued(config: Parameters<typeof openDatabase>[0]) {
+async function activeCount(config: Parameters<typeof openDatabase>[0]) {
   const db = await openDatabase(config);
   try {
-    const row = await recordStore(db, config.encryptionKey).read(queueKey);
-    return row?.value as { complete: boolean; keys: string[] } | undefined;
+    const rows = await db("yada_records")
+      .where({ kind: "conversation", active: true })
+      .select("id");
+    return rows.length;
   } finally {
     await db.destroy();
   }
@@ -296,7 +295,7 @@ for (const driver of drivers)
           s.storage.jobs.submit(s.identity, id, input("x")),
         ),
       );
-      expect((await queued(s.config))?.keys).toHaveLength(5);
+      expect(await activeCount(s.config)).toBe(5);
       expect(
         (await s.storage.jobs.pending()).jobs
           .map((item) => item.conversationId)
@@ -317,19 +316,19 @@ for (const driver of drivers)
         { type: "completed", text: "ok" },
         { status: "completed", text: "ok" },
       );
-      expect((await queued(s.config))?.keys).toHaveLength(3);
+      expect(await activeCount(s.config)).toBe(3);
       expect(
         (await s.storage.jobs.pending()).jobs.map(
           (item) => item.conversationId,
         ),
       ).not.toContain("a");
       await s.storage.jobs.prune(s.identity, "a", Date.now() + 1);
-      expect((await queued(s.config))?.keys).toHaveLength(3);
+      expect(await activeCount(s.config)).toBe(3);
       await s.storage.jobs.submit(s.identity, "a", input("again"));
-      expect((await queued(s.config))?.keys).toHaveLength(4);
+      expect(await activeCount(s.config)).toBe(4);
     });
 
-    it("rebuilds a missing index from existing conversations", async () => {
+    it("backfills kind and active for rows written before the index", async () => {
       const s = await storageFixture(driver);
       await s.storage.jobs.submit(s.identity, "a", input("one"));
       await s.storage.jobs.submit(s.identity, "b", input("two"));
@@ -342,48 +341,15 @@ for (const driver of drivers)
       );
       const db = await openDatabase(s.config);
       try {
-        await db("yada_records").where({ kind: "job_queue" }).delete();
+        await db("yada_records").update({ kind: null, active: null });
       } finally {
         await db.destroy();
       }
-      expect(await queued(s.config)).toBeUndefined();
-      const page = await s.storage.jobs.pending();
-      expect(page.jobs.map((item) => item.conversationId)).toEqual(["a"]);
-      expect(await queued(s.config)).toMatchObject({ complete: true });
-      expect((await queued(s.config))?.keys).toHaveLength(1);
-    });
-    it("writes the job and its queue entry atomically", async () => {
-      const s = await storageFixture(driver);
-      const db = await openDatabase(s.config);
-      try {
-        const records = recordStore(db, s.config.encryptionKey);
-        const broken = createJobStore({
-          ...records,
-          transact: (operation) =>
-            records.transaction((tx) =>
-              operation({
-                ...tx,
-                write: (key, value, revision) =>
-                  key === queueKey
-                    ? Promise.reject(new Error("crash"))
-                    : tx.write(key, value, revision),
-              }),
-            ),
-        });
-        await expect(
-          broken.submit(s.identity, "chat", input("one")),
-        ).rejects.toThrow("crash");
-        expect(await s.storage.jobs.load(s.identity, "chat", "one")).toBe(
-          undefined,
-        );
-        await s.storage.jobs.pending();
-        await s.storage.jobs.submit(s.identity, "chat", input("one"));
-        expect(
-          (await s.storage.jobs.pending()).jobs.map((item) => item.job.id),
-        ).toEqual(["one"]);
-      } finally {
-        await db.destroy();
-      }
+      expect(await activeCount(s.config)).toBe(1);
+      const reopened = await s.reopen();
+      expect(
+        (await reopened.jobs.pending()).jobs.map((item) => item.conversationId),
+      ).toEqual(["a"]);
     });
 
     it("leaves a job alone when another worker holds a live lease", async () => {

@@ -11,8 +11,24 @@ export class StorageConflict extends Error {
     super("Storage revision conflict");
   }
 }
-export function recordStore(db: Knex, encryptionKey: string) {
-  const cipher = storageCipher(encryptionKey);
+export function isRetryable(error: unknown) {
+  if (error instanceof StorageConflict) return true;
+  const { code, errno } = (error ?? {}) as { code?: unknown; errno?: unknown };
+  return (
+    code === "40001" ||
+    code === "40P01" ||
+    errno === 1213 ||
+    errno === 1205 ||
+    code === "ER_LOCK_DEADLOCK" ||
+    code === "ER_LOCK_WAIT_TIMEOUT"
+  );
+}
+export function recordStore(
+  db: Knex,
+  encryptionKey: string,
+  previousKeys: readonly string[] = [],
+) {
+  const cipher = storageCipher(encryptionKey, previousKeys);
   const idFor = (key: string) => createHash("sha256").update(key).digest("hex");
   async function read(key: string) {
     const id = idFor(key);
@@ -21,13 +37,24 @@ export function recordStore(db: Knex, encryptionKey: string) {
     const row = rowSchema.parse(raw);
     return { revision: row.revision, value: cipher.open(id, row.value) };
   }
-  async function write(key: string, value: unknown, revision: number) {
+  async function write(
+    key: string,
+    value: unknown,
+    revision: number,
+    active?: boolean,
+  ) {
     const id = idFor(key);
     const encrypted = cipher.seal(id, value);
     const kind = z.array(z.string()).parse(JSON.parse(key))[0];
     if (revision === 0) {
       await db("yada_records")
-        .insert({ id, value: encrypted, revision: 1, kind })
+        .insert({
+          id,
+          value: encrypted,
+          revision: 1,
+          kind,
+          active: active ?? false,
+        })
         .onConflict("id")
         .ignore();
       const raw: unknown = await db("yada_records").where({ id }).first();
@@ -36,30 +63,39 @@ export function recordStore(db: Knex, encryptionKey: string) {
     } else {
       const updated = await db("yada_records")
         .where({ id, revision })
-        .update({ value: encrypted, revision: revision + 1, kind });
+        .update({
+          value: encrypted,
+          revision: revision + 1,
+          kind,
+          ...(active === undefined ? {} : { active }),
+        });
       if (updated !== 1) throw new StorageConflict();
     }
     return revision + 1;
   }
   async function mutate<T>(
     key: string,
-    change: (value: unknown) => { value: unknown; result: T },
+    change: (value: unknown) => {
+      value: unknown;
+      result: T;
+      active?: boolean;
+    },
   ): Promise<T> {
     for (let attempt = 0; attempt < 20; attempt++) {
       const record = await read(key);
       const next = change(record?.value);
       try {
-        await write(key, next.value, record?.revision ?? 0);
+        await write(key, next.value, record?.revision ?? 0, next.active);
         return next.result;
       } catch (error) {
-        if (!(error instanceof StorageConflict)) throw error;
+        if (!isRetryable(error)) throw error;
       }
     }
     throw new StorageConflict();
   }
-  async function scan(kind: string, after = "", limit = 100) {
+  async function scan(kind: string, after = "", limit = 100, active?: boolean) {
     const rows: unknown = await db("yada_records")
-      .where({ kind })
+      .where({ kind, ...(active === undefined ? {} : { active }) })
       .andWhere("id", ">", after)
       .orderBy("id")
       .limit(z.number().int().min(1).max(1000).parse(limit));
@@ -76,7 +112,9 @@ export function recordStore(db: Knex, encryptionKey: string) {
   function transaction<T>(
     operation: (records: ReturnType<typeof recordStore>) => Promise<T>,
   ): Promise<T> {
-    return db.transaction((tx) => operation(recordStore(tx, encryptionKey)));
+    return db.transaction((tx) =>
+      operation(recordStore(tx, encryptionKey, previousKeys)),
+    );
   }
   async function transact<T>(
     operation: (records: ReturnType<typeof recordStore>) => Promise<T>,
@@ -85,7 +123,7 @@ export function recordStore(db: Knex, encryptionKey: string) {
       try {
         return await transaction(operation);
       } catch (error) {
-        if (!(error instanceof StorageConflict)) throw error;
+        if (!isRetryable(error)) throw error;
       }
     }
     throw new StorageConflict();

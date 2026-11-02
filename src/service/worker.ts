@@ -132,6 +132,8 @@ export function createWorker(options: {
       ]
     ) => options.storage.jobs.update(identity, conversationId, job.id, ...args);
     let token = "";
+    const owned = (): RunOwnership | undefined =>
+      token ? { runId, token } : undefined;
     let sequence = job.events.length;
     let consumed = 0;
     let recording = Promise.resolve();
@@ -240,7 +242,7 @@ export function createWorker(options: {
               : {}),
         },
         final,
-        undefined,
+        owned(),
         turns,
         summary,
       );
@@ -261,12 +263,20 @@ export function createWorker(options: {
         attempt >= (options.maxAttempts ?? 5) &&
         latest.status !== "reconciling" &&
         !(await executing().catch(() => true));
+      const lease = held?.token === token && held.expiresAt > Date.now();
       if (exhausted)
         await updateJob(
           { type: "failed", code: "retry_exhausted" },
           { status: "failed", code: "retry_exhausted" },
+          lease ? owned() : undefined,
         );
-      else await options.storage.jobs.retry(identity, conversationId, job.id);
+      else
+        await options.storage.jobs.retry(
+          identity,
+          conversationId,
+          job.id,
+          lease ? owned() : undefined,
+        );
       trace({
         event: exhausted ? "run_finished" : "run_retry",
         status: exhausted ? "failed" : "retryable",
@@ -336,7 +346,8 @@ export function createWorker(options: {
             if (args[1] !== runId) return runs.claim(...args);
             if (!(await eligible())) throw new RunLeaseError();
             const state = await runs.claim(...args);
-            if (state.lease) token = state.lease.token;
+            if (state.lease && !state.checkpoint?.outcome)
+              token = state.lease.token;
             if (!(await eligible())) {
               if (state.lease && !state.checkpoint?.outcome)
                 await runs.release(identity, args[1], state.lease.token);
