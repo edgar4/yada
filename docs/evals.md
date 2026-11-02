@@ -33,7 +33,7 @@ To add a scenario, append to the `scenarios` array. Keep prompts explicit about 
 
 ## Qualification workflow
 
-`.github/workflows/qualify.yml` runs only on manual `workflow_dispatch`, never on push or pull request. Add the repository secrets `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` and `DEEPSEEK_API_KEY` for the providers you qualify. Start it from the Actions tab (or `gh workflow run qualify.yml -f provider=anthropic -f model=<model-id> -f runs=5 -f pricing=<in>,<out>`). The report is uploaded as the `evals-results` artifact; live evals are otherwise refused when `CI` is set.
+`.github/workflows/qualify.yml` runs only on manual `workflow_dispatch`, never on push or pull request. It uses the same `YADA_LLM_API_KEY` as every other Yada config: add it as a repository secret, or as a secret of a GitHub environment named after the provider (`anthropic`, `openai`, `gemini`, `deepseek`) to keep one key per provider. The `provider` and `model` inputs set the rest. Start it from the Actions tab (or `gh workflow run qualify.yml -f provider=anthropic -f model=<model-id> -f runs=5 -f pricing=<in>,<out>`). The report is uploaded as the `evals-results` artifact; live evals are otherwise refused when `CI` is set.
 
 ### Qualification matrix
 
