@@ -26,6 +26,7 @@ try {
       /^(?:dist\/|docs\/|examples\/starter\/|README\.md$|LICENSE$|package\.json$)/,
     );
   assert(!packed.files.some(({ path }) => /(?:^|\/)\.env/.test(path)));
+  assert(packed.files.some(({ path }) => path === "dist/yada-widget.js"));
   assert(packed.files.some(({ path }) => path === "LICENSE"));
   for (const entry of [
     "index",
@@ -37,6 +38,7 @@ try {
     "entries/mcp",
     "entries/service",
     "entries/otel",
+    "entries/langchain",
   ])
     for (const extension of ["js", "d.ts"])
       assert(
@@ -80,10 +82,13 @@ import * as mcp from "@edgaralochi/yada/mcp";
 import * as skillsEntry from "@edgaralochi/yada/skills";
 import * as service from "@edgaralochi/yada/service";
 import * as otel from "@edgaralochi/yada/otel";
-for (const entry of [providers, storageEntry, mcp, skillsEntry, service, otel])
+import * as langchain from "@edgaralochi/yada/langchain";
+for (const entry of [providers, storageEntry, mcp, skillsEntry, service])
   for (const key of Object.keys(entry)) assert.equal(entry[key], root[key], key);
 assert(Object.keys(client).length > 0);
 assert(Object.keys(widget).length > 0);
+assert(!("otelTracer" in root) && !("chatModelAdapter" in root) && !("chatModelAdapter" in providers));
+assert.equal(typeof langchain.chatModelAdapter, "function");
 const provider = createFakeProvider(() => ({content: "installed", toolCalls: [], finishReason: "stop"}));
 const result = await run({provider, tools: [], identity: {actorId: "test", tenantId: "test"}, input: "test", system: "test", signal: AbortSignal.timeout(5000)});
 assert.deepEqual(result, {status: "completed", text: "installed"});
@@ -125,9 +130,13 @@ import * as storage from "@edgaralochi/yada/storage";
 import * as mcp from "@edgaralochi/yada/mcp";
 import * as skills from "@edgaralochi/yada/skills";
 import * as service from "@edgaralochi/yada/service";
-import * as otel from "@edgaralochi/yada/otel";
-void [runtime, client, widget, providers, storage, mcp, skills, service, otel];
+void [runtime, client, widget, providers, storage, mcp, skills, service];
 `,
+  );
+  execute(
+    npm,
+    ["install", "--no-save", "--no-audit", "--no-fund", "@types/node"],
+    temporary,
   );
   execute(
     process.execPath,
@@ -135,7 +144,8 @@ void [runtime, client, widget, providers, storage, mcp, skills, service, otel];
       join(root, "node_modules/typescript/bin/tsc"),
       "--noEmit",
       "--strict",
-      "--skipLibCheck",
+      "--types",
+      "node",
       "--module",
       "NodeNext",
       "--target",

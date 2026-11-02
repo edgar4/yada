@@ -6,7 +6,7 @@ description: "Run a complete Yada agent with a real model provider, optional pas
 
 # Starter app
 
-The starter is a complete, project-independent agent for one shared workspace. It combines Yada's provider adapters, durable worker, encrypted storage, typed tools and browser widget. It runs on Node 24.
+The starter is a complete, project-independent agent for one shared workspace. It combines Yada's provider adapters, durable worker, encrypted storage, typed tools and browser widget. It runs on Node 24 or newer.
 
 ## Create a standalone app
 
@@ -34,7 +34,6 @@ Open the generated `.env.starter` and set your provider configuration:
 
 ```dotenv
 YADA_LLM_PROVIDER=anthropic
-YADA_LLM_MODEL=claude-sonnet-4-6
 YADA_LLM_API_KEY=your-provider-api-key
 ```
 
@@ -70,7 +69,7 @@ Skills are discovered automatically from project skill folders. See [skills](ski
 
 By default, the starter opens without login. Leave `YADA_STARTER_PASSWORD` unset or empty for this mode. Anyone who can reach the starter can use its provider account, access the shared workspace and invoke its configured tools. Use password protection or your host’s authentication when access should be restricted.
 
-To enable login, add `YADA_STARTER_PASSWORD` with a 24–256 character password to `.env.starter` and restart. Remove it or set it empty to disable login. Signed session cookies expire after eight hours, are HttpOnly and SameSite=Strict, and use Secure on HTTPS. Login attempts are bounded. Mutations require the configured browser origin. In password-protected mode, logout revokes that session; restarting the server invalidates sessions and requires login again. Without a password, the chat opens directly and has no sign-out button.
+To enable login, add `YADA_STARTER_PASSWORD` with a 24–256 character password to `.env.starter` and restart. Remove it or set it empty to disable login. Signed session cookies expire after eight hours, are HttpOnly and SameSite=Strict, and use Secure on HTTPS. Login attempts are limited to 10 per minute per client address (the proxy's last `X-Forwarded-For` entry when behind a local reverse proxy). Mutations require the configured browser origin. In password-protected mode, logout revokes that session; restarting the server invalidates sessions and requires login again. Without a password, the chat opens directly and has no sign-out button.
 
 Conversations and unfinished runs remain durable across restarts. Reloading the browser resumes its saved run instead of submitting it again. Logging out disconnects the interface; use **Cancel run** to cancel work already submitted.
 

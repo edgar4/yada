@@ -9,7 +9,6 @@ try {
     filename,
     [
       "YADA_LLM_PROVIDER=anthropic",
-      "YADA_LLM_MODEL=claude-sonnet-4-6",
       "YADA_LLM_API_KEY=",
       `YADA_STORAGE_KEY=${randomBytes(32).toString("hex")}`,
       "",

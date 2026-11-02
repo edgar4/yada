@@ -40,6 +40,9 @@ const waiting = {
   text: malicious,
 };
 let decision: boolean | undefined;
+let decisionBody = "";
+let failureCode: string | undefined;
+const steered: string[] = [];
 let cancelRequested = false;
 let reconnectOnce = false;
 let deltaMode = false;
@@ -129,6 +132,12 @@ const server = createServer((request, response) => {
       connections++;
       cursors.push(url.searchParams.get("after") ?? "0");
       response.setHeader("content-type", "application/x-ndjson");
+      if (failureCode) {
+        response.end(
+          `${JSON.stringify(queued)}\n${JSON.stringify({ version: 1, sequence: 2, type: "failed", at: 1, code: failureCode })}\n`,
+        );
+        return;
+      }
       if (reconnectOnce) {
         reconnectOnce = false;
         response.end(`${JSON.stringify(queued)}\n`);
@@ -159,6 +168,16 @@ const server = createServer((request, response) => {
         closed++;
         streams.delete(response);
       });
+    } else if (url.pathname.endsWith("/messages")) {
+      let body = "";
+      request.on("data", (chunk: Buffer) => {
+        body += chunk.toString();
+      });
+      request.on("end", () => {
+        steered.push(body);
+        response.writeHead(202);
+        response.end("{}");
+      });
     } else if (url.pathname.endsWith("/decision")) {
       if (decisionFailure) {
         response.writeHead(409);
@@ -170,6 +189,7 @@ const server = createServer((request, response) => {
         body += chunk.toString();
       });
       request.on("end", () => {
+        decisionBody = body;
         decision = (JSON.parse(body) as { approved: boolean }).approved;
         if (operationMode) {
           heldOperation = response;
@@ -296,6 +316,9 @@ afterEach(async () => {
 });
 beforeEach(() => {
   decision = undefined;
+  decisionBody = "";
+  failureCode = undefined;
+  steered.length = 0;
   operationMode = undefined;
   heldOperation = heldRun = undefined;
   holdRun = false;
@@ -361,12 +384,7 @@ describe("browser widget", () => {
     await page.keyboard.press("Enter");
     const widget = page.locator("yada-chat").first();
     await widget.getByRole("button", { name: "Approve action" }).waitFor();
-    expect(await widget.getByRole("textbox").isDisabled()).toBe(true);
-    expect(
-      await widget
-        .getByRole("button", { name: "Send", exact: true })
-        .isDisabled(),
-    ).toBe(true);
+    expect(await widget.getByRole("textbox").isDisabled()).toBe(false);
     expect(
       await widget
         .getByRole("button", { name: "Approve action" })
@@ -414,12 +432,9 @@ describe("browser widget", () => {
     const page = await open();
     const widget = await start(page);
     await widget.getByRole("button", { name: "Decline action" }).click();
-    await page.waitForFunction(
-      () =>
-        !document
-          .querySelector("yada-chat")
-          ?.shadowRoot?.querySelector("textarea")?.disabled,
-    );
+    await expect
+      .poll(() => widget.getByRole("status").textContent())
+      .toBe("completed");
     expect(decision).toBe(false);
     await widget.getByRole("textbox").fill("Second");
     await widget.getByRole("button", { name: "Send", exact: true }).click();
@@ -434,14 +449,77 @@ describe("browser widget", () => {
     const other = await start(next);
     await other.getByRole("button", { name: "Cancel run" }).click();
     await expect.poll(() => cancelRequested).toBe(true);
-    await next.waitForFunction(
-      () =>
-        !document
-          .querySelector("yada-chat")
-          ?.shadowRoot?.querySelector("textarea")?.disabled,
-    );
-    expect(await other.getByRole("status").textContent()).toBe("cancelled");
+    await expect
+      .poll(() => other.getByRole("status").textContent())
+      .toBe("cancelled");
     await next.close();
+  });
+
+  it.each([
+    ["timeout", "The run took too long and was stopped."],
+    ["limit", "The run stopped after reaching its usage limit."],
+    ["unknown_code", "The run failed."],
+  ])("shows a visible error when a run fails with %s", async (code, text) => {
+    failureCode = code;
+    const page = await open();
+    const widget = await start(page);
+    await expect.poll(() => widget.getByRole("alert").textContent()).toBe(text);
+    expect(await widget.getByRole("textbox").isDisabled()).toBe(false);
+    await page.close();
+  });
+
+  it("applies label overrides and adopts styles without a style element", async () => {
+    const page = await open();
+    const widget = page.locator("yada-chat").first();
+    await page.evaluate(() => {
+      const element = document.querySelector<YadaWidget>("yada-chat");
+      element?.configure({
+        client: window.createTestClient(location.origin + "/api"),
+        conversationId: "chat",
+        profileId: "support",
+        labels: { title: "Assistent", send: "Senden", placeholder: "Frage" },
+      });
+    });
+    await widget.getByRole("button", { name: "Senden", exact: true }).waitFor();
+    expect(await widget.locator("h2").textContent()).toBe("Assistent");
+    expect(await widget.getByRole("textbox").getAttribute("placeholder")).toBe(
+      "Frage",
+    );
+    expect(
+      await widget.evaluate((node) => ({
+        sheets: node.shadowRoot?.adoptedStyleSheets.length,
+        styles: node.shadowRoot?.querySelectorAll("style").length,
+      })),
+    ).toEqual({ sheets: 1, styles: 0 });
+    await page.close();
+  });
+
+  it("steers an active run and remembers an approval only when checked", async () => {
+    const page = await open();
+    const widget = await start(page);
+    await widget.getByRole("button", { name: "Approve action" }).waitFor();
+    await widget.getByRole("textbox").fill("Actually, use blue");
+    await widget.getByRole("button", { name: "Send", exact: true }).click();
+    await expect.poll(() => steered.length).toBe(1);
+    expect(JSON.parse(steered[0] ?? "{}")).toMatchObject({
+      input: "Actually, use blue",
+    });
+    await expect
+      .poll(() => widget.locator(".user").last().textContent())
+      .toContain("Actually, use blue");
+    expect(await widget.getByRole("textbox").inputValue()).toBe("");
+    const remember = widget.getByRole("checkbox", {
+      name: "Remember this approval for this run",
+    });
+    expect(await remember.isChecked()).toBe(false);
+    await remember.check();
+    await widget.getByRole("button", { name: "Approve action" }).click();
+    await expect.poll(() => decisionBody).not.toBe("");
+    expect(JSON.parse(decisionBody)).toEqual({
+      approved: true,
+      remember: "run",
+    });
+    await page.close();
   });
 
   it("replays from the cursor across transport interruption and element reconnection", async () => {
@@ -594,7 +672,9 @@ describe("browser widget", () => {
       expect((await settled).status()).toBe(status);
       await page.waitForFunction(() => window.finishedOperations > 0);
       expect(await widget.getByRole("status").textContent()).toBe(terminal);
-      expect(await widget.getByRole("alert").textContent()).toBe("");
+      expect(await widget.getByRole("alert").textContent()).toBe(
+        operation === "Cancel run" ? "The run was cancelled." : "",
+      );
       expect(await widget.getByRole("textbox").isDisabled()).toBe(false);
       await page.close();
     },

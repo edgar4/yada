@@ -76,8 +76,7 @@ export function createStarterAuth(options: {
         origin.startsWith("https:"),
       )
     : undefined;
-  let attempts = 0;
-  let windowEnds = 0;
+  const limits = new Map<string, { attempts: number; windowEnds: number }>();
   const json = (
     body: Record<string, unknown>,
     status = 200,
@@ -125,17 +124,22 @@ export function createStarterAuth(options: {
         return json({ authenticated: false }, 200, {
           "set-cookie": cookies.logout(request),
         });
-      if (Date.now() >= windowEnds) {
-        attempts = 0;
-        windowEnds = Date.now() + 60_000;
-      }
-      if (attempts >= 10)
+      const now = Date.now();
+      for (const [key, limit] of limits)
+        if (now >= limit.windowEnds) limits.delete(key);
+      const client = request.headers.get("x-yada-client-ip") ?? "";
+      const limit = limits.get(client) ?? {
+        attempts: 0,
+        windowEnds: now + 60_000,
+      };
+      limits.set(client, limit);
+      if (limit.attempts >= 10)
         return json({ error: "Too many login attempts" }, 429, {
           "retry-after": String(
-            Math.max(1, Math.ceil((windowEnds - Date.now()) / 1000)),
+            Math.max(1, Math.ceil((limit.windowEnds - now) / 1000)),
           ),
         });
-      attempts++;
+      limit.attempts++;
       if (
         request.headers
           .get("content-type")
