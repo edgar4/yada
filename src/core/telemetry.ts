@@ -74,6 +74,11 @@ export function tracingHooks(
             "usage.cache_write_tokens",
             result.usage.cacheWriteTokens,
           );
+        if (result.usage.serverToolCalls !== undefined)
+          model.setAttribute(
+            "usage.server_tool_calls",
+            result.usage.serverToolCalls,
+          );
       }
       close(model, true);
       model = undefined;
