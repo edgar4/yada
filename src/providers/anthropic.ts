@@ -1,21 +1,10 @@
-import { z } from "zod";
 import { nativeAnthropicAdapter } from "./native/anthropic.js";
-import {
-  effort,
-  modelOptions,
-  promptCache,
-  serverToolFields,
-  thinkingDisplay,
-} from "./options.js";
-const anthropicOptions = modelOptions
-  .omit({ temperature: true })
-  .extend({ effort, thinkingDisplay, promptCache, ...serverToolFields });
-export function createAnthropicProvider(
-  config: z.input<typeof anthropicOptions>,
-) {
-  const options = anthropicOptions.parse(config);
+import { modelOptions, type ModelOptions } from "./options.js";
+export function createAnthropicProvider(config: ModelOptions) {
+  const options = modelOptions.parse(config);
   return nativeAnthropicAdapter({
     ...options,
     model: options.model ?? "claude-opus-5-5",
+    serverTools: options.serverTools ?? ["web_search"],
   });
 }

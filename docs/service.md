@@ -31,6 +31,8 @@ server.listen(3000, "127.0.0.1");
 
 Import the functions from Yada's public entry point. Authentication must return the verified `{ tenantId, actorId }`, never values copied from the request body. Profile authorization decides which configured agent the actor can use. Use explicit allowed browser origins and host-managed sessions or bearer credentials. Provider credentials remain on the server.
 
+Optional `quota` limits run submissions and spend per tenant or actor; see [Operations](operations.md#tenant-quotas). Pass the same `quota` to `createHandler` and `createWorker`.
+
 On shutdown, stop accepting new requests, await `worker.stop()`, then close storage. Shutdown leaves active runs recoverable; user cancellation is a separate operation. Start one migration opener before scaling workers. SQLite uses one persistent local volume; PostgreSQL and MySQL support workers on multiple hosts with synchronized clocks.
 
 ## HTTP API
@@ -77,16 +79,16 @@ For clients in other languages (a Python package belongs in its own repository).
 
 Errors are `{ "error": string }` with these statuses:
 
-| Status | Meaning                                                                                                                                     |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | Invalid request body or parameters                                                                                                          |
-| 401    | Authentication required; renew credentials, then retry                                                                                      |
-| 403    | Origin or profile denied; do not retry                                                                                                      |
-| 404    | Unknown path, run or approval; also the response for runs of another tenant or actor                                                        |
-| 409    | Conflict: run ID reused with different input, unfinished run in the conversation, approval not pending, or `after` beyond the stored events |
-| 413    | Request body too large                                                                                                                      |
-| 429    | Reserved for host rate limiting; Yada's handler does not return it. Honor `Retry-After`, then retry                                         |
-| 503    | Temporary failure; retry with backoff                                                                                                       |
+| Status | Meaning                                                                                                                                                |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 400    | Invalid request body or parameters                                                                                                                     |
+| 401    | Authentication required; renew credentials, then retry                                                                                                 |
+| 403    | Origin or profile denied; do not retry                                                                                                                 |
+| 404    | Unknown path, run or approval; also the response for runs of another tenant or actor                                                                   |
+| 409    | Conflict: run ID reused with different input, unfinished run in the conversation, approval not pending, or `after` beyond the stored events            |
+| 413    | Request body too large                                                                                                                                 |
+| 429    | Tenant or actor quota exceeded on run submission (`{ "error": "Rate limit exceeded" }`), or host rate limiting. Wait `Retry-After` seconds, then retry |
+| 503    | Temporary failure; retry with backoff                                                                                                                  |
 
 Event lines are JSON objects `{ version: 1, sequence, type, at }` plus optional `text`, `code`, `approvalId`, `expiresAt`, `tool`, `failed`, `inputTokens`, `outputTokens`. Types: `queued`, `running`, `progress`, `awaiting_approval`, `reconciling`, `completed`, `failed`, `cancelled`, `tool_started`, `tool_finished`, `usage`, `steering_received` and, only on a shared event bus, `text_delta`. Terminal types are `completed` (`text`), `failed` (`code`) and `cancelled`. `tests/fixtures/service-events.ndjson` holds a sample stream that the test suite validates against the event schema.
 

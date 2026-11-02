@@ -1,6 +1,7 @@
 export { createWorker } from "../service/worker.js";
 export type { AgentProfile, Trace } from "../service/worker.js";
 export { createHandler } from "../service/http.js";
+export type { QuotaOptions } from "../service/quota.js";
 export { createEventBus } from "../service/events.js";
 export type { EventBus } from "../service/events.js";
 export { createNodeServer } from "../service/node.js";

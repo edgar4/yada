@@ -14,9 +14,25 @@ Service profiles optionally set `historyChars` (default 128,000). The worker ret
 
 For an optional per-run spending reservation, set both `limits.maxCostMicros` and `limits.costPerCallMicros`. One million micros is one unit of your accounting currency. The host supplies a conservative maximum cost per call based on its configured model, output limit, context bound and billing rules. Each model attempt reserves that amount durably before dispatch, including attempts interrupted by a crash. Reservations are not refunded automatically. A request that would exceed the configured reservation budget is blocked.
 
-To bound spending by what the provider reports instead, set `limits.pricing` (`inputMicrosPer1k`, `outputMicrosPer1k`) with `maxCostMicros`; `costPerCallMicros` is then optional. Optional `cacheReadMicrosPer1k` and `cacheWriteMicrosPer1k` price cached input tokens; without them cached tokens are priced as input. Before each model request the run's accumulated reported usage is priced, and the run ends with `limit` once the cost reaches `maxCostMicros`. Calls whose provider reports no usage count as zero, so keep `costPerCallMicros` as a backstop for such providers.
+To bound spending by what the provider reports instead, set `limits.pricing` (`inputMicrosPer1k`, `outputMicrosPer1k`) with `maxCostMicros`; `costPerCallMicros` is then optional. Optional `cacheReadMicrosPer1k` and `cacheWriteMicrosPer1k` price cached input tokens; without them cached tokens are priced as input. Before each model request the run's accumulated reported usage is priced, and the run ends with `limit` once the cost reaches `maxCostMicros`. Calls whose provider reports no usage count as zero, so keep `costPerCallMicros` as a backstop for such providers. Provider-hosted web search, on by default for Anthropic, OpenAI and Gemini, is billed per search by the provider and not included in these limits; cap it with `webSearch.maxUses` or turn it off with `YADA_LLM_SERVER_TOOLS=none`.
 
 This does not discover provider pricing or guarantee the provider's final invoice. Configure provider-side account limits as well. Actual reported input/output token usage is retained in checkpoints when the provider supplies it; absent usage stays unknown rather than being reported as zero. Profile versions bind these limits for recovery.
+
+## Tenant quotas
+
+Per-run limits do not bound a tenant over time. Pass `quota` to `createHandler` and the same value to `createWorker`:
+
+```ts
+const quota = {
+  requests: { limit: 100, windowMs: 3_600_000 },
+  costMicros: { limit: 5_000_000, windowMs: 86_400_000 },
+  scope: "tenant",
+};
+```
+
+`scope` is `"tenant"` (default, shared by all actors) or `"actor"`. Counters are fixed windows kept in storage, so they hold across instances; one record per scope holds only the current window. `POST .../runs` consumes one request unit; resubmitting an existing run ID does not. Once a window is exhausted, or the cost window is at or over `limit`, submission returns `429` with `Retry-After` (seconds until the window ends) and `{ "error": "Rate limit exceeded" }`.
+
+The worker adds each finished run's reported usage, priced with the profile `limits.pricing` (including cache pricing), to the cost window. Runs of profiles without `pricing` or without reported usage add nothing. A run already in flight is never stopped, so spend can overshoot `limit` by one run. Without `quota`, nothing changes. Other endpoints, including steering messages, do not consume quota. Handler and worker must use the same `quota`; a worker without it does not accrue cost.
 
 ## Backup, restore and encryption keys
 

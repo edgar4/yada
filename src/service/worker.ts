@@ -1,4 +1,8 @@
-import { contextWindow, type RunLimits } from "../core/limits.js";
+import {
+  contextWindow,
+  usageCostMicros,
+  type RunLimits,
+} from "../core/limits.js";
 import {
   modelHistory,
   summaryOf,
@@ -20,6 +24,7 @@ import { RunLeaseError, type RunOwnership } from "../storage/runs.js";
 import type { YadaStorage } from "../storage/index.js";
 import type { JobStore } from "../storage/jobs.js";
 import { isTerminal, type RunEvent } from "./contracts.js";
+import { quotaScopeKey, type QuotaOptions } from "./quota.js";
 import { eventKey, type EventBus } from "./events.js";
 import { composeHooks, type AgentEvent, type RunHooks } from "../core/hooks.js";
 export type AgentProfile = Readonly<{
@@ -60,6 +65,7 @@ export function createWorker(options: {
   concurrency?: number;
   maxAttempts?: number;
   bus?: EventBus;
+  quota?: QuotaOptions;
   trace?: (event: Trace) => void | Promise<void>;
 }) {
   const shutdown = new AbortController();
@@ -197,6 +203,17 @@ export function createWorker(options: {
         ...(await counters()),
       });
     };
+    const accrueCost = async () => {
+      const { quota } = options;
+      const pricing = profile.limits?.pricing;
+      const usage = (await runs.load(identity, runId))?.checkpoint?.usage;
+      if (!quota?.costMicros || !pricing || !usage) return;
+      await options.storage.quota.addCost(
+        quotaScopeKey(identity, quota),
+        quota.costMicros.windowMs,
+        Math.ceil(usageCostMicros(pricing, usage)),
+      );
+    };
     const finalize = async (result: TerminalResult) => {
       const latest = await loadJob();
       const final: TerminalResult =
@@ -227,6 +244,7 @@ export function createWorker(options: {
         turns,
         summary,
       );
+      await accrueCost().catch(() => undefined);
       await traceFinished(
         final.status,
         final.status === "failed" ? final.code : undefined,

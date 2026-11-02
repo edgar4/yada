@@ -98,6 +98,7 @@ describe("request mapping", () => {
             },
           ],
         },
+        { googleSearch: {} },
       ],
       contents: [
         {
@@ -552,12 +553,6 @@ describe("errors", () => {
       expect(result).toEqual({ status: "completed", text: "Done" });
       expect(execute).toHaveBeenCalledTimes(1);
       expect(calls).toHaveLength(2);
-    });
-
-    it("rejects webSearch options", () => {
-      expect(() =>
-        gemini({ serverTools: ["web_search"], webSearch: { maxUses: 1 } }),
-      ).toThrow();
     });
   });
 });

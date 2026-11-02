@@ -12,6 +12,7 @@ import {
   steeringInputSchema,
   type RunEvent,
 } from "./contracts.js";
+import { quotaScopeKey, type QuotaOptions } from "./quota.js";
 import { eventKey, type EventBus } from "./events.js";
 export async function readJson(
   request: Request,
@@ -40,6 +41,7 @@ export function createHandler(options: {
   authenticate: (request: Request) => Promise<Identity | undefined>;
   authorizeProfile: (identity: Identity, profileId: string) => Promise<boolean>;
   bus?: EventBus;
+  quota?: QuotaOptions;
 }) {
   const pollMs = options.bus ? 500 : 100;
   return async (request: Request): Promise<Response> => {
@@ -82,6 +84,23 @@ export function createHandler(options: {
         );
         if (!(await options.authorizeProfile(identity, input.profileId)))
           return json({ error: "Profile denied" }, 403);
+        const { quota } = options;
+        if (
+          quota &&
+          !(await options.storage.jobs.load(identity, conversationId, input.id))
+        ) {
+          const denied = await options.storage.quota.consume(
+            quotaScopeKey(identity, quota),
+            quota,
+          );
+          if (denied) {
+            headers.set(
+              "retry-after",
+              String(Math.ceil(denied.retryAfterMs / 1000)),
+            );
+            return json({ error: "Rate limit exceeded" }, 429);
+          }
+        }
         return json(
           await options.storage.jobs.submit(identity, conversationId, input),
           202,

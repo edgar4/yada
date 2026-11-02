@@ -25,9 +25,8 @@ const anthropic = () =>
   createProvider({ provider: "anthropic", apiKey: "k", model: "c" });
 const openai = (extra: object = {}) =>
   createProvider({
-    provider: "openai",
-    api: "chat",
-    apiKey: "k",
+    provider: "openai-compatible",
+    baseUrl: "http://localhost:1/v1",
     model: "m",
     ...extra,
   });
@@ -82,6 +81,7 @@ describe("anthropic", () => {
           description: "Lookup",
           input_schema: { type: "object" },
         },
+        { type: "web_search_20260318", name: "web_search" },
       ],
     });
     expect(calls[0]?.body).not.toHaveProperty("temperature");
@@ -370,37 +370,21 @@ describe("anthropic", () => {
       expect(result.finishReason).toBe("tool_calls");
     });
 
-    it("rejects unsupported combinations", () => {
-      expect(() =>
-        createProvider({
-          provider: "openai",
-          api: "chat",
-          apiKey: "k",
-          serverTools: ["web_search"],
-        }),
-      ).toThrow();
-      expect(() =>
-        createProvider({
-          provider: "deepseek",
-          apiKey: "k",
-          serverTools: ["web_search"],
-        }),
-      ).toThrow();
-      expect(() =>
-        createProvider({
-          provider: "ollama",
-          model: "m",
-          serverTools: ["web_search"],
-        } as never),
-      ).toThrow();
-      expect(() =>
-        createProvider({
+    it("ignores server tools where a provider has none", () => {
+      for (const config of [
+        { provider: "deepseek", apiKey: "k", serverTools: ["web_search"] },
+        { provider: "ollama", model: "m", serverTools: ["web_search"] },
+        {
           provider: "gemini",
           apiKey: "k",
           serverTools: ["web_search"],
           webSearch: { maxUses: 1 },
-        }),
-      ).toThrow();
+        },
+      ] satisfies Parameters<typeof createProvider>[0][])
+        expect(() => createProvider(config)).not.toThrow();
+    });
+
+    it("rejects unknown server tools", () => {
       expect(() =>
         providerConfigFromEnv({
           YADA_LLM_PROVIDER: "anthropic",
