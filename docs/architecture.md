@@ -54,7 +54,15 @@ The runtime supports read tools, a scripted testing provider, and native adapter
 
 ## Sub-agents
 
-`agentTool({ name, description, provider, tools, system, limits?, maxRounds?, hooks?, authorize? })` returns a read tool with input `{ task }` that runs a nested `run()` with the caller's identity and signal and returns the completed text. `authorize` gates which identities see the sub-agent (default: everyone); its inner tools still apply their own authorization. A failed or suspended sub-agent returns `{"error": "agent_failed", "message": "The sub-agent failed: <code>"}` as the tool result, so the parent model sees only the failure code. Cancellation propagates through the shared signal. Write tools are rejected at construction, and agent tools nest at most two deep (checked at construction). The parent's hooks and limits do not apply inside the sub-agent; pass `hooks` and `limits` to `agentTool`, and note each call gets its own budget. Sub-agent runs are in-memory with no checkpoint, so a resumed parent re-runs the sub-agent, which is safe because it is read-only.
+`agentTool({ name, description, provider, tools, system, limits?, maxRounds?, hooks?, authorize? })` returns a read tool with input `{ task }` that runs a nested agent with the caller's identity and signal and returns the completed text. `authorize` gates which identities see the sub-agent (default: everyone); its inner tools still apply their own authorization. A failed sub-agent returns `{"error": "agent_failed", "message": "The sub-agent failed: <code>"}` as the tool result, so the parent model sees only the failure code. Agent tools nest at most two deep (checked at construction). The parent's hooks and limits do not apply inside the sub-agent; pass `hooks` and `limits` to `agentTool`, and note each call gets its own budget.
+
+Plain `run()` keeps the sub-agent in memory with no checkpoint, so a resumed parent re-runs it; write tools then fail the sub-agent as `unsupported`. Under `runDurable` or the worker, the sub-agent is durable and may use write tools:
+
+- Its run ID is derived from the parent run ID and tool call ID and is stored through the same run store, so a resumed parent re-issues the agent tool call and the sub-agent continues from its checkpoint. A sub-agent that already finished returns its stored result without calling the model again.
+- A sub-agent write needs approval like any other. Its action belongs to the parent run (call ID `sub:<parent call ID>:<call ID>`), so the existing approval endpoints work unchanged. The parent suspends with that approval ID and the sub-agent's lease is released.
+- Cancellation, shutdown and lease loss abort the sub-agent through the shared signal. Checkpoint or lease failures in the sub-agent fail the parent attempt so the job retries.
+- When the sub-agent ends, its token usage is added to the parent's `usage`. Its limits are its own.
+- Erasing a conversation also removes sub-agent runs and their actions, and cancellation waits while a sub-agent write is executing.
 
 ## Development checks
 
