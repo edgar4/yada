@@ -8,6 +8,9 @@ import { closeNodeServer, createNodeServer } from "../src/service/node.js";
 import { createWorker } from "../src/service/worker.js";
 import { createFakeProvider } from "../src/providers/fake.js";
 import { operationId } from "../src/storage/actions.js";
+import { openDatabase } from "../src/storage/database.js";
+import { recordStore } from "../src/storage/records.js";
+import { conversationKey } from "../src/storage/conversations.js";
 
 async function setup(extra: Partial<Parameters<typeof createHandler>[0]> = {}) {
   const s = await storageFixture("sqlite");
@@ -104,7 +107,7 @@ it("does not burn quota on conflicts", async () => {
 
 it("limits requests and concurrent streams per actor", async () => {
   const s = await setup({
-    limits: { requestsPerMinute: 3, streamsPerActor: 1 },
+    limits: { requestsPerMinute: 4, streamsPerActor: 1 },
   });
   expect((await s.submit("a")).status).toBe(202);
   const stream = await s.call("/v1/conversations/chat/runs/a/events");
@@ -137,8 +140,14 @@ it("shares request and stream limits across instances", async () => {
   const refused = await get("/v1/conversations/chat/runs/a/events");
   expect(refused.status).toBe(429);
   await stream.body?.cancel();
-  expect((await get("/v1/conversations")).status).toBe(200);
-  expect((await get("/v1/conversations")).status).toBe(429);
+  const remove = (
+    call: (path: string, init: RequestInit) => Promise<Response>,
+  ) => call("/v1/conversations/none", { method: "DELETE" });
+  const other_ = (path: string, init: RequestInit) =>
+    other(new Request(`http://localhost${path}`, init));
+  expect((await remove(other_)).status).toBe(404);
+  expect((await remove(other_)).status).toBe(404);
+  expect((await remove(s.call)).status).toBe(429);
 });
 
 it("fails open and reports when the shared counters fail", async () => {
@@ -355,4 +364,74 @@ it("applies node server defaults and drains on close", async () => {
   expect(onError).toHaveBeenCalledOnce();
   await closeNodeServer(server);
   expect(server.listening).toBe(false);
+});
+
+it("applies the per-actor request limit to submissions", async () => {
+  const s = await setup({ limits: { requestsPerMinute: 2 } });
+  expect((await s.submit("a")).status).toBe(202);
+  expect((await s.submit("a")).status).toBe(202);
+  expect((await s.submit("a")).status).toBe(429);
+});
+
+it("maps stored-data parse errors to 503 and unknown deletes to 404 without a tombstone", async () => {
+  const onError = vi.fn();
+  const s = await setup({ onError });
+  expect(
+    (await s.call("/v1/conversations/ghost", { method: "DELETE" })).status,
+  ).toBe(404);
+  expect(
+    (await s.storage.conversations.inspect(s.identity, "ghost")).exists,
+  ).toBe(false);
+  expect((await s.call("/v1/conversations?limit=0")).status).toBe(400);
+  const db = await openDatabase(s.config);
+  await recordStore(db, s.config.encryptionKey).write(
+    conversationKey(s.identity, "bad"),
+    { messages: "nope" },
+    0,
+  );
+  await db.destroy();
+  expect((await s.call("/v1/conversations/bad")).status).toBe(503);
+  expect(onError).toHaveBeenCalledOnce();
+});
+
+it("answers 409 when deleting a conversation with unfinished actions or runs", async () => {
+  const s = await setup();
+  expect((await s.submit("a")).status).toBe(202);
+  await s.storage.jobs.update(s.identity, "chat", "a", { type: "running" });
+  await expect(
+    s.storage.retention.eraseConversation(s.identity, "chat"),
+  ).rejects.toMatchObject({ status: 409 });
+});
+
+type Page = { conversations: { id: string }[]; next?: string };
+it("lists conversations most recently updated first", async () => {
+  const s = await setup();
+  for (const id of ["x", "y", "z"]) {
+    expect((await s.submit("r", id)).status).toBe(202);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  const first = (await (
+    await s.call("/v1/conversations?limit=2")
+  ).json()) as Page;
+  expect(first.conversations.map((item: { id: string }) => item.id)).toEqual([
+    "z",
+    "y",
+  ]);
+  const rest = (await (
+    await s.call(`/v1/conversations?limit=2&after=${first.next ?? ""}`)
+  ).json()) as Page;
+  expect(rest.conversations.map((item: { id: string }) => item.id)).toEqual([
+    "x",
+  ]);
+});
+
+it("reports not ready when the schema is behind", async () => {
+  const s = await setup();
+  const db = await openDatabase(s.config, { migrate: false });
+  await db.schema.alterTable("yada_records", (table) => {
+    table.dropIndex(["scope", "updated_at", "id"]);
+    table.dropColumn("updated_at");
+  });
+  await db.destroy();
+  expect((await s.call("/readyz")).status).toBe(503);
 });

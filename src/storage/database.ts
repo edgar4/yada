@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import knex, { type Knex } from "knex";
 import { z } from "zod";
 import { knexClient } from "../optional.js";
-import { isTerminal } from "../service/contracts.js";
+import { isTerminal } from "../service/terminal.js";
 import { storageConfig, type StorageConfig } from "./config.js";
 import { storageCipher } from "./crypto.js";
 import { conversationKey } from "./conversations.js";
@@ -24,42 +24,63 @@ export async function backfillRecords(db: Knex, config: StorageConfig) {
     options.encryptionKey,
     options.previousEncryptionKeys,
   );
-  for (;;) {
-    const rows = rowSchema.parse(
-      await db("yada_records")
-        .whereNull("kind")
-        .orWhere({ kind: "conversation", active: null })
-        .orWhere((query) => {
-          void query
-            .whereIn("kind", ["conversation", "retired"])
-            .whereNull("scope");
-        })
-        .orderBy("id")
-        .limit(100),
-    );
-    if (!rows.length) break;
-    for (const row of rows) {
-      const value = cipher.open(row.id, row.value);
-      const state = conversationStateSchema.safeParse(value);
-      const conversation =
-        row.kind === "conversation" || Array.isArray(value) || state.success;
-      const kind = row.kind ?? (conversation ? "conversation" : "legacy");
-      const key = state.success
-        ? conversationKey(state.data.identity, state.data.id)
-        : retiredSchema.safeParse(value).data?.key;
-      await db("yada_records")
-        .where({ id: row.id, revision: row.revision })
-        .update({
-          kind,
-          ...(kind === "conversation" || kind === "retired"
-            ? { scope: (key && scopeFor(key)) ?? "" }
-            : {}),
-          active:
-            state.success &&
-            state.data.jobs.some((job) => !isTerminal(job.status)),
-        });
+  const stale = [
+    (query: Knex.QueryBuilder) => query.whereNull("kind"),
+    (query: Knex.QueryBuilder) =>
+      query.where({ kind: "conversation" }).where((nulls) => {
+        void nulls.whereNull("active").orWhereNull("updated_at");
+      }),
+    (query: Knex.QueryBuilder) =>
+      query
+        .whereIn("kind", ["conversation", "retired", "grant"])
+        .whereNull("scope"),
+    (query: Knex.QueryBuilder) => query.where({ kind: "legacy" }),
+  ];
+  for (const condition of stale)
+    for (let after = ""; ;) {
+      const rows = rowSchema.parse(
+        await condition(db("yada_records"))
+          .andWhere("id", ">", after)
+          .orderBy("id")
+          .limit(100),
+      );
+      const last = rows.at(-1);
+      if (!last) break;
+      after = last.id;
+      for (const row of rows) {
+        const value = cipher.open(row.id, row.value);
+        if (value === true) {
+          await db("yada_records")
+            .where({ id: row.id, revision: row.revision })
+            .delete();
+          continue;
+        }
+        if (row.kind === "legacy") continue;
+        const state = conversationStateSchema.safeParse(value);
+        const conversation =
+          row.kind === "conversation" || Array.isArray(value) || state.success;
+        const kind = row.kind ?? (conversation ? "conversation" : "legacy");
+        const key = state.success
+          ? conversationKey(state.data.identity, state.data.id)
+          : retiredSchema.safeParse(value).data?.key;
+        await db("yada_records")
+          .where({ id: row.id, revision: row.revision })
+          .update({
+            kind,
+            ...(kind === "conversation" ||
+            kind === "retired" ||
+            kind === "grant"
+              ? { scope: (key && scopeFor(key)) ?? "" }
+              : {}),
+            ...(kind === "conversation"
+              ? { updated_at: state.data?.jobs.at(-1)?.updatedAt ?? 0 }
+              : {}),
+            active:
+              state.success &&
+              state.data.jobs.some((job) => !isTerminal(job.status)),
+          });
+      }
     }
-  }
   await db("yada_records")
     .where({
       id: createHash("sha256")
@@ -96,11 +117,19 @@ export async function openDatabase(
             "002_discovery",
             "003_active",
             "004_scope",
+            "005_updated",
           ]),
         getMigrationName: (name) => String(name),
         getMigration: (name) =>
           Promise.resolve({
             up: async (tx: Knex) => {
+              if (name === "005_updated") {
+                await tx.schema.alterTable("yada_records", (table) => {
+                  table.bigInteger("updated_at");
+                  table.index(["scope", "updated_at", "id"]);
+                });
+                return;
+              }
               if (name === "004_scope") {
                 await tx.schema.alterTable("yada_records", (table) => {
                   table.string("scope", 64);
@@ -128,6 +157,13 @@ export async function openDatabase(
               });
             },
             down: async (tx: Knex) => {
+              if (name === "005_updated") {
+                await tx.schema.alterTable("yada_records", (table) => {
+                  table.dropIndex(["scope", "updated_at", "id"]);
+                  table.dropColumn("updated_at");
+                });
+                return;
+              }
               if (name === "004_scope") {
                 await tx.schema.alterTable("yada_records", (table) => {
                   table.dropIndex(["scope", "id"]);

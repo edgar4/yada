@@ -201,6 +201,36 @@ for (const driver of drivers)
       expect(t.execute).not.toHaveBeenCalled();
       await worker.stop();
     });
+    it("resumes a decided approval without a client read", async () => {
+      const s = await storageFixture(driver);
+      const t = toolFixture();
+      const provider = createFakeProvider((_req, n) =>
+        n === 1
+          ? { content: "", toolCalls: [call], finishReason: "tool_calls" }
+          : { content: "Declined", toolCalls: [], finishReason: "stop" },
+      );
+      await s.storage.jobs.submit(s.identity, "chat", {
+        id: "run",
+        input: "Rename",
+        profileId: "v1",
+      });
+      const worker = createWorker({
+        storage: s.storage,
+        profiles: { v1: { provider, tools: [t.tool], system: "Help" } },
+      });
+      await worker.tick();
+      const id = operationId(
+        s.identity,
+        JSON.stringify(["chat", "run"]),
+        call.id,
+      );
+      await s.storage.actions.decide(s.identity, id, false);
+      await worker.tick();
+      expect(
+        (await s.storage.jobs.load(s.identity, "chat", "run"))?.status,
+      ).toBe("completed");
+      await worker.stop();
+    });
   });
 it("expires an approved action before execution and rejects out-of-order receipts", async () => {
   const s = await storageFixture("sqlite");

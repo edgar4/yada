@@ -93,7 +93,10 @@ export interface JobStore {
     lease?: RunOwnership,
   ): Promise<Job>;
   cancel(identity: Identity, conversationId: string, id: string): Promise<void>;
-  pending(after?: string): Promise<{
+  pending(
+    after?: string,
+    onCorrupt?: (error: z.ZodError) => void,
+  ): Promise<{
     cursor: string;
     jobs: { identity: Identity; conversationId: string; job: Job }[];
   }>;
@@ -374,7 +377,7 @@ export function createJobStore(
         },
       );
     },
-    async pending(after = "") {
+    async pending(after = "", onCorrupt) {
       const rows = await records.scan("conversation", after, 100, true);
       const jobs: {
         identity: Identity;
@@ -382,11 +385,18 @@ export function createJobStore(
         job: Job;
       }[] = [];
       for (const row of rows) {
-        const state = conversationStateSchema.parse(row.value);
+        const parsed = conversationStateSchema.safeParse(row.value);
+        if (!parsed.success) {
+          onCorrupt?.(parsed.error);
+          continue;
+        }
+        const state = parsed.data;
         for (const job of state.jobs)
           if (
             !isTerminal(job.status) &&
-            (job.availableAt <= Date.now() || job.cancelRequested)
+            (job.availableAt <= Date.now() ||
+              job.cancelRequested ||
+              job.status === "awaiting_approval")
           )
             jobs.push({
               identity: state.identity,

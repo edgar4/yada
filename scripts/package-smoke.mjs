@@ -70,6 +70,17 @@ try {
   );
   assert.equal(manifest.version, packed.version);
   await writeFile(
+    join(temporary, "exports.mjs"),
+    Object.entries(manifest.exports)
+      .filter(([, target]) => typeof target === "object")
+      .map(
+        ([subpath]) =>
+          `await import(${JSON.stringify(manifest.name + subpath.slice(1))});`,
+      )
+      .join("\n"),
+  );
+  execute(process.execPath, ["exports.mjs"], temporary);
+  await writeFile(
     join(temporary, "smoke.mjs"),
     `
 import assert from "node:assert/strict";

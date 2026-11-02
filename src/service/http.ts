@@ -18,6 +18,7 @@ import {
 } from "./contracts.js";
 import { quotaScopeKey, type QuotaOptions } from "./quota.js";
 import { eventKey, type EventBus } from "./events.js";
+import { resumeDecided } from "./recovery.js";
 export async function readJson(
   request: Request,
   maximum = 65_536,
@@ -59,6 +60,11 @@ const visibleMessages = (
           : [],
   );
 const LEASE_TTL_MS = 30_000;
+const parseRequest = <T>(schema: z.ZodType<T>, value: unknown) => {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) throw new HttpError(400, "Invalid request");
+  return parsed.data;
+};
 export type HandlerLimits = Readonly<{
   requestsPerMinute?: number;
   streamsPerActor?: number;
@@ -129,9 +135,10 @@ export function createHandler(options: {
       return json({ status: "ok" });
     if (request.method === "GET" && path === "/readyz") {
       try {
-        await options.storage.conversations.inspect(
+        await options.storage.conversations.list(
           { tenantId: "readyz", actorId: "readyz" },
-          "ping",
+          undefined,
+          1,
         );
         return json({ status: "ready" });
       } catch (error) {
@@ -163,12 +170,11 @@ export function createHandler(options: {
         return json({ error: "Rate limit exceeded" }, 429);
       };
       const actorKey = JSON.stringify([identity.tenantId, identity.actorId]);
-      const submitting =
-        request.method === "POST" &&
-        /^\/v1\/conversations\/[^/]+\/runs$/.test(url.pathname);
-      const wait = submitting
-        ? undefined
-        : (retryAfter(actorKey) ?? (await sharedRetryAfter(identity, request)));
+      const wait =
+        retryAfter(actorKey) ??
+        (request.method === "POST" || request.method === "DELETE"
+          ? await sharedRetryAfter(identity, request)
+          : undefined);
       if (wait !== undefined) return throttle(wait);
       const conversation = /^\/v1\/conversations(?:\/([^/]+))?$/.exec(
         url.pathname,
@@ -177,12 +183,13 @@ export function createHandler(options: {
         if (!conversation[1]) {
           if (request.method !== "GET")
             return json({ error: "Method not allowed" }, 405);
-          const query = z
-            .object({
-              after: z.string().optional(),
+          const query = parseRequest(
+            z.object({
+              after: z.string().regex(/^\d+:/).optional(),
               limit: z.coerce.number().int().min(1).max(100).default(50),
-            })
-            .parse(Object.fromEntries(url.searchParams));
+            }),
+            Object.fromEntries(url.searchParams),
+          );
           return json(
             await options.storage.conversations.list(
               identity,
@@ -193,9 +200,12 @@ export function createHandler(options: {
         }
         const id = decodeURIComponent(conversation[1]);
         if (request.method === "DELETE") {
-          if (
-            (await options.storage.conversations.inspect(identity, id)).active
-          )
+          const state = await options.storage.conversations.inspect(
+            identity,
+            id,
+          );
+          if (!state.exists) return json({ error: "Not found" }, 404);
+          if (state.active)
             return json({ error: "Conversation has an active run" }, 409);
           await options.storage.retention.eraseConversation(identity, id);
           return new Response(null, { status: 204, headers });
@@ -214,7 +224,8 @@ export function createHandler(options: {
       const conversationId = decodeURIComponent(match[1]);
       const id = match[2] ? decodeURIComponent(match[2]) : undefined;
       if (!id && request.method === "POST") {
-        const input = jobInputSchema.parse(
+        const input = parseRequest(
+          jobInputSchema,
           await readJson(request, maxJobBodyBytes),
         );
         if (!(await options.authorizeProfile(identity, input.profileId)))
@@ -241,25 +252,8 @@ export function createHandler(options: {
       if (!id) return json({ error: "Method not allowed" }, 405);
       const job = await options.storage.jobs.load(identity, conversationId, id);
       if (!job) return json({ error: "Not found" }, 404);
-      const recover = async (current: Job) => {
-        const approvalId =
-          current.status === "awaiting_approval"
-            ? current.events
-                .filter((item) => item.type === "awaiting_approval")
-                .at(-1)?.approvalId
-            : undefined;
-        if (
-          approvalId &&
-          (await options.storage.actions.load(identity, approvalId))?.status !==
-            "pending"
-        )
-          await options.storage.jobs.resume(
-            identity,
-            conversationId,
-            id,
-            approvalId,
-          );
-      };
+      const recover = (current: Job) =>
+        resumeDecided(options.storage, identity, conversationId, current);
       if (match[3]?.startsWith("approvals/")) {
         const approvalId = match[3].split("/")[1] ?? "";
         const action = await options.storage.actions.load(identity, approvalId);
@@ -274,13 +268,14 @@ export function createHandler(options: {
           });
         if (request.method !== "POST" || !match[3].endsWith("/decision"))
           return json({ error: "Method not allowed" }, 405);
-        const decision = z
-          .strictObject({
+        const decision = parseRequest(
+          z.strictObject({
             approved: z.boolean(),
             remember: z.enum(["run", "conversation"]).optional(),
             content: z.record(z.string(), z.unknown()).optional(),
-          })
-          .parse(await readJson(request));
+          }),
+          await readJson(request),
+        );
         if (
           job.status !== "awaiting_approval" ||
           job.events.filter((item) => item.type === "awaiting_approval").at(-1)
@@ -336,7 +331,10 @@ export function createHandler(options: {
           identity,
           conversationId,
           id,
-          steeringInputSchema.parse(await readJson(request, maxJobBodyBytes)),
+          parseRequest(
+            steeringInputSchema,
+            await readJson(request, maxJobBodyBytes),
+          ),
         );
         return json({ accepted: true }, 202);
       }
@@ -351,11 +349,10 @@ export function createHandler(options: {
         return json({ ...job, history: visibleMessages(job.history) });
       }
       if (match[3] !== "events") return json({ error: "Not found" }, 404);
-      let cursor = z.coerce
-        .number()
-        .int()
-        .nonnegative()
-        .parse(url.searchParams.get("after") ?? 0);
+      let cursor = parseRequest(
+        z.coerce.number().int().nonnegative(),
+        url.searchParams.get("after") ?? 0,
+      );
       if (cursor > job.events.length)
         return json({ error: "Invalid event cursor" }, 409);
       if ((streams.get(actorKey) ?? 0) >= maxStreams) return throttle(1000);
@@ -512,11 +509,7 @@ export function createHandler(options: {
         return json({ error: error.message }, error.status);
       if (error instanceof JobConflict || error instanceof ActionConflict)
         return json({ error: error.message }, 409);
-      if (
-        error instanceof z.ZodError ||
-        error instanceof SyntaxError ||
-        error instanceof URIError
-      )
+      if (error instanceof SyntaxError || error instanceof URIError)
         return json({ error: "Invalid request" }, 400);
       if (error instanceof RangeError)
         return json({ error: "Request too large" }, 413);

@@ -23,14 +23,33 @@ export function isRetryable(error: unknown) {
     code === "ER_LOCK_WAIT_TIMEOUT"
   );
 }
+export const conversationOf = (runId: string) => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(runId);
+  } catch {
+    return runId;
+  }
+  return Array.isArray(parsed) && typeof parsed[0] === "string"
+    ? parsed[0]
+    : runId;
+};
 export function scopeFor(key: string) {
   const [kind, ...parts] = z.array(z.string()).parse(JSON.parse(key));
   const length = { conversation: 2, retired: 3 }[kind ?? ""];
-  return length === undefined
-    ? undefined
-    : createHash("sha256")
-        .update(JSON.stringify(parts.slice(0, length)))
-        .digest("hex");
+  const owner =
+    kind === "grant"
+      ? [
+          parts[0],
+          parts[1],
+          parts[2] === "run" ? conversationOf(parts[3] ?? "") : parts[3],
+        ]
+      : length === undefined
+        ? undefined
+        : parts.slice(0, length);
+  return (
+    owner && createHash("sha256").update(JSON.stringify(owner)).digest("hex")
+  );
 }
 export function recordStore(
   db: Knex,
@@ -64,6 +83,7 @@ export function recordStore(
           revision: 1,
           kind,
           scope,
+          updated_at: Date.now(),
           active: active ?? false,
         })
         .onConflict("id")
@@ -79,6 +99,7 @@ export function recordStore(
           revision: revision + 1,
           kind,
           scope,
+          updated_at: Date.now(),
           ...(active === undefined ? {} : { active }),
         });
       if (updated !== 1) throw new StorageConflict();
@@ -126,6 +147,38 @@ export function recordStore(
       .parse(rows)
       .map((row) => ({ id: row.id, value: cipher.open(row.id, row.value) }));
   }
+  async function recent(
+    kind: string,
+    scopeKey: string,
+    after?: { at: number; id: string },
+    limit = 100,
+  ) {
+    const rows: unknown = await db("yada_records")
+      .where({ kind, scope: scopeFor(scopeKey) })
+      .andWhere((query) => {
+        if (after)
+          void query.where("updated_at", "<", after.at).orWhere((same) => {
+            void same
+              .where("updated_at", after.at)
+              .andWhere("id", ">", after.id);
+          });
+      })
+      .orderBy([
+        { column: "updated_at", order: "desc" },
+        { column: "id", order: "asc" },
+      ])
+      .limit(z.number().int().min(1).max(1000).parse(limit));
+    return z
+      .array(
+        rowSchema.extend({ id: z.string(), updated_at: z.coerce.number() }),
+      )
+      .parse(rows)
+      .map((row) => ({
+        id: row.id,
+        at: row.updated_at,
+        value: cipher.open(row.id, row.value),
+      }));
+  }
   async function remove(key: string) {
     await db("yada_records")
       .where({ id: idFor(key) })
@@ -150,5 +203,5 @@ export function recordStore(
     }
     throw new StorageConflict();
   }
-  return { read, write, mutate, scan, remove, transaction, transact };
+  return { read, write, mutate, scan, recent, remove, transaction, transact };
 }

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { Identity } from "../core/contracts.js";
-import type { recordStore } from "./records.js";
+import { conversationOf, type recordStore } from "./records.js";
 import {
   withRunLease,
   RunLeaseError,
@@ -74,39 +74,41 @@ export class ActionConflict extends Error {
     super("Action decision conflict");
   }
 }
-const conversationOf = (runId: string) => {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(runId);
-  } catch {
-    return runId;
-  }
-  return Array.isArray(parsed) && typeof parsed[0] === "string"
-    ? parsed[0]
-    : runId;
-};
+const grantKey = (
+  identity: Identity,
+  scope: RememberScope,
+  runId: string,
+  tool: string,
+  toolVersion: string,
+  args: unknown,
+) =>
+  JSON.stringify([
+    "grant",
+    identity.tenantId,
+    identity.actorId,
+    scope,
+    scope === "run" ? runId : conversationOf(runId),
+    tool,
+    toolVersion,
+    createHash("sha256").update(JSON.stringify(args)).digest("hex"),
+  ]);
 export async function eraseGrants(
   records: ReturnType<typeof recordStore>,
   identity: Identity,
   conversationId: string,
 ) {
-  const grant = z.object({
-    key: z.string(),
-    tenantId: z.string(),
-    actorId: z.string(),
-    conversationId: z.string(),
-  });
+  const scopeKey = grantKey(
+    identity,
+    "conversation",
+    conversationId,
+    "",
+    "",
+    0,
+  );
   for (let after = ""; ;) {
-    const rows = await records.scan("grant", after);
-    for (const row of rows) {
-      const parsed = grant.safeParse(row.value).data;
-      if (
-        parsed?.tenantId === identity.tenantId &&
-        parsed.actorId === identity.actorId &&
-        parsed.conversationId === conversationId
-      )
-        await records.remove(parsed.key);
-    }
+    const rows = await records.scan("grant", after, 100, undefined, scopeKey);
+    for (const row of rows)
+      await records.remove(z.object({ key: z.string() }).parse(row.value).key);
     if (rows.length < 100) return;
     after = rows[rows.length - 1]?.id ?? "";
   }
@@ -145,24 +147,6 @@ export function createActionStore(
 ): ActionStore {
   const key = (identity: Identity, id: string) =>
     JSON.stringify(["action", identity.tenantId, identity.actorId, id]);
-  const grantKey = (
-    identity: Identity,
-    scope: RememberScope,
-    runId: string,
-    tool: string,
-    toolVersion: string,
-    args: unknown,
-  ) =>
-    JSON.stringify([
-      "grant",
-      identity.tenantId,
-      identity.actorId,
-      scope,
-      scope === "run" ? runId : conversationOf(runId),
-      tool,
-      toolVersion,
-      createHash("sha256").update(JSON.stringify(args)).digest("hex"),
-    ]);
   return {
     async load(identity, id) {
       const record = await records.read(key(identity, id));

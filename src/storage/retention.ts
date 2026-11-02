@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Identity } from "../core/contracts.js";
-import { isTerminal } from "../service/contracts.js";
+import { HttpError } from "../service/contracts.js";
+import { isTerminal } from "../service/terminal.js";
 import { conversationStateSchema } from "./jobs.js";
 import { conversationKey, retiredKey } from "./conversations.js";
 import { actionSchema, eraseGrants, runTree } from "./actions.js";
@@ -57,7 +58,7 @@ export function createRetention(records: ReturnType<typeof recordStore>) {
     for (const key of keys) {
       const action = await records.read(key);
       if (action && actionSchema.parse(action.value).status === "executing")
-        throw new Error("Resolve unfinished actions before erasure");
+        throw new HttpError(409, "Resolve unfinished actions before erasure");
     }
     return { keys, runIds: tree.runIds };
   }
@@ -69,7 +70,10 @@ export function createRetention(records: ReturnType<typeof recordStore>) {
       const planned = await records.read(key);
       const current = stateFrom(planned?.value);
       if (current.jobs.some((job) => !isTerminal(job.status)))
-        throw new Error("Cancel or resolve unfinished runs before erasure");
+        throw new HttpError(
+          409,
+          "Cancel or resolve unfinished runs before erasure",
+        );
       const tombstones = await retiredKeys(identity, id);
       const runIds = runsFrom(current, id, tombstones);
       for (const runId of runIds) await resolvedActions(identity, runId);
