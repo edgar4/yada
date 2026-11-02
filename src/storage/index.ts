@@ -15,6 +15,7 @@ import { createOAuthStore } from "./oauth.js";
 import type { McpOAuthStore } from "../connectors/mcp/oauth.js";
 import { createMemoryStore } from "./memory.js";
 import type { MemoryStore } from "../core/memory.js";
+import { createQuotaStore, type QuotaStore } from "./quota.js";
 import { openDatabase } from "./database.js";
 import { recordStore } from "./records.js";
 import { storageConfig, type StorageConfig } from "./config.js";
@@ -29,6 +30,7 @@ export interface YadaStorage {
   conversations: ConversationStore;
   oauth: McpOAuthStore;
   memory: MemoryStore;
+  quota: QuotaStore;
   close: () => Promise<void>;
 }
 export async function createStorage(
@@ -45,6 +47,7 @@ export async function createStorage(
     conversations: createConversationStore(records),
     oauth: createOAuthStore(records),
     memory: createMemoryStore(records),
+    quota: createQuotaStore(records),
     close: () => db.destroy(),
   };
 }

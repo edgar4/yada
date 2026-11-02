@@ -18,6 +18,22 @@ To bound spending by what the provider reports instead, set `limits.pricing` (`i
 
 This does not discover provider pricing or guarantee the provider's final invoice. Configure provider-side account limits as well. Actual reported input/output token usage is retained in checkpoints when the provider supplies it; absent usage stays unknown rather than being reported as zero. Profile versions bind these limits for recovery.
 
+## Tenant quotas
+
+Per-run limits do not bound a tenant over time. Pass `quota` to `createHandler` and the same value to `createWorker`:
+
+```ts
+const quota = {
+  requests: { limit: 100, windowMs: 3_600_000 },
+  costMicros: { limit: 5_000_000, windowMs: 86_400_000 },
+  scope: "tenant",
+};
+```
+
+`scope` is `"tenant"` (default, shared by all actors) or `"actor"`. Counters are fixed windows kept in storage, so they hold across instances; one record per scope holds only the current window. `POST .../runs` consumes one request unit; resubmitting an existing run ID does not. Once a window is exhausted, or the cost window is at or over `limit`, submission returns `429` with `Retry-After` (seconds until the window ends) and `{ "error": "Rate limit exceeded" }`.
+
+The worker adds each finished run's reported usage, priced with the profile `limits.pricing` (including cache pricing), to the cost window. Runs of profiles without `pricing` or without reported usage add nothing. A run already in flight is never stopped, so spend can overshoot `limit` by one run. Without `quota`, nothing changes. Other endpoints, including steering messages, do not consume quota. Handler and worker must use the same `quota`; a worker without it does not accrue cost.
+
 ## Backup, restore and encryption keys
 
 SQLite maintenance requires a persistent database filename. These config-based APIs open their own connection and reject `:memory:`, which would address a different empty database.
