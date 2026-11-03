@@ -8,7 +8,7 @@
   --deep-amber: #e07a00;
   --bg: var(--white);
   --text: var(--ink);
-  --muted: #5a5670;
+  --muted: #48445e;
   --line: #e6e4ee;
   --surface: #f4f3f8;
   --accent: #9a4f00;
@@ -25,7 +25,7 @@
   :root {
     --bg: var(--ink-deep);
     --text: var(--white);
-    --muted: #c3bfd6;
+    --muted: #d8d4e8;
     --line: #3a3263;
     --surface: #221c45;
     --accent: var(--amber);
@@ -41,7 +41,7 @@ body {
 }
 .on-ink {
   --text: var(--white);
-  --muted: #c3bfd6;
+  --muted: #d8d4e8;
   --line: #3a3263;
   --surface: var(--ink-raised);
   --accent: var(--amber);
@@ -158,16 +158,16 @@ h3 {
   font-family: var(--display);
 }
 h1 {
-  font-size: clamp(44px, 5.4vw, 76px);
-  letter-spacing: -0.03em;
+  font-size: clamp(46px, 5.4vw, 76px);
+  letter-spacing: 0.01em;
   font-weight: 600;
   line-height: 1.1;
   margin-bottom: 26px;
 }
 h2 {
-  font-size: clamp(32px, 3.4vw, 48px);
+  font-size: clamp(28px, 2.8vw, 40px);
   line-height: 1.1;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.01em;
   font-weight: 600;
   margin-bottom: 0;
 }
@@ -273,10 +273,10 @@ h3 {
     gap: 12px;
   }
   h1 {
-    font-size: 40px;
+    font-size: 42px;
   }
   h2 {
-    font-size: 30px;
+    font-size: 26px;
   }
   .button {
     font-size: 14px;
