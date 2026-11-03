@@ -123,6 +123,9 @@ export function recordStore(
       } catch (error) {
         if (!isRetryable(error)) throw error;
       }
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.random() * 2 ** Math.min(attempt, 6)),
+      );
     }
     throw new StorageConflict();
   }
@@ -200,6 +203,9 @@ export function recordStore(
       } catch (error) {
         if (!isRetryable(error)) throw error;
       }
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.random() * 2 ** Math.min(attempt, 6)),
+      );
     }
     throw new StorageConflict();
   }
