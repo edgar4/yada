@@ -1,9 +1,8 @@
-import { execFile } from "node:child_process";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
+import { qualifyMcp } from "../src/cli/qualify-mcp.js";
 
 const example = JSON.parse(
   await readFile("evals/mcp-servers.example.json", "utf8"),
@@ -13,17 +12,14 @@ const qualify = async (servers: unknown) => {
   const file = join(dir, "servers.json");
   await writeFile(file, JSON.stringify(servers));
   const out = join(dir, "out.json");
-  const run = promisify(execFile)(
-    process.execPath,
-    ["--import", "tsx", "scripts/qualify-mcp.mjs", file, "--out", out],
-    { encoding: "utf8" },
-  );
-  return { run, out };
+  vi.spyOn(console, "table").mockImplementation(() => undefined);
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
+  return { code: await qualifyMcp([file, "--out", out]), out };
 };
 
 it("qualifies the in-repo fixture server", async () => {
-  const { run, out } = await qualify(example);
-  await run;
+  const { code, out } = await qualify(example);
+  expect(code).toBe(0);
   const [result] = JSON.parse(await readFile(out, "utf8")) as {
     server: string;
     steps: Record<string, { ok: boolean; ms: number }>;
@@ -36,8 +32,9 @@ it("qualifies the in-repo fixture server", async () => {
 
 it("exits 1 when a step fails and 2 on a bad servers file", async () => {
   const [entry] = example;
-  const { run } = await qualify([{ ...entry, call: { tool: "missing" } }]);
-  await expect(run).rejects.toMatchObject({ code: 1 });
-  const bad = await qualify({});
-  await expect(bad.run).rejects.toMatchObject({ code: 2 });
+  expect((await qualify([{ ...entry, call: { tool: "missing" } }])).code).toBe(
+    1,
+  );
+  expect((await qualify({})).code).toBe(2);
+  expect(await qualifyMcp([])).toBe(2);
 }, 30_000);

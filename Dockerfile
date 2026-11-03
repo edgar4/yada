@@ -5,7 +5,8 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
-COPY README.md LICENSE ./
+COPY scripts/build-bundle.mjs ./scripts/
+COPY README.md LICENSE .env.example ./
 COPY docs ./docs
 RUN npm pack --pack-destination /tmp
 RUN npm install --prefix /runtime --omit=dev --no-audit --no-fund /tmp/edgaralochi-yada-*.tgz better-sqlite3@13.0.3
