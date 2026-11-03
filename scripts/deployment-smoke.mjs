@@ -7,7 +7,8 @@ import { TextDecoder } from "node:util";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const name = `yada-deployment-smoke-${randomBytes(6).toString("hex")}`;
-const image = `${name}:test`;
+const prebuilt = process.env.YADA_SMOKE_IMAGE;
+const image = prebuilt ?? `${name}:test`;
 const volume = `${name}-data`;
 const env = {
   ...process.env,
@@ -51,7 +52,7 @@ function stop() {
 }
 
 try {
-  docker("build", "--tag", image, ".");
+  if (!prebuilt) docker("build", "--tag", image, ".");
   docker("volume", "create", volume);
   docker(
     "run",
@@ -151,7 +152,7 @@ try {
   for (const args of [
     ["rm", "--force", name],
     ["volume", "rm", volume],
-    ["image", "rm", image],
+    ...(prebuilt ? [] : [["image", "rm", image]]),
   ]) {
     try {
       docker(...args);

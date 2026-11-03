@@ -24,8 +24,10 @@ export default defineConfig({
   },
   test: {
     include: ["tests/**/*.test.ts"],
-    fileParallelism:
-      !process.env.YADA_TEST_POSTGRES_URL && !process.env.YADA_TEST_MYSQL_URL,
+    testTimeout:
+      process.env.YADA_TEST_POSTGRES_URL || process.env.YADA_TEST_MYSQL_URL
+        ? 30_000
+        : 5_000,
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts", "examples/starter/**/*.ts"],
