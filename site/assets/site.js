@@ -36,7 +36,9 @@ const showProof = async (key, url, pick) => {
   let value;
   try {
     value = globalThis.sessionStorage.getItem(`yada-proof-${key}`);
-  } catch {}
+  } catch {
+    value = null;
+  }
   if (!value) {
     try {
       const response = await globalThis.fetch(url);
@@ -48,7 +50,9 @@ const showProof = async (key, url, pick) => {
     if (!value) return;
     try {
       globalThis.sessionStorage.setItem(`yada-proof-${key}`, value);
-    } catch {}
+    } catch {
+      // Storage can be blocked; the value still renders uncached.
+    }
   }
   item.querySelector("span").textContent = value;
   item.hidden = false;
