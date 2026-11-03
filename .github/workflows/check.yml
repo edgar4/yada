@@ -1,26 +1,78 @@
 name: Check
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: ./.github/actions/setup
         with:
-          node-version: "24"
-          cache: npm
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npm run check
+          browser: "true"
+      - run: npm test
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
       - run: npm run demo
       - run: npm run test:package
+  storage:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: yada-test
+          POSTGRES_DB: yada_test
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 30
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: yada-test
+          MYSQL_DATABASE: yada_test
+        ports: ["3306:3306"]
+        options: --health-cmd "mysqladmin ping -pyada-test" --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      YADA_TEST_POSTGRES_URL: postgres://postgres:yada-test@127.0.0.1:5432/yada_test
+      YADA_TEST_MYSQL_URL: mysql://root:yada-test@127.0.0.1:3306/yada_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          browser: "true"
+      - run: npx vitest run $(grep -l helpers/storage tests/*.test.ts)
   deployment:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: yada-smoke:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
       - run: npm run test:deployment
+        env:
+          YADA_SMOKE_IMAGE: yada-smoke:ci
