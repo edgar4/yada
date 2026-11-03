@@ -9,7 +9,8 @@ for (const button of globalThis.document.querySelectorAll("[data-copy]")) {
     const status = globalThis.document.querySelector(".copy-status");
     try {
       await globalThis.navigator.clipboard.writeText(code.textContent);
-      button.textContent = "Copied";
+      if (button.querySelector("svg")) button.classList.add("is-copied");
+      else button.textContent = "Copied";
       status.textContent = "Code copied to clipboard.";
     } catch {
       status.textContent = "Copy unavailable. Select the code to copy it.";
@@ -17,73 +18,53 @@ for (const button of globalThis.document.querySelectorAll("[data-copy]")) {
   });
 }
 
-const face = globalThis.document.getElementById("yada-face");
-const faces = {
-  neutral: {
-    l: [30, 32, 45, 46, 60, 60],
-    r: [90, 32, 75, 46, 60, 60],
-    s: [60, 60, 60, 75, 60, 90],
-    d: [60, 60, 9],
-  },
-  thinking: {
-    l: [50, 40, 50, 41, 50, 42],
-    r: [74, 40, 74, 41, 74, 42],
-    s: [52, 80, 64, 76, 76, 80],
-    d: [60, 78, 0],
-  },
-  smile: {
-    l: [44, 42, 44, 48, 44, 54],
-    r: [76, 42, 76, 48, 76, 54],
-    s: [40, 72, 60, 92, 80, 72],
-    d: [60, 80, 0],
-  },
-  wink: {
-    l: [44, 42, 44, 48, 44, 54],
-    r: [67, 52, 76, 38, 85, 52],
-    s: [42, 74, 62, 90, 80, 70],
-    d: [60, 80, 0],
-  },
-};
-if (
-  face &&
-  !globalThis.matchMedia("(prefers-reduced-motion: reduce)").matches
-) {
-  const part = (key) => face.querySelector(`[data-part="${key}"]`);
-  const draw = (f) => {
-    for (const key of ["l", "r", "s"])
-      part(key).setAttribute(
-        "d",
-        `M${f[key][0]} ${f[key][1]} Q${f[key][2]} ${f[key][3]} ${f[key][4]} ${f[key][5]}`,
-      );
-    for (const [i, attr] of ["cx", "cy", "r"].entries())
-      part("d").setAttribute(attr, f.d[i]);
-  };
-  const clone = (f) =>
-    Object.fromEntries(Object.entries(f).map(([key, v]) => [key, [...v]]));
-  let current = clone(faces.neutral);
-  const morph = (name) => {
-    const from = clone(current);
-    const start = globalThis.performance.now();
-    const step = (now) => {
-      const t = Math.min((now - start) / 320, 1);
-      const e = 1 - (1 - t) ** 3;
-      for (const key in from)
-        current[key] = from[key].map(
-          (v, i) => v + (faces[name][key][i] - v) * e,
-        );
-      draw(current);
-      if (t < 1) globalThis.requestAnimationFrame(step);
-    };
-    globalThis.requestAnimationFrame(step);
-  };
-  const steps = [...globalThis.document.querySelectorAll("[data-face]")];
-  let index = 0;
-  const advance = () => {
-    for (const item of steps)
-      item.classList.toggle("is-active", item === steps[index]);
-    morph(steps[index].dataset.face);
-    index = (index + 1) % steps.length;
-  };
-  advance();
-  globalThis.setInterval(advance, 2400);
+for (const button of globalThis.document.querySelectorAll(".play-button")) {
+  const video = button.previousElementSibling;
+  video.controls = false;
+  button.hidden = false;
+  button.addEventListener("click", () => {
+    video.controls = true;
+    button.hidden = true;
+    video.play();
+    video.focus();
+  });
 }
+
+const showProof = async (key, url, pick) => {
+  const item = globalThis.document.querySelector(`[data-proof="${key}"]`);
+  if (!item) return;
+  let value;
+  try {
+    value = globalThis.sessionStorage.getItem(`yada-proof-${key}`);
+  } catch {
+    value = null;
+  }
+  if (!value) {
+    try {
+      const response = await globalThis.fetch(url);
+      if (!response.ok) return;
+      value = pick(await response.json());
+    } catch {
+      return;
+    }
+    if (!value) return;
+    try {
+      globalThis.sessionStorage.setItem(`yada-proof-${key}`, value);
+    } catch {
+      // Storage can be blocked; the value still renders uncached.
+    }
+  }
+  item.querySelector("span").textContent = value;
+  item.hidden = false;
+};
+showProof(
+  "npm",
+  "https://registry.npmjs.org/@edgaralochi/yada/latest",
+  (data) => typeof data.version === "string" && `v${data.version}`,
+);
+showProof(
+  "stars",
+  "https://api.github.com/repos/edgar4/yada",
+  (data) =>
+    data.stargazers_count > 0 && data.stargazers_count.toLocaleString("en"),
+);

@@ -12,6 +12,10 @@
   --line: #e6e4ee;
   --surface: #f4f3f8;
   --accent: #9a4f00;
+  --lavender: #a99cf0;
+  --lavender-text: #5a4ac2;
+  --code-text: var(--ink);
+  --code-bg: #ece9f8;
   --sans: "Geist", ui-sans-serif, system-ui, sans-serif;
   --display: var(--sans);
   --mono: "Geist Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
@@ -29,6 +33,9 @@
     --line: #3a3263;
     --surface: #221c45;
     --accent: var(--amber);
+    --lavender-text: var(--lavender);
+    --code-text: #d4ccfa;
+    --code-bg: rgb(169 156 240 / 0.14);
   }
 }
 * {
@@ -45,6 +52,8 @@ body {
   --line: #3a3263;
   --surface: var(--ink-raised);
   --accent: var(--amber);
+  --code-text: var(--lavender);
+  --code-bg: rgb(169 156 240 / 0.12);
   color: var(--text);
   background: var(--ink);
 }
@@ -73,7 +82,7 @@ summary:focus-visible,
   border-radius: 6px;
 }
 .wrap {
-  width: min(1200px, calc(100% - 80px));
+  width: min(var(--wrap, 1200px), calc(100% - 80px));
   margin-inline: auto;
 }
 .site-header {
@@ -143,7 +152,7 @@ summary:focus-visible,
 .kicker {
   font-size: 15px;
   font-weight: 600;
-  color: var(--accent);
+  color: var(--lavender);
   margin-bottom: 20px;
 }
 h1,
@@ -159,21 +168,21 @@ h3 {
 }
 h1 {
   font-size: clamp(46px, 5.4vw, 76px);
-  letter-spacing: 0.01em;
+  letter-spacing: -0.035em;
   font-weight: 600;
-  line-height: 1.1;
+  line-height: 1.02;
   margin-bottom: 26px;
 }
 h2 {
   font-size: clamp(28px, 2.8vw, 40px);
   line-height: 1.1;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.025em;
   font-weight: 600;
   margin-bottom: 0;
 }
 h3 {
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
 }
 .button {
   text-decoration: none;
@@ -201,8 +210,13 @@ h3 {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  border-bottom: 2px solid var(--deep-amber);
+  border-bottom: 1px solid color-mix(in srgb, currentColor 35%, transparent);
   padding-bottom: 2px;
+}
+.text-link:hover,
+.text-link:focus-visible {
+  color: inherit;
+  border-bottom-color: var(--amber);
 }
 .site-footer {
   padding-block: 56px;
@@ -227,6 +241,19 @@ h3 {
 }
 .site-footer nav {
   font-size: 14px;
+}
+.footer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+}
+.footer-meta a {
+  text-decoration: none;
 }
 .visually-hidden {
   position: absolute;
