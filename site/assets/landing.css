@@ -150,8 +150,8 @@
   margin: 0;
   font-family: var(--display);
   font-size: 22px;
-  font-weight: 750;
-  letter-spacing: -0.4px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 .strip-inner ul {
   display: flex;
