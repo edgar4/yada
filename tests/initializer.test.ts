@@ -47,12 +47,12 @@ it("creates the existing starter, private config, skills directory and pinned de
   const root = await fixture();
   const target = join(root, "my agent");
   expect(await createStarter(target)).toBe(target);
-  const env = await readFile(join(target, ".env.starter"), "utf8");
+  const env = await readFile(join(target, ".env"), "utf8");
   expect(env).toContain("YADA_LLM_API_KEY=\n");
   expect(env).toMatch(/YADA_STORAGE_KEY=[a-f0-9]{64}\n/);
-  expect(env).not.toContain("PASSWORD");
+  expect(env).not.toMatch(/^YADA_STARTER_PASSWORD=/m);
   if (process.platform !== "win32")
-    expect((await stat(join(target, ".env.starter"))).mode & 0o777).toBe(0o600);
+    expect((await stat(join(target, ".env"))).mode & 0o777).toBe(0o600);
   const original = JSON.parse(
     await readFile(new URL("../package.json", import.meta.url), "utf8"),
   ) as { version: string };
@@ -64,8 +64,7 @@ it("creates the existing starter, private config, skills directory and pinned de
     dependencies: { "@edgaralochi/yada": original.version },
     scripts: {
       build: "node build.mjs",
-      start:
-        "npm run build && node --env-file=.env.starter --import tsx server.ts",
+      start: "npm run build && node --env-file=.env --import tsx server.ts",
     },
   });
   expect(await readFile(join(target, "app.ts"), "utf8")).toBe(
@@ -74,9 +73,7 @@ it("creates the existing starter, private config, skills directory and pinned de
       "utf8",
     ),
   );
-  expect(await readFile(join(target, ".gitignore"), "utf8")).toContain(
-    ".env.starter",
-  );
+  expect(await readFile(join(target, ".gitignore"), "utf8")).toContain(".env");
   expect(await readFile(join(target, "skills/README.md"), "utf8")).toContain(
     "SKILL.md",
   );
@@ -86,7 +83,7 @@ it("creates the existing starter, private config, skills directory and pinned de
   const before = await readdir(target);
   await expect(createStarter(target)).rejects.toThrow("already exists");
   expect(await readdir(target)).toEqual(before);
-  expect(await readFile(join(target, ".env.starter"), "utf8")).toBe(env);
+  expect(await readFile(join(target, ".env"), "utf8")).toBe(env);
 });
 
 it("never replaces an existing file or follows a destination symlink", async () => {
@@ -138,7 +135,7 @@ it.each([
 it("supports the default directory and skips installation without exposing generated secrets", async () => {
   const root = await fixture();
   const result = await cli(root, ["init", "--no-install"]);
-  const env = await readFile(join(root, "yada-agent/.env.starter"), "utf8");
+  const env = await readFile(join(root, "yada-agent/.env"), "utf8");
   const key = /YADA_STORAGE_KEY=(\w+)/.exec(env)?.[1];
   expect(key).toBeTruthy();
   expect(result.stdout + result.stderr).not.toContain(key);
@@ -163,7 +160,7 @@ it.skipIf(process.platform === "win32")(
     await expect(cli(root, ["init", "failed"], env)).rejects.toThrow(
       "configuration has been retained",
     );
-    expect(await readFile(join(root, "failed/.env.starter"), "utf8")).toContain(
+    expect(await readFile(join(root, "failed/.env"), "utf8")).toContain(
       "YADA_STORAGE_KEY=",
     );
     await writeFile(

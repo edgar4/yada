@@ -11,3 +11,5 @@
 !LICENSE
 !deploy/
 !deploy/server.mjs
+!.env.example
+!scripts/build-bundle.mjs

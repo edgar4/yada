@@ -31,6 +31,27 @@ The exit code is 0 only when every run passed, 1 otherwise and 2 for invalid arg
 
 To add a scenario, append to the `scenarios` array. Keep prompts explicit about which tool to use so live models behave predictably.
 
+## Test your own agent
+
+The runner is exported from `@edgaralochi/yada/evals`:
+
+```ts
+import { createFakeProvider } from "@edgaralochi/yada/providers";
+import { runScenario, summarize, type Scenario } from "@edgaralochi/yada/evals";
+
+const scenario: Scenario = {
+  name: "greets",
+  input: "Say hello",
+  build: async () => ({ tools: [] }),
+  fake: () => ({ content: "hello", toolCalls: [], finishReason: "stop" }),
+  expect: { status: "completed", text: "hello" },
+};
+const result = await runScenario(scenario, createFakeProvider(scenario.fake));
+console.table(summarize([result]));
+```
+
+Pass any provider from `createProvider` instead of the fake one to run against a live model.
+
 ## MCP server qualification
 
 `scripts/qualify-mcp.mjs` connects to the servers listed in a JSON file, discovers tools, optionally makes one read call, lists resources and prompts, and reports pass/fail with latency per step. It exits 1 if any step fails.
@@ -38,5 +59,7 @@ To add a scenario, append to the `scenarios` array. Keep prompts explicit about 
 ```sh
 npm run qualify:mcp -- evals/mcp-servers.example.json --out mcp-results.json
 ```
+
+The same check ships in the package CLI: `npx yada qualify-mcp servers.json --out results.json`.
 
 The file is an array of `{ "server": <MCP config>, "call"?: { "tool", "args" }, "prompts"?: true }`. `server` is a normal [MCP server config](mcp.md) (`command`/`args` or `url`, `headers`, `resources`); `resources: true` runs `list_resources`, `call.tool` is the bare tool name. The example file lists only the in-repo fixture. Keep files for public servers (for example `npx -y <server-package>` or a streamable HTTP `url`) and any credentials outside the repository; do not commit tokens.

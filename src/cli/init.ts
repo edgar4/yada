@@ -43,8 +43,10 @@ export async function runCommand(
 
 export function assertNodeVersion(range: string, version: string) {
   const required = /\d+/.exec(range)?.[0];
-  if (required && version.split(".")[0] !== required)
-    throw new Error(`Yada requires Node ${required}.`);
+  if (required && Number(version.split(".")[0]) < Number(required))
+    throw new Error(
+      `Yada requires Node ${required} or newer; found ${version}.`,
+    );
 }
 
 export async function createStarter(directory: string) {
@@ -65,6 +67,10 @@ export async function createStarter(directory: string) {
   }
   try {
     await copyFile(join(packageRoot, "LICENSE"), join(destination, "LICENSE"));
+    await copyFile(
+      join(packageRoot, ".env.example"),
+      join(destination, ".env.example"),
+    );
     await cp(join(packageRoot, "examples/starter"), destination, {
       recursive: true,
       filter: (source) =>
@@ -85,7 +91,7 @@ export async function createStarter(directory: string) {
           scripts: {
             build: "node build.mjs",
             start:
-              "npm run build && node --env-file=.env.starter --import tsx server.ts",
+              "npm run build && node --env-file=.env --import tsx server.ts",
           },
           dependencies: {
             [manifest.name]: manifest.version,

@@ -72,7 +72,14 @@ export type SteeringInput = z.infer<typeof steeringInputSchema>;
 export type JobInput = z.infer<typeof jobInputSchema>;
 export type Job = z.infer<typeof jobSchema>;
 export type RunEvent = z.infer<typeof eventSchema>;
-export const isTerminal = (status: string) =>
-  status === "completed" || status === "failed" || status === "cancelled";
+export { isTerminal } from "./terminal.js";
 export const isActivity = (type: string) =>
   (activityTypes as readonly string[]).includes(type);
+export class HttpError extends Error {
+  constructor(
+    readonly status: 400 | 404 | 409 | 410 | 415,
+    message: string,
+  ) {
+    super(message);
+  }
+}

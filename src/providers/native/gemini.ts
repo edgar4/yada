@@ -27,6 +27,7 @@ export type GeminiSettings = Pick<ServerToolSettings, "serverTools"> &
     model: string;
     maxTokens: number;
     maxRetries: number;
+    timeoutMs?: number | undefined;
     baseUrl?: string | undefined;
     headers?: Record<string, string> | undefined;
     temperature?: number | undefined;
@@ -253,6 +254,7 @@ export function nativeGeminiAdapter(settings: GeminiSettings): ProviderAdapter {
           apiKey: settings.apiKey,
           httpOptions: {
             retryOptions: { attempts: settings.maxRetries + 1 },
+            ...(settings.timeoutMs && { timeout: settings.timeoutMs }),
             ...(settings.baseUrl && { baseUrl: settings.baseUrl }),
             ...(settings.headers && { headers: settings.headers }),
           },
@@ -306,7 +308,7 @@ export function nativeGeminiAdapter(settings: GeminiSettings): ProviderAdapter {
   };
   return {
     name: "gemini",
-    capabilities: { toolCalling: true, vision: true },
+    capabilities: { toolCalling: true, vision: true, retries: true },
     async complete(request) {
       const response = await (
         await load()

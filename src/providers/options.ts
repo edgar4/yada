@@ -1,5 +1,8 @@
 import { z } from "zod";
 export const defaultMaxRetries = 2;
+export const defaultTimeoutMs = 120_000;
+const defaultMaxTokens = 8192;
+const thinkingMaxTokens = 32_000;
 const baseUrl = z.url().refine((value) => {
   const url = new URL(value);
   return (
@@ -16,6 +19,7 @@ export const tuning = {
   maxTokens: z.number().int().positive().optional(),
   temperature: z.number().min(0).max(2).optional(),
   maxRetries: z.number().int().min(0).max(10).optional(),
+  timeoutMs: z.number().int().positive().optional(),
 };
 export const modelFields = {
   apiKey: z.string().trim().min(1),
@@ -38,18 +42,38 @@ export const serverToolFields = {
 };
 export type ServerToolSettings = z.infer<z.ZodObject<typeof serverToolFields>>;
 export const settingFields = {
+  fallbackModel: z.string().trim().min(1).optional(),
+  vision: z.boolean().optional(),
   effort,
   thinkingDisplay,
   promptCache,
   ...serverToolFields,
 };
-export const modelOptions = z.strictObject({
-  ...modelFields,
-  ...settingFields,
-  maxTokens: z.number().int().positive().default(8192),
-  maxRetries: z.number().int().min(0).max(10).default(defaultMaxRetries),
-});
+export const modelOptions = z
+  .strictObject({
+    ...modelFields,
+    ...settingFields,
+  })
+  .transform((options) => ({
+    ...options,
+    maxRetries: options.maxRetries ?? defaultMaxRetries,
+    timeoutMs: options.timeoutMs ?? defaultTimeoutMs,
+  }));
 export type ModelOptions = z.input<typeof modelOptions>;
+
+export function parseModelOptions(config: ModelOptions, effortTokens = false) {
+  const options = modelOptions.parse(config);
+  const deep =
+    effortTokens &&
+    options.effort !== undefined &&
+    options.effort !== "low" &&
+    options.effort !== "medium";
+  return {
+    ...options,
+    maxTokens:
+      options.maxTokens ?? (deep ? thinkingMaxTokens : defaultMaxTokens),
+  };
+}
 export function defined<T extends object>(value: T) {
   return Object.fromEntries(
     Object.entries(value).filter(([, v]) => v !== undefined),

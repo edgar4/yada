@@ -17,6 +17,7 @@ const errorCodes = new Set([
   "denied",
   "invalid_arguments",
   "tool_failed",
+  "timeout",
 ]);
 const category = (content: string) => {
   try {
@@ -47,10 +48,11 @@ export function tracingHooks(
     span.end();
   };
   return {
-    beforeModel() {
+    beforeModel(_request, call) {
       model = tracer.startSpan(
         "yada.model",
         {
+          ...(call?.purpose ? { "model.purpose": call.purpose } : {}),
           ...(info.provider ? { "model.provider": info.provider } : {}),
           ...(info.model ? { "model.name": info.model } : {}),
         },
@@ -96,6 +98,7 @@ export function tracingHooks(
           "tool.outcome",
           event.failed ? category(event.content) : "ok",
         );
+        if (event.cause) span.setAttribute("tool.cause", event.cause);
         close(span, !event.failed);
         tools.delete(event.call.id);
       } else if (
@@ -111,6 +114,8 @@ export function tracingHooks(
         span.setAttribute("run.status", event.result.status);
         if (event.result.status === "failed")
           span.setAttribute("run.code", event.result.code);
+        if (event.type === "run_finished" && event.cause)
+          span.setAttribute("run.cause", event.cause);
         close(span, ok || event.result.status === "completed");
         run = undefined;
       }

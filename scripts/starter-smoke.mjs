@@ -88,7 +88,7 @@ export async function verifyStarter(directory, execute, npm) {
   const start = async (passwordEnabled = true) => {
     child = spawn(
       process.execPath,
-      ["--env-file=.env.starter", "--import", "tsx", "server.ts"],
+      ["--env-file=.env", "--import", "tsx", "server.ts"],
       {
         cwd: directory,
         env: {

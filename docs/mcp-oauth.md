@@ -27,6 +27,8 @@ const connection = await connectMcp(
 );
 ```
 
+Servers that need a pre-registered client can pass `clientId` and, for confidential clients, `clientSecret` with `clientAuthMethod` (`"client_secret_basic"` by default, or `"client_secret_post"`). Pass `clientMetadataUrl` (HTTPS, with a path) to identify the client by a metadata document. Without these options Yada acts as a public client and registers dynamically. Keep the secret in server-side configuration.
+
 Import `createMcpOAuth` and `connectMcp` from Yada. Do not combine OAuth with `token` or a stdio command. OAuth is bound to the exact server URL, actor, and tenant.
 
 If authorization is needed, the SDK discovers the authorization server, registers the client where supported, generates PKCE parameters, and calls your `redirect` handler. The connection attempt then rejects with the SDK's `UnauthorizedError`; your route should treat that as pending login after a redirect, not as a successful connection. Handle other connection errors normally.
@@ -70,6 +72,8 @@ Existing custom stores remain compatible through a process-local queue shared by
 Initialization and tool requests serialize the SDK's entire HTTP send/authentication lifecycle, including refresh and token persistence. Callback exchange and disconnect use the same coordination key. Unsolicited SSE authentication runs in an isolated coordinated lifecycle. MCP SDK 1.32.2 provides no public interception point for background SSE authentication, so a narrow adapter wraps its `_startOrAuthSse` hook. Missing hooks fail closed, and integration tests exercise background refresh; review this boundary when updating the pinned SDK. Resource streams retain their transport cancellation signal; the shorter coordination signal applies to OAuth discovery and token requests. SDK transport failures are redacted while authorization redirects preserve `UnauthorizedError`.
 
 Use `storage.oauth` from [durable storage](storage.md), or implement this interface in your existing backend. Storage failures must propagate; do not silently fall back to memory. Callback checks depend on atomic consumption in your implementation.
+
+`oauth.cancelPending()` clears an abandoned pending login so the user can retry immediately; tokens are kept.
 
 `oauth.disconnect()` deletes local tokens and pending login state. Close active MCP connections as well. This does not revoke the upstream authorization grant; use the provider's account controls when revocation is required.
 

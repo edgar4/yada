@@ -24,6 +24,7 @@ export type AnthropicSettings = ServerToolSettings &
     model: string;
     maxTokens: number;
     maxRetries: number;
+    timeoutMs?: number | undefined;
     baseUrl?: string | undefined;
     headers?: Record<string, string> | undefined;
     effort?: "low" | "medium" | "high" | "xhigh" | "max" | undefined;
@@ -199,6 +200,7 @@ export function nativeAnthropicAdapter(
   const client = new Anthropic({
     apiKey: settings.apiKey,
     maxRetries: settings.maxRetries,
+    ...(settings.timeoutMs && { timeout: settings.timeoutMs }),
     ...(settings.baseUrl && { baseURL: settings.baseUrl }),
     ...(settings.headers && { defaultHeaders: settings.headers }),
   });
@@ -303,7 +305,7 @@ export function nativeAnthropicAdapter(
   }
   return {
     name: "anthropic",
-    capabilities: { toolCalling: true, vision: true },
+    capabilities: { toolCalling: true, vision: true, retries: true },
     async complete(request) {
       const run = generate(request);
       for (;;) {

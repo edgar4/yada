@@ -7,27 +7,9 @@ import {
   writeTool,
   type ProviderRequest,
   type ProviderResult,
-  type Tool,
   type ToolCall,
 } from "../src/index.js";
-import type { ActionExecutor } from "../src/core/action.js";
-import type { Content } from "../src/core/contracts.js";
-
-export type Scenario = {
-  name: string;
-  input: Content;
-  build: () => Promise<{
-    tools: Tool[];
-    system?: string;
-    executeWrite?: ActionExecutor;
-  }>;
-  fake: (request: ProviderRequest, call: number) => ProviderResult;
-  expect: {
-    status: "completed" | "awaiting_approval";
-    text?: string;
-    calls?: { name: string; args?: Record<string, unknown> }[];
-  };
-};
+import type { Scenario } from "../src/evals/scenario.js";
 
 const authorize = () => Promise.resolve(true);
 const reply = (content: string): ProviderResult => ({

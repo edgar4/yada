@@ -114,7 +114,7 @@ describe("summarizing compaction", () => {
     ).toEqual({ status: "completed", text: "Done" });
     const transcript = o.summarize.provider.requests[0]?.messages[0];
     expect(transcript?.content).toBe(
-      `user: ${"a".repeat(3000)}\n\nassistant: A`,
+      `user: ${"a".repeat(3000)}\n\nassistant: A`.slice(-1500),
     );
     expect(o.provider.requests[0]?.messages).toEqual([
       {

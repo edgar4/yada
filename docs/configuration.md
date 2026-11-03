@@ -50,7 +50,7 @@ When switching providers, replace all three values: provider, its model ID, and 
 | `llamacpp`          | Select the served model alias | Optional server API key       |
 | `openai-compatible` | Required; also set `baseUrl`  | Optional gateway API key      |
 
-Gemini uses the official `@google/genai` SDK, an optional peer dependency: run `npm install @google/genai` before selecting `gemini`. `chatModelAdapter` needs `@langchain/core`. The other providers use their native SDKs, which ship with Yada. Without the package, the first Gemini request fails with an error naming it.
+Gemini uses the official `@google/genai` SDK, an optional peer dependency: run `npm install @google/genai` before selecting `gemini`. `chatModelAdapter` (from `@edgaralochi/yada/langchain`) needs `@langchain/core`. The other providers use their native SDKs, which ship with Yada. Without the package, `createProvider` fails with an error naming it.
 
 Local and OpenAI-compatible providers do not accept images unless the config sets `vision: true`.
 
@@ -72,7 +72,7 @@ YADA_LLM_API_KEY=your-google-ai-studio-api-key
 
 Use the provider's exact API model ID when overriding the default. The selected model must support text and function calling for tool workflows. Provider access and model availability depend on your account. Hosted adapters require API-key authentication. Azure OpenAI and Vertex AI are not configured by this interface.
 
-Anthropic, OpenAI, DeepSeek, Ollama, llama.cpp and OpenAI-compatible servers use native adapters on the official `@anthropic-ai/sdk` and `openai` SDKs (Messages, Responses and Chat Completions; hosted OpenAI in Chat Completions mode sends `max_completion_tokens`, other servers `max_tokens`). Gemini uses a native adapter on `@google/genai` (`generateContent` and `generateContentStream`). Any LangChain chat model can be wrapped with `chatModelAdapter`. The default `gpt-6-luna` supports function calling there only with reasoning disabled, so Yada sends `reasoning_effort: none` when you use the default model; set your own `model` to avoid this. Gemini omits tool call IDs on some models, so Yada generates `gemini_call_N` IDs and leaves them out of the request; thought signatures are kept in provider metadata and replayed with the same turn's function calls. Safety, recitation and prohibited-content finish reasons end the run as `refusal`; usage includes thinking tokens in the output count and cached tokens as `cacheReadTokens`. Provider metadata cannot be reused with another provider. Transient failures are retried by the provider SDK with backoff (`maxRetries`, default 2). Aborted runs are never retried; remaining failures return through the runtime's error contract.
+Anthropic, OpenAI, DeepSeek, Ollama, llama.cpp and OpenAI-compatible servers use native adapters on the official `@anthropic-ai/sdk` and `openai` SDKs (Messages for Anthropic, Responses for hosted OpenAI, Chat Completions for the others). Gemini uses a native adapter on `@google/genai` (`generateContent` and `generateContentStream`). Any LangChain chat model can be wrapped with `chatModelAdapter` from `@edgaralochi/yada/langchain`. The default `gpt-6-luna` supports function calling only with reasoning disabled, so Yada sends `reasoning.effort: none` when you use the default model without `effort`. Gemini omits tool call IDs on some models, so Yada generates `gemini_call_N` IDs and leaves them out of the request; thought signatures are kept in provider metadata and replayed with the same turn's function calls. Safety, recitation and prohibited-content finish reasons end the run as `refusal`; usage includes thinking tokens in the output count and cached tokens as `cacheReadTokens`. Provider metadata cannot be reused with another provider. Transient failures are retried by the provider SDK with backoff (`maxRetries`, default 2). Aborted runs are never retried; remaining failures return through the runtime's error contract.
 
 Model references: [OpenAI GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) and [Google Gemini 3.8 Flash](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash).
 
@@ -90,13 +90,15 @@ Yada routes requests to `https://api.deepseek.com` using Chat Completions with t
 
 All providers accept these optional settings. `baseUrl` must be an `http(s)` URL without credentials, query or fragment, and is trusted server configuration.
 
-| Setting (code / env)                   | Default                           | Meaning                                             |
-| -------------------------------------- | --------------------------------- | --------------------------------------------------- |
-| `maxTokens` / `YADA_LLM_MAX_TOKENS`    | 8192 hosted, server default local | Maximum output tokens per model call.               |
-| `temperature` / `YADA_LLM_TEMPERATURE` | provider default                  | Sampling temperature, 0 to 2.                       |
-| `maxRetries` / `YADA_LLM_MAX_RETRIES`  | 2                                 | Retries for transient errors, 0 to 10.              |
-| `baseUrl` / `YADA_LLM_BASE_URL`        | provider default                  | Override the API endpoint (proxy, gateway, region). |
-| `headers` (code only)                  | none                              | Extra HTTP headers as a record of strings.          |
+| Setting (code / env)                        | Default                             | Meaning                                                                                                                                                                                      |
+| ------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `maxTokens` / `YADA_LLM_MAX_TOKENS`         | 8192 hosted, server default local   | Maximum output tokens per model call. 32000 when `effort` is `high` or above on Anthropic, OpenAI and Gemini.                                                                                |
+| `timeoutMs` / `YADA_LLM_TIMEOUT_MS`         | 120000 (all providers, incl. local) | Per-request timeout in milliseconds.                                                                                                                                                         |
+| `fallbackModel` / `YADA_LLM_FALLBACK_MODEL` | none                                | Model of the same provider retried once after a transient error (5xx, 408, 429, connection, timeout) before any output. Provider metadata such as thinking signatures is not replayed to it. |
+| `temperature` / `YADA_LLM_TEMPERATURE`      | provider default                    | Sampling temperature, 0 to 2.                                                                                                                                                                |
+| `maxRetries` / `YADA_LLM_MAX_RETRIES`       | 2                                   | Retries for transient errors, 0 to 10.                                                                                                                                                       |
+| `baseUrl` / `YADA_LLM_BASE_URL`             | provider default                    | Override the API endpoint (proxy, gateway, region).                                                                                                                                          |
+| `headers` (code only)                       | none                                | Extra HTTP headers as a record of strings.                                                                                                                                                   |
 
 ## Model settings
 

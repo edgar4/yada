@@ -14,7 +14,7 @@ A plug-and-play AI agent harness for TypeScript backends. Bring any model, any M
 
 ## Get started
 
-Two ways in, both on Node 24.
+Two ways in, both on Node 24 or newer.
 
 ### Start a new agent app
 
@@ -25,7 +25,7 @@ npx @edgaralochi/yada init my-agent
 cd my-agent
 ```
 
-Set your provider credentials in `.env.starter`, then run `npm start`. See the [starter guide](docs/starter.md).
+Set your provider credentials in `.env`, then run `npm start`. See the [starter guide](docs/starter.md).
 
 ### Add Yada to an existing backend
 
@@ -33,17 +33,51 @@ Set your provider credentials in `.env.starter`, then run `npm start`. See the [
 npm install @edgaralochi/yada
 ```
 
-Import the runtime from `@edgaralochi/yada`, the browser client from `@edgaralochi/yada/client` and the widget from `@edgaralochi/yada/widget`. Narrower entry points are `/providers`, `/storage`, `/mcp`, `/skills` and `/service`; the root exports all of them.
+Import the runtime from `@edgaralochi/yada`, the browser client from `@edgaralochi/yada/client` and the widget from `@edgaralochi/yada/widget` (or the prebuilt `@edgaralochi/yada/widget.js` script). Narrower entry points are `/providers`, `/storage`, `/mcp`, `/skills`, `/service`, `/langchain`, `/otel` and `/evals`; the root exports all of them.
 
 The core and the Anthropic and OpenAI-compatible providers need nothing else. Install only what you use:
 
-| Feature                  | Install                       |
-| ------------------------ | ----------------------------- |
-| SQLite storage (default) | `npm install better-sqlite3`  |
-| PostgreSQL storage       | `npm install pg`              |
-| MySQL storage            | `npm install mysql2`          |
-| Gemini                   | `npm install @google/genai`   |
-| `chatModelAdapter`       | `npm install @langchain/core` |
+| Feature                                            | Install                          |
+| -------------------------------------------------- | -------------------------------- |
+| SQLite storage (default)                           | `npm install better-sqlite3`     |
+| PostgreSQL storage                                 | `npm install pg`                 |
+| MySQL storage                                      | `npm install mysql2`             |
+| Gemini                                             | `npm install @google/genai`      |
+| `chatModelAdapter` (`@edgaralochi/yada/langchain`) | `npm install @langchain/core`    |
+| `otelTracer` (`@edgaralochi/yada/otel`)            | `npm install @opentelemetry/api` |
+
+### Use Yada in your backend
+
+```ts
+import { z } from "zod";
+import {
+  createProvider,
+  providerConfigFromEnv,
+  readTool,
+  run,
+} from "@edgaralochi/yada";
+
+const provider = createProvider(providerConfigFromEnv(process.env));
+const orderStatus = readTool({
+  name: "order_status",
+  description: "Look up an order by ID.",
+  input: z.strictObject({ id: z.string() }),
+  authorize: () => Promise.resolve(true),
+  execute: ({ id }) => Promise.resolve(`Order ${id}: shipped`),
+});
+
+const result = await run({
+  provider,
+  tools: [orderStatus],
+  identity: { actorId: "user-1", tenantId: "acme" },
+  input: "Where is order 1042?",
+  system: "Help customers with their orders.",
+  signal: AbortSignal.timeout(30_000),
+});
+if (result.status === "completed") console.log(result.text);
+```
+
+Set `YADA_LLM_PROVIDER`, `YADA_LLM_API_KEY` and optionally `YADA_LLM_MODEL`. For durable runs, approvals and an HTTP API, see the [worker and handler example](docs/service.md).
 
 Using a feature without its package fails with an error naming what to install. See [provider configuration](docs/configuration.md) to choose a model.
 
@@ -78,7 +112,7 @@ YADA_LLM_MODEL=claude-opus-5-5
 YADA_LLM_API_KEY=your-anthropic-api-key
 ```
 
-That is all Yada needs. `.env.example` also lists the optional settings (effort, temperature, prompt caching, provider-hosted web search and code execution) with their allowed values; see [configuration](docs/configuration.md#model-settings). Live requests use your provider account and may incur charges; keep `.env` private. For the full starter, run `npm run starter:init`, add credentials to `.env.starter`, then `npm run starter`.
+That is all Yada needs. `.env.example` also lists the optional settings (effort, temperature, prompt caching, provider-hosted web search and code execution) with their allowed values; see [configuration](docs/configuration.md#model-settings). Live requests use your provider account and may incur charges; keep `.env` private. For the full starter, run `npm run starter:init`, add credentials to `.env`, then `npm run starter`.
 
 Before opening a pull request:
 
@@ -92,12 +126,16 @@ Automated tests require no provider credentials.
 
 ## Upgrading from 0.2
 
-- `better-sqlite3`, `pg`, `mysql2`, `@google/genai` (Gemini) and `@langchain/core` (`chatModelAdapter`) are optional peer dependencies; install the ones you use.
+- `better-sqlite3`, `pg`, `mysql2`, `@google/genai` (Gemini) and `@langchain/core` (`chatModelAdapter` from `@edgaralochi/yada/langchain`) are optional peer dependencies; install the ones you use.
 - `@langchain/google-genai`, `@langchain/anthropic` and `@langchain/openai` are no longer used; Anthropic and OpenAI-compatible providers run on the official SDKs.
 - `ReadTool.execute` returns `Content` (a string or an array of text and image parts) instead of `string`.
 - Hosted `openai` always uses the Responses API; the `api` option and `YADA_LLM_OPENAI_API` are removed.
 - Provider-hosted web search is on by default for `anthropic`, `openai` and `gemini` and is billed by the provider; set `YADA_LLM_SERVER_TOOLS=none` to turn it off.
 - Every provider accepts every model setting and ignores ones it has no equivalent for (Anthropic ignores `temperature`; use `effort`).
+- `chatModelAdapter` moved to `@edgaralochi/yada/langchain`, and `otelTracer` is only exported from `@edgaralochi/yada/otel`.
+- Storage writes use a new encryption envelope with key ids (`v1` records stay readable) and an indexed `active` column; stop older Yada versions before upgrading, since they cannot read new records. Set `YADA_STORAGE_PREVIOUS_KEYS` to rotate keys without downtime.
+- The service returns 400, 404, 410 and 415 for client errors instead of 503, and JSON endpoints require `Content-Type: application/json`.
+- `maxFailures` counts consecutive rounds in which every tool call failed, and tools time out after `limits.toolTimeoutMs` (default 120,000).
 - `maxContextChars` defaults to 256,000 and service `historyChars` to 128,000.
 - `maxRounds` defaults to 32 and `maxToolCalls` to 64, also for `runDurable` and worker profiles. Set `maxCostMicros` to bound spend. Durable runs suspended before the upgrade fail with `Run configuration mismatch` on resume unless their profile pins the old `maxRounds: 8` and `maxToolCalls: 16`.
 

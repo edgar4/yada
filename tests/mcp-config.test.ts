@@ -31,3 +31,22 @@ it("keeps the MCP client version in step with the package", async () => {
   const { clientVersion } = await import("../src/connectors/mcp/session.js");
   expect(clientVersion).toBe(manifest.version);
 });
+it("names the failing fields without exposing values", () => {
+  const raw =
+    '[{"name":"a","url":"https://example.test","timeoutMs":"hunter2"}]';
+  let message = "";
+  try {
+    mcpServersFromEnv({ YADA_MCP_SERVERS: raw });
+  } catch (error) {
+    message = String(error);
+  }
+  expect(message).toContain("0.timeoutMs");
+  expect(message).not.toContain("hunter2");
+  expect(() => mcpServersFromEnv({ YADA_MCP_SERVERS: "nope" })).toThrow(
+    "not valid JSON",
+  );
+});
+it("qualify-mcp rejects missing arguments", async () => {
+  const { qualifyMcp } = await import("../src/cli/qualify-mcp.js");
+  expect(await qualifyMcp([])).toBe(2);
+});

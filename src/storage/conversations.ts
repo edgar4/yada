@@ -2,6 +2,7 @@ import { z } from "zod";
 import { summaryPrefix, turnSchema } from "../core/checkpoint.js";
 import type { Identity, Turn } from "../core/contracts.js";
 import type { recordStore } from "./records.js";
+import { isTerminal } from "../service/terminal.js";
 export const identitySchema = z.strictObject({
   actorId: z.string().min(1),
   tenantId: z.string().min(1),
@@ -75,6 +76,28 @@ export type Conversation = Readonly<{
   revision: number;
   messages: readonly ConversationMessage[];
 }>;
+export type ConversationOverview = Readonly<{
+  id: string;
+  updatedAt: number;
+  status?: string;
+}>;
+export interface ConversationQueries {
+  list(
+    identity: Identity,
+    after?: string,
+    limit?: number,
+  ): Promise<{ conversations: ConversationOverview[]; next?: string }>;
+  inspect(
+    identity: Identity,
+    id: string,
+    runId?: string,
+  ): Promise<{
+    exists: boolean;
+    erased: boolean;
+    active: boolean;
+    submitted: boolean;
+  }>;
+}
 export interface ConversationStore {
   load(identity: Identity, id: string): Promise<Conversation | undefined>;
   save(
@@ -91,6 +114,18 @@ export const conversationKey = (identity: Identity, id: string) =>
     identity.actorId,
     z.string().min(1).parse(id),
   ]);
+export const retiredKey = (
+  identity: Identity,
+  conversationId: string,
+  runId: string,
+) =>
+  JSON.stringify([
+    "retired",
+    identity.tenantId,
+    identity.actorId,
+    conversationId,
+    runId,
+  ]);
 export const messagesFrom = (value: unknown) =>
   z
     .array(messageSchema)
@@ -99,10 +134,65 @@ export const messagesFrom = (value: unknown) =>
         ? value
         : z.object({ messages: z.unknown() }).parse(value).messages,
     );
+const overviewSchema = z.object({
+  id: z.string(),
+  identity: identitySchema,
+  deleted: z.boolean().default(false),
+  retiredRuns: z.array(z.string()).default([]),
+  jobs: z.array(
+    z.object({ id: z.string(), status: z.string(), updatedAt: z.number() }),
+  ),
+});
 export function createConversationStore(
   records: ReturnType<typeof recordStore>,
-): ConversationStore {
+): ConversationStore & ConversationQueries {
   return {
+    async list(identity, after, limit = 50) {
+      const conversations: ConversationOverview[] = [];
+      const [at, ...rest] = after?.split(":") ?? [];
+      let cursor =
+        at === undefined ? undefined : { at: Number(at), id: rest.join(":") };
+      for (;;) {
+        const rows = await records.recent(
+          "conversation",
+          conversationKey(identity, "-"),
+          cursor,
+          100,
+        );
+        for (const row of rows) {
+          cursor = { at: row.at, id: row.id };
+          const state = overviewSchema.safeParse(row.value).data;
+          if (!state || state.deleted) continue;
+          const job = state.jobs.at(-1);
+          conversations.push({
+            id: state.id,
+            updatedAt: job?.updatedAt ?? 0,
+            ...(job ? { status: job.status } : {}),
+          });
+          if (conversations.length === limit)
+            return { conversations, next: [row.at, row.id].join(":") };
+        }
+        if (rows.length < 100) return { conversations };
+      }
+    },
+    async inspect(identity, id, runId) {
+      const record = await records.read(conversationKey(identity, id));
+      const state = overviewSchema.safeParse(record?.value).data;
+      const runIds = [
+        ...(state?.jobs.map((job) => job.id) ?? []),
+        ...(state?.retiredRuns ?? []),
+      ];
+      return {
+        exists: record !== undefined,
+        erased: state?.deleted ?? false,
+        active: state?.jobs.some((job) => !isTerminal(job.status)) ?? false,
+        submitted:
+          runId !== undefined &&
+          (runIds.includes(runId) ||
+            (await records.read(retiredKey(identity, id, runId))) !==
+              undefined),
+      };
+    },
     async load(identity, id) {
       const record = await records.read(conversationKey(identity, id));
       if (

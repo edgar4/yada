@@ -91,7 +91,9 @@ Use trusted server configuration for URLs and commands. The stdio transport laun
 
 Remote tool names are prefixed: `lookup` becomes `catalog__lookup`. Use distinct connection names when combining tools from multiple servers. `run` rejects duplicate names.
 
-Tool catalogs are discovered automatically. Without `readTools`, only tools advertising `readOnlyHint: true` are exposed as reads. With `readTools`, the host explicitly selects reviewed read tools, including tools without annotations. Tools explicitly marked as mutating are rejected from reads. Every tool still requires host authorization; annotations alone do not grant access. This does not sandbox or prevent side effects inside a remote server.
+Tool catalogs are discovered automatically. Without `readTools`, only tools advertising `readOnlyHint: true` are exposed as reads. Every other tool is listed in `connection.skipped` (`{ tool, reason }`) and a `console.warn` names each one; set `readTools` or `confirmTools` to expose them.
+
+Remote tool names are exposed as `<server>__<name>` with characters outside `[a-zA-Z0-9_-]` replaced by `_` (duplicates get a numeric suffix); calls still use the remote name. HTTP servers that reject Streamable HTTP with a 4xx other than 401/403 are retried over the legacy SSE transport (not with OAuth). `yada qualify-mcp <servers.json> [--out file]` runs the [qualification checks](evals.md) from an installed package. Invalid `YADA_MCP_SERVERS` errors name the failing fields, never their values. With `readTools`, the host explicitly selects reviewed read tools, including tools without annotations. Tools explicitly marked as mutating are rejected from reads. Every tool still requires host authorization; annotations alone do not grant access. This does not sandbox or prevent side effects inside a remote server.
 
 Discovery follows pagination with bounded page/tool counts and rejects duplicate tools, repeated cursors, or missing configured tools. The combined `server__tool` name must fit the provider-compatible 64-character limit; longer names fail with an error stating that limit. Reconnect to refresh a changed tool catalog.
 

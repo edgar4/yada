@@ -201,6 +201,7 @@ it("fails closed when the pinned SDK background authentication hook is unavailab
     identity,
     complete: () => Promise.resolve(),
     disconnect: () => Promise.resolve(),
+    cancelPending: () => Promise.resolve(),
     coordinate: <T>(operation: () => Promise<T>) => operation(),
   };
   expect(() => {
@@ -294,6 +295,7 @@ it("redacts SDK transport errors", async () => {
     identity,
     complete: () => Promise.resolve(),
     disconnect: () => Promise.resolve(),
+    cancelPending: () => Promise.resolve(),
     coordinate: <T>(operation: () => Promise<T>) => operation(),
   };
   coordinateOAuthTransport(transport, oauth);

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Content, ContentPart } from "./contracts.js";
+import type { Content, ContentPart, Turn } from "./contracts.js";
 export const imageTypes = [
   "image/png",
   "image/jpeg",
@@ -38,8 +38,32 @@ export const contentText = (content: Content): string =>
           part.type === "text" ? part.text : `[image: ${part.mimeType}]`,
         )
         .join("\n");
+export const imageChars = 6400;
+const imageSavings = (content: Content) =>
+  typeof content === "string"
+    ? 0
+    : content.reduce(
+        (sum, part) =>
+          part.type === "image" ? sum + part.data.length - imageChars : sum,
+        0,
+      );
 export const contentSize = (content: Content) =>
-  typeof content === "string" ? content.length : JSON.stringify(content).length;
+  (typeof content === "string"
+    ? content.length
+    : JSON.stringify(content).length) - imageSavings(content);
+export const turnSize = (turn: Turn) =>
+  JSON.stringify(turn).length - imageSavings(turn.content);
+export const messagesSize = (messages: readonly Turn[]) =>
+  JSON.stringify(messages).length -
+  messages.reduce((sum, turn) => sum + imageSavings(turn.content), 0);
+export const omitImages = (content: Content): Content =>
+  typeof content === "string"
+    ? content
+    : content.map((part) =>
+        part.type === "image"
+          ? { type: "text" as const, text: "[image omitted]" }
+          : part,
+      );
 export async function mapText(
   content: Content,
   change: (text: string) => Promise<string> | string,

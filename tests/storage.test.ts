@@ -229,6 +229,7 @@ it("defaults to SQLite and validates configuration", () => {
     driver: "sqlite",
     filename: "yada.sqlite",
     encryptionKey: key,
+    previousEncryptionKeys: [],
   });
   expect(() => storageConfigFromEnv({})).toThrow("Invalid storage");
   expect(() =>

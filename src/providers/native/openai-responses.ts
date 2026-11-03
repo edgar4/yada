@@ -152,6 +152,7 @@ export function nativeOpenAIResponsesAdapter(
   const client = new OpenAI({
     apiKey: settings.apiKey ?? "unused",
     maxRetries: settings.maxRetries,
+    ...(settings.timeoutMs && { timeout: settings.timeoutMs }),
     ...(settings.baseUrl && { baseURL: settings.baseUrl }),
     ...(settings.headers && { defaultHeaders: settings.headers }),
   });
@@ -213,7 +214,11 @@ export function nativeOpenAIResponsesAdapter(
   };
   return {
     name: settings.name,
-    capabilities: { toolCalling: true, vision: settings.vision ?? false },
+    capabilities: {
+      toolCalling: true,
+      vision: settings.vision ?? false,
+      retries: true,
+    },
     async complete(request) {
       const response = await client.responses.create(params(request), {
         signal: request.signal,

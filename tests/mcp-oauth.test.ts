@@ -360,3 +360,45 @@ it("sends configured headers only to the MCP origin", async () => {
   expect(auth.every(([, key]) => key === null)).toBe(true);
   expect(mcp.every(([, key]) => key === "secret")).toBe(true);
 });
+it("cancels a pending login without deleting tokens", async () => {
+  const s = setup();
+  await s.oauth.provider.saveTokens({
+    access_token: "t",
+    token_type: "Bearer",
+  });
+  await s.oauth.provider.state?.();
+  await expect(s.oauth.provider.state?.()).rejects.toThrow("already pending");
+  await s.oauth.cancelPending();
+  await expect(s.oauth.provider.state?.()).resolves.toBeTruthy();
+  expect((await s.oauth.provider.tokens())?.access_token).toBe("t");
+});
+it.each([
+  [undefined, "none"],
+  ["client_secret_basic", "client_secret_basic"],
+  ["client_secret_post", "client_secret_post"],
+] as const)("supports confidential clients (%s)", async (method, expected) => {
+  const s = setup();
+  const oauth = createMcpOAuth({
+    ...s.options,
+    clientId: "id",
+    ...(method ? { clientSecret: "secret", clientAuthMethod: method } : {}),
+    clientMetadataUrl: "https://app.example/client.json",
+  });
+  expect(oauth.provider.clientMetadata.token_endpoint_auth_method).toBe(
+    method ? expected : "none",
+  );
+  expect(oauth.provider.clientMetadataUrl).toBe(
+    "https://app.example/client.json",
+  );
+  expect(await oauth.provider.clientInformation()).toEqual({
+    client_id: "id",
+    ...(method ? { client_secret: "secret" } : {}),
+  });
+});
+it("rejects invalid client options", () => {
+  const { options } = setup();
+  expect(() => createMcpOAuth({ ...options, clientSecret: "s" })).toThrow();
+  expect(() =>
+    createMcpOAuth({ ...options, clientMetadataUrl: "http://x.example/a" }),
+  ).toThrow();
+});

@@ -1,7 +1,7 @@
 import { nativeOpenAIResponsesAdapter } from "./native/openai-responses.js";
-import { modelOptions, type ModelOptions } from "./options.js";
+import { parseModelOptions, type ModelOptions } from "./options.js";
 export function createOpenAIProvider(config: ModelOptions) {
-  const options = modelOptions.parse(config);
+  const options = parseModelOptions(config, true);
   return nativeOpenAIResponsesAdapter({
     ...options,
     name: "openai",

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Identity, ProviderAdapter, ReadTool, Tool } from "./contracts.js";
-import type { RunHooks } from "./hooks.js";
+import { composeHooks, type RunHooks } from "./hooks.js";
 import type { RunLimits } from "./limits.js";
 import { Suspended } from "./action.js";
 import { run } from "./runtime.js";
@@ -15,6 +15,7 @@ export function agentTool(options: {
   system: string;
   limits?: RunLimits;
   maxRounds?: number;
+  timeoutMs?: number;
   hooks?: RunHooks;
   authorize?: (identity: Identity) => Promise<boolean>;
 }): ReadTool {
@@ -29,8 +30,23 @@ export function agentTool(options: {
     name: options.name,
     description: options.description,
     input: z.strictObject({ task: z.string().min(1) }),
+    timeoutMs: options.timeoutMs ?? Infinity,
     authorize: options.authorize ?? (() => Promise.resolve(true)),
     execute: async ({ task }, identity, signal, toolRun) => {
+      const inherited = options.limits ?? toolRun?.limits;
+      const remaining = toolRun?.remainingCostMicros;
+      const limits =
+        inherited &&
+        remaining !== undefined &&
+        (inherited.pricing || inherited.costPerCallMicros)
+          ? {
+              ...inherited,
+              maxCostMicros: Math.min(
+                inherited.maxCostMicros ?? remaining,
+                remaining,
+              ),
+            }
+          : inherited;
       const child = {
         provider: options.provider,
         tools: options.tools,
@@ -38,20 +54,32 @@ export function agentTool(options: {
         input: task,
         system: options.system,
         signal,
-        ...(options.limits ? { limits: options.limits } : {}),
+        ...(limits ? { limits } : {}),
         ...(options.maxRounds ? { maxRounds: options.maxRounds } : {}),
         ...(options.hooks ? { hooks: options.hooks } : {}),
       };
-      const { result, usage } = toolRun?.runChild
-        ? await toolRun.runChild(child)
-        : { result: await run(child), usage: undefined };
+      const nested = toolRun?.runChild;
+      const { result, usage } = nested
+        ? await nested(child)
+        : {
+            result: await run({
+              ...child,
+              hooks: composeHooks(options.hooks ?? {}, {
+                onEvent(event) {
+                  if (event.type === "model_finished")
+                    toolRun?.addUsage(event.usage);
+                  return undefined;
+                },
+              }),
+            }),
+            usage: undefined,
+          };
       signal.throwIfAborted();
-      if (
+      const suspended =
         result.status === "awaiting_approval" ||
-        result.status === "reconciling"
-      )
-        throw new Suspended(result);
-      toolRun?.addUsage(usage);
+        result.status === "reconciling";
+      if (!suspended) toolRun?.addUsage(usage);
+      if (suspended) throw new Suspended(result);
       if (result.status === "completed") return result.text;
       return JSON.stringify({
         error: "agent_failed",

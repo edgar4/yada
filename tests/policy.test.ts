@@ -181,7 +181,11 @@ for (const driver of drivers)
             "http://localhost/v1/conversations/chat/runs/a/approvals/" +
               operationId(s.identity, JSON.stringify(["chat", "a"]), "c1") +
               "/decision",
-            { method: "POST", body: JSON.stringify(body) },
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(body),
+            },
           ),
         );
       const execute = vi.fn(() => Promise.resolve("ran"));

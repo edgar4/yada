@@ -23,9 +23,12 @@ try {
   for (const { path } of packed.files)
     assert.match(
       path,
-      /^(?:dist\/|docs\/|examples\/starter\/|README\.md$|LICENSE$|package\.json$)/,
+      /^(?:dist\/|docs\/|examples\/starter\/|README\.md$|LICENSE$|\.env\.example$|package\.json$)/,
     );
-  assert(!packed.files.some(({ path }) => /(?:^|\/)\.env/.test(path)));
+  assert(
+    !packed.files.some(({ path }) => /(?:^|\/)\.env(?!\.example$)/.test(path)),
+  );
+  assert(packed.files.some(({ path }) => path === "dist/yada-widget.js"));
   assert(packed.files.some(({ path }) => path === "LICENSE"));
   for (const entry of [
     "index",
@@ -37,6 +40,7 @@ try {
     "entries/mcp",
     "entries/service",
     "entries/otel",
+    "entries/langchain",
   ])
     for (const extension of ["js", "d.ts"])
       assert(
@@ -66,6 +70,17 @@ try {
   );
   assert.equal(manifest.version, packed.version);
   await writeFile(
+    join(temporary, "exports.mjs"),
+    Object.entries(manifest.exports)
+      .filter(([, target]) => typeof target === "object")
+      .map(
+        ([subpath]) =>
+          `await import(${JSON.stringify(manifest.name + subpath.slice(1))});`,
+      )
+      .join("\n"),
+  );
+  execute(process.execPath, ["exports.mjs"], temporary);
+  await writeFile(
     join(temporary, "smoke.mjs"),
     `
 import assert from "node:assert/strict";
@@ -80,10 +95,16 @@ import * as mcp from "@edgaralochi/yada/mcp";
 import * as skillsEntry from "@edgaralochi/yada/skills";
 import * as service from "@edgaralochi/yada/service";
 import * as otel from "@edgaralochi/yada/otel";
-for (const entry of [providers, storageEntry, mcp, skillsEntry, service, otel])
+import * as langchain from "@edgaralochi/yada/langchain";
+import * as evals from "@edgaralochi/yada/evals";
+for (const entry of [providers, storageEntry, mcp, skillsEntry, service])
   for (const key of Object.keys(entry)) assert.equal(entry[key], root[key], key);
 assert(Object.keys(client).length > 0);
 assert(Object.keys(widget).length > 0);
+assert(!("otelTracer" in root) && !("chatModelAdapter" in root) && !("chatModelAdapter" in providers));
+assert.equal(typeof langchain.chatModelAdapter, "function");
+assert.equal(typeof evals.runScenario, "function");
+assert.equal(typeof evals.summarize, "function");
 const provider = createFakeProvider(() => ({content: "installed", toolCalls: [], finishReason: "stop"}));
 const result = await run({provider, tools: [], identity: {actorId: "test", tenantId: "test"}, input: "test", system: "test", signal: AbortSignal.timeout(5000)});
 assert.deepEqual(result, {status: "completed", text: "installed"});
@@ -93,8 +114,7 @@ const skills = await loadSkills({directories: ["skills"], authorize: async () =>
 assert.match(skills.system, /Verify packaged skills/);
 assert.match(await skills.tools[0].execute({name: "installed"}, {actorId: "test", tenantId: "test"}, AbortSignal.timeout(5000)), /Use the installed runtime/);
 await assert.rejects(createStorage({driver: "sqlite", filename: ":memory:", encryptionKey: "11".repeat(32)}), /npm install better-sqlite3/);
-const gemini = root.createProvider({provider: "gemini", apiKey: "key"});
-await assert.rejects(gemini.complete({system: "s", messages: [], tools: [], signal: AbortSignal.timeout(5000)}), /npm install @google\\/genai/);
+assert.throws(() => root.createProvider({provider: "gemini", apiKey: "key"}), /npm install @google\\/genai/);
 await assert.rejects(otel.otelTracer(), /npm install @opentelemetry\\/api/);
 `,
   );
@@ -126,9 +146,14 @@ import * as storage from "@edgaralochi/yada/storage";
 import * as mcp from "@edgaralochi/yada/mcp";
 import * as skills from "@edgaralochi/yada/skills";
 import * as service from "@edgaralochi/yada/service";
-import * as otel from "@edgaralochi/yada/otel";
-void [runtime, client, widget, providers, storage, mcp, skills, service, otel];
+import * as evals from "@edgaralochi/yada/evals";
+void [runtime, client, widget, providers, storage, mcp, skills, service, evals];
 `,
+  );
+  execute(
+    npm,
+    ["install", "--no-save", "--no-audit", "--no-fund", "@types/node"],
+    temporary,
   );
   execute(
     process.execPath,
@@ -136,7 +161,8 @@ void [runtime, client, widget, providers, storage, mcp, skills, service, otel];
       join(root, "node_modules/typescript/bin/tsc"),
       "--noEmit",
       "--strict",
-      "--skipLibCheck",
+      "--types",
+      "node",
       "--module",
       "NodeNext",
       "--target",
@@ -159,10 +185,7 @@ void [runtime, client, widget, providers, storage, mcp, skills, service, otel];
     await readFile(join(starter, "skills/README.md"), "utf8"),
     /SKILL.md/,
   );
-  assert.match(
-    await readFile(join(starter, ".gitignore"), "utf8"),
-    /\.env\.starter/,
-  );
+  assert.match(await readFile(join(starter, ".gitignore"), "utf8"), /^\.env$/m);
   execute(
     npm,
     ["install", "--no-audit", "--no-fund", join(temporary, packed.filename)],

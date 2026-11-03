@@ -2,6 +2,7 @@ import { z } from "zod";
 import { failureCodes } from "./contracts.js";
 import { contentSchema } from "./content.js";
 export const summaryPrefix = "[summary of earlier conversation]\n";
+export const feedbackPrefix = "[output validation failed]\n";
 const call = z.object({
   id: z.string().min(1),
   name: z.string(),
@@ -32,7 +33,11 @@ export const turnSchema = z.discriminatedUnion("role", [
   }),
 ]);
 export const runResultSchema = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("completed"), text: z.string() }),
+  z.object({
+    status: z.literal("completed"),
+    text: z.string(),
+    data: z.unknown().optional(),
+  }),
   z.object({
     status: z.literal("failed"),
     code: z.enum(failureCodes),
@@ -46,6 +51,8 @@ export const checkpointSchema = z.object({
   rounds: z.number().int().nonnegative(),
   calls: z.number().int().nonnegative(),
   failures: z.number().int().nonnegative().optional(),
+  roundFailures: z.number().int().nonnegative().optional(),
+  outputRetries: z.number().int().nonnegative().optional(),
   steered: z.array(z.string()).optional(),
   reservedCostMicros: z.number().int().nonnegative().optional(),
   usage: z

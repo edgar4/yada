@@ -35,7 +35,7 @@ const allow = () => Promise.resolve(true);
 export function memoryTools(memory: MemoryStore) {
   const save = z.object({
     key: z.string().min(1).max(200),
-    text: z.string().min(1),
+    text: z.string().min(1).max(4000),
     tags: z.array(z.string().min(1).max(64)).max(16).optional(),
   });
   const forget = z.object({ key: z.string().min(1).max(200) });

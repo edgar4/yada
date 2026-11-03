@@ -1,5 +1,9 @@
 import { z } from "zod";
-const secret = { encryptionKey: z.string().regex(/^[a-fA-F0-9]{64}$/) };
+const keyHex = z.string().regex(/^[a-fA-F0-9]{64}$/);
+const secret = {
+  encryptionKey: keyHex,
+  previousEncryptionKeys: z.array(keyHex).default([]),
+};
 export const storageConfig = z.discriminatedUnion("driver", [
   z.strictObject({
     driver: z.literal("sqlite"),
@@ -29,6 +33,13 @@ export function storageConfigFromEnv(
   const result = storageConfig.safeParse({
     driver,
     encryptionKey: env["YADA_STORAGE_KEY"],
+    ...(env["YADA_STORAGE_PREVIOUS_KEYS"]
+      ? {
+          previousEncryptionKeys: env["YADA_STORAGE_PREVIOUS_KEYS"]
+            .split(",")
+            .map((key) => key.trim()),
+        }
+      : {}),
     ...(driver === "sqlite"
       ? { filename: env["YADA_STORAGE_FILE"] }
       : { url: env["YADA_STORAGE_URL"] }),

@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "type": "module",
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('dist', {recursive: true, force: true})\" && tsc -p tsconfig.build.json",
+    "build": "node -e \"require('node:fs').rmSync('dist', {recursive: true, force: true})\" && tsc -p tsconfig.build.json && node scripts/build-bundle.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
@@ -19,7 +19,7 @@
     "test:deployment": "node scripts/deployment-smoke.mjs",
     "starter:init": "node examples/starter/init.mjs",
     "starter:build": "npm run build && node examples/starter/build.mjs",
-    "starter": "npm run starter:build && node --env-file=.env.starter --import tsx examples/starter/server.ts"
+    "starter": "npm run starter:build && node --env-file=.env --import tsx examples/starter/server.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.129.0",
@@ -53,7 +53,7 @@
     "vitest": "5.0.5"
   },
   "engines": {
-    "node": ">=24.0.0 <25"
+    "node": ">=24"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -70,6 +70,7 @@
       "types": "./dist/widget/index.d.ts",
       "import": "./dist/widget/index.js"
     },
+    "./widget.js": "./dist/yada-widget.js",
     "./providers": {
       "types": "./dist/entries/providers.d.ts",
       "import": "./dist/entries/providers.js"
@@ -90,6 +91,14 @@
       "types": "./dist/entries/service.d.ts",
       "import": "./dist/entries/service.js"
     },
+    "./langchain": {
+      "types": "./dist/entries/langchain.d.ts",
+      "import": "./dist/entries/langchain.js"
+    },
+    "./evals": {
+      "types": "./dist/entries/evals.d.ts",
+      "import": "./dist/entries/evals.js"
+    },
     "./otel": {
       "types": "./dist/entries/otel.d.ts",
       "import": "./dist/entries/otel.js"
@@ -100,6 +109,7 @@
     "docs",
     "README.md",
     "LICENSE",
+    ".env.example",
     "examples/starter",
     "!examples/starter/**/.env*",
     "!examples/starter/**/*.sqlite*",

@@ -1,4 +1,5 @@
 import type { WriteTool, Suspension, Ask } from "./action.js";
+import type { RunLimits } from "./limits.js";
 import type { RunOptions } from "./runtime.js";
 export type ProviderMetadata = Readonly<{
   provider: string;
@@ -54,7 +55,11 @@ export type ProviderResult = Readonly<{
 export type ProviderDelta = Readonly<{ type: "text"; delta: string }>;
 export interface ProviderAdapter {
   readonly name: string;
-  readonly capabilities: Readonly<{ toolCalling: boolean; vision?: boolean }>;
+  readonly capabilities: Readonly<{
+    toolCalling: boolean;
+    vision?: boolean;
+    retries?: boolean;
+  }>;
   complete(request: ProviderRequest): Promise<ProviderResult>;
   stream?(
     request: ProviderRequest,
@@ -64,6 +69,7 @@ export type Identity = Readonly<{ actorId: string; tenantId: string }>;
 export interface ReadTool {
   readonly spec: ToolSpec;
   readonly effect: "read";
+  readonly timeoutMs?: number;
   authorize(identity: Identity): Promise<boolean>;
   execute(
     args: unknown,
@@ -76,6 +82,8 @@ export type ToolRun = Readonly<{
   ask?: Ask;
   addUsage: (usage: ProviderResult["usage"]) => void;
   maxOutput: number;
+  limits?: RunLimits;
+  remainingCostMicros?: number | undefined;
   runChild?: (options: RunOptions) => Promise<ChildRun>;
 }>;
 export type ChildRun = Readonly<{
@@ -95,7 +103,7 @@ export const failureCodes = [
 ] as const;
 export type RunResult = TerminalResult | Suspension;
 export type TerminalResult =
-  | Readonly<{ status: "completed"; text: string }>
+  | Readonly<{ status: "completed"; text: string; data?: unknown }>
   | Readonly<{
       status: "failed";
       code: (typeof failureCodes)[number];

@@ -27,12 +27,13 @@ const drivers = {
   postgres: "pg",
   mysql: "mysql2",
 } as const;
-export function knexClient(driver: keyof typeof drivers) {
-  const client = drivers[driver];
+export function requirePackage(packages: string, purpose: string) {
   try {
-    require.resolve(client);
+    require.resolve(packages);
   } catch (error) {
-    throw missing(client, `The ${driver} storage driver`, error);
+    throw missing(packages, purpose, error);
   }
-  return client;
+  return packages;
 }
+export const knexClient = (driver: keyof typeof drivers) =>
+  requirePackage(drivers[driver], `The ${driver} storage driver`);

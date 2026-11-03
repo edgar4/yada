@@ -1,9 +1,5 @@
-import {
-  run,
-  type ProviderAdapter,
-  type ProviderResult,
-} from "../src/index.js";
-import type { Scenario } from "./scenarios.js";
+import { run, type ProviderAdapter, type ProviderResult } from "../index.js";
+import type { Scenario } from "./scenario.js";
 
 export type EvalResult = {
   name: string;

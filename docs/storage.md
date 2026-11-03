@@ -18,6 +18,8 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 
 Set `YADA_STORAGE_KEY` to that 64-character hex value. Keep the same key across restarts and application instances. Losing it makes stored records unreadable. Do not regenerate it on startup.
 
+Each record carries the id of the key that sealed it (`v2.<keyId>...`); older `v1` records stay readable. To rotate without downtime, set `YADA_STORAGE_KEY` to the new key and `YADA_STORAGE_PREVIOUS_KEYS` to a comma-separated list of retired keys (`previousEncryptionKeys` in config). Records are read with any listed key and re-encrypted with the current key whenever they are written. Run `rotateStorageKey` afterwards to re-encrypt the rest, then drop the old keys. Instances from before key ids cannot read newly written records, so upgrade every instance before rotating.
+
 Database drivers are optional peer dependencies. Install the one you use: `better-sqlite3` for SQLite, `pg` for PostgreSQL, `mysql2` for MySQL. Opening storage without it fails with an error naming the package.
 
 SQLite requires only the key and `better-sqlite3`:
@@ -96,7 +98,11 @@ const oauth = createMcpOAuth({
 
 ## Operations
 
-Opening storage applies versioned migrations under Knex's migration lock. Migration or connection failures stop initialization; there is no fallback to another database. Deploy against a database where the migration account can create the required tables. Back up before upgrades and run one migration opener before scaling application instances.
+Opening storage applies versioned migrations under Knex's migration lock. Migration or connection failures stop initialization; there is no fallback to another database. Deploy against a database where the migration account can create the required tables. Back up before upgrades and run one migration opener before scaling application instances: call `migrateDatabase(config)` once (a deploy step or init container), then start instances with `createStorage(config, { migrate: false })` so they skip migrations. Migration also backfills the conversation `kind`, `active` and `scope` columns from existing records in batches; stop older application versions first, since they do not maintain `active`.
+
+Workers find unfinished jobs through an indexed `active` flag on conversation records, so polling cost scales with active conversations and no shared row is rewritten. Jobs store only the number of history messages they started from and derive history from the conversation. Terminal jobs beyond the latest 20 per conversation are removed from the conversation; their ids are kept as small `retired` records (blocking id reuse, found by erasure through the indexed `scope` column), so conversation state stays bounded. Listing conversations reads only the caller's records through `scope` (a hash of tenant and actor) with cursor pagination.
+
+Writes that fail with a serialization failure or deadlock (PostgreSQL `40001`/`40P01`, MySQL `1213`/`1205`) are retried like revision conflicts.
 
 SQLite uses WAL with a bounded busy timeout and a single connection per storage instance. Keep the database on a persistent local volume, not a shared network filesystem. PostgreSQL and MySQL support deployments using a shared database across hosts.
 

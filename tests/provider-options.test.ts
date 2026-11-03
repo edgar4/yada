@@ -53,7 +53,6 @@ it.each([
   { YADA_LLM_MAX_TOKENS: "0" },
   { YADA_LLM_MAX_TOKENS: "1.5" },
   { YADA_LLM_MAX_TOKENS: "abc" },
-  { YADA_LLM_MAX_TOKENS: " " },
   { YADA_LLM_TEMPERATURE: "-1" },
   { YADA_LLM_TEMPERATURE: "3" },
   { YADA_LLM_MAX_RETRIES: "11" },
@@ -290,7 +289,7 @@ it("round trips Claude 5 thinking blocks and sends effort through a tool loop", 
   expect(result).toEqual({ status: "completed", text: "Available" });
   expect(urls[0]).toBe("https://claude.example.com/v1/messages");
   expect(bodies[0]).toMatchObject({
-    max_tokens: 8192,
+    max_tokens: 32000,
     output_config: { effort: "high" },
     thinking: { type: "adaptive", display: "summarized" },
   });

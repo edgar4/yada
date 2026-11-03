@@ -17,8 +17,10 @@ export type { RunStore, DurableRun, DurableRequest } from "../storage/runs.js";
 export type { JobStore } from "../storage/jobs.js";
 export { JobConflict } from "../storage/jobs.js";
 export type { Action, ActionStore } from "../storage/actions.js";
+export { migrateDatabase } from "../storage/database.js";
 export {
   backupStorage,
+  streamBackup,
   restoreStorage,
   rotateStorageKey,
 } from "../storage/maintenance.js";

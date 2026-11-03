@@ -28,6 +28,27 @@ widget?.configure({
 
 Place `<yada-chat></yada-chat>` in the host markup. `defineYadaWidget()` explicitly registers the component, accepts an optional custom element name, and does nothing during server rendering. Configure the element after registration. Registration is idempotent. Rendering creates no global styles or UI outside the element's Shadow DOM.
 
+## Without a bundler
+
+`dist/yada-widget.js` (also `@edgaralochi/yada/widget.js`) is a single minified script with the client and widget; it exposes a `Yada` global. Serve it from your own origin:
+
+```html
+<yada-chat></yada-chat>
+<script src="/assets/yada-widget.js"></script>
+<script>
+  Yada.defineYadaWidget();
+  document.querySelector("yada-chat").configure({
+    client: new Yada.BrowserClient({ baseUrl: location.origin }),
+    conversationId: "support-chat",
+    profileId: "support",
+  });
+</script>
+```
+
+## Content Security Policy
+
+The widget adopts its styles as a constructed stylesheet (`adoptedStyleSheets`), which a `style-src` policy without `'unsafe-inline'` allows. Browsers without it fall back to an inline `<style>` element, which a strict `style-src` blocks; allow it with a nonce or `'unsafe-inline'` if you must support them. The widget needs no inline scripts, `eval` or external resources; `connect-src` must allow the API origin.
+
 The host owns authentication, conversation identity, profile selection, and API deployment. `baseUrl` is an absolute HTTP(S) URL prefix; the client appends `/v1/conversations/...`. Credentials, queries and fragments in that URL are rejected. API redirects fail rather than forwarding requests to another endpoint. `credentials` defaults to `same-origin`. The optional `headers` callback runs for every request and retry so refreshed authentication can be used. Cross-origin deployments require the server to allow the host origin and relevant credentials/headers. The client does not persist credentials.
 
 ## Framework-independent runs
@@ -55,7 +76,27 @@ Call `cancel(conversationId, runId)` to request server cancellation. Cancellatio
 
 ## Widget behavior and themes
 
-The widget shows the conversation as chat bubbles: the user's messages on the right in the accent color, assistant replies on the left. Enter sends a message and Shift+Enter adds a new line. It includes a labeled message field, keyboard-operable controls, a polite conversation log, status announcements, alerts and visible focus indicators. While a run is active, message submission is disabled. Approval controls show the server preview as text and require an explicit approve or decline. Expired or nonpending approval snapshots disable decision buttons. Server events and previews use text nodes, never HTML.
+The widget shows the conversation as chat bubbles: the user's messages on the right in the accent color, assistant replies on the left. Enter sends a message and Shift+Enter adds a new line. It includes a labeled message field, keyboard-operable controls, a polite conversation log, status announcements, alerts and visible focus indicators. Approval controls show the server preview as text and require an explicit approve or decline. Expired or nonpending approval snapshots disable decision buttons. Server events and previews use text nodes, never HTML.
+
+While a run is active the message field stays enabled: sending a message steers the running run (`BrowserClient.steer`) and appears in the conversation. Approvals include a "Remember this approval for this run" checkbox, off by default; when checked, approving sends `remember: "run"` so identical later actions in the run are approved automatically. Failed and cancelled runs show a message in the alert region; the codes `limit`, `dependency_failed`, `refused`, `timeout`, `retry_exhausted` and `cancelled` have specific texts, any other failure a generic one.
+
+Pass `labels` to `configure` to translate or reword any UI string; omitted keys keep their English defaults:
+
+```ts
+widget.configure({
+  client,
+  conversationId,
+  profileId,
+  labels: {
+    title: "Assistent",
+    send: "Senden",
+    placeholder: "Nachricht",
+    errorTimeout: "Zeitüberschreitung.",
+  },
+});
+```
+
+Keys (`WidgetLabels`): `title`, `empty`, `conversation`, `message`, `placeholder`, `send`, `cancel`, `reconnect`, `you`, `ready`, `loading`, `connecting`, `reconnecting`, `disconnected`, `toolRunning` and `toolFinished` (with `{tool}`), `tool`, `queued`, `running`, `awaitingApproval`, `completed`, `failed`, `cancelled`, `cancelRequested`, `approved`, `declined`, `approvalGroup`, `approvalTitle`, `approve`, `decline`, `remember`, `loadFailed`, `connectionFailed`, `cancelFailed`, `decisionFailed`, `steerFailed`, `errorFailed`, `errorCancelled`, `errorLimit`, `errorDependencyFailed`, `errorRefused`, `errorTimeout` and `errorRetryExhausted`. Assistant replies and server-provided text are shown as received.
 
 Reconnect preserves the submitted input ID and event cursor. Removing an element aborts its browser requests; reattaching the same element resumes its active run. `configure` aborts the prior subscription and resets local display state. Explicit **Cancel run** requests server cancellation. Approval and cancellation failures appear in the alert region. Hosts should call `configure` when account or conversation identity changes.
 

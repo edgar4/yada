@@ -51,9 +51,29 @@ All paths start with `/v1/conversations/{conversationId}/runs`. IDs are scoped t
 
 Steering messages are stored on the run and delivered as user turns at the start of the next model round, after pending tool calls finish. A message sent while the run is `awaiting_approval` waits and is delivered after the decision; it does not resume the run. The worker marks a message consumed only after the checkpoint holding it is saved, and a redelivered message already in the checkpoint is skipped, so a crash never duplicates or loses it. A message that arrives during the final model call is delivered as another round, unless the run has used its last round.
 
-Generate a unique run ID before submission and reuse it when retrying that submission. Reusing it with changed input or profile returns 409. A conversation accepts one unfinished run at a time. Completed answers and conversation history are committed atomically, so recovery cannot append an answer twice. Network disconnection never cancels the run.
+Generate a unique run ID before submission and reuse it when retrying that submission. An identical resend returns 202 with the existing run; reusing the ID with changed input or profile returns 409. A conversation accepts one unfinished run at a time. Completed answers and conversation history are committed atomically, so recovery cannot append an answer twice. Network disconnection never cancels the run.
 
 Events have `version`, `sequence`, `type`, and `at`, with optional `text`, `code`, `approvalId`, or (on `awaiting_approval`) `expiresAt`. Streams provide lifecycle progress, tool activity and complete answers; they do not expose provider reasoning. Persisted `tool_started` (read tools only, since writes already report approval and reconciliation), `tool_finished` (with `failed`) and `usage` (`inputTokens`, `outputTokens`) events carry the tool name or token counts only, never arguments or content, and do not change the run status. Reconnect using the last processed sequence and discard already processed events. Errors are sanitized and responses are not cacheable.
+
+Quota is consumed only when a submission creates a new run; resends and 409 conflicts are free. Every request, submissions included, counts toward a per-actor limit of 600 requests per minute, and each actor may hold 8 concurrent event streams; override with `limits: { requestsPerMinute, streamsPerActor }`. Both limits are shared across instances through storage: requests use an in-process counter, and POST and DELETE also use a fixed one-minute counter per actor in storage (polling reads skip the storage counter), and each open stream holds a 30-second lease renewed while open and released on close, so a crashed instance frees its slots. If storage fails, the limits fail open and the error goes to `onError`. `Retry-After` is exposed to browsers through CORS.
+
+## Conversations
+
+| Method | Path                            | Behavior                                                                                                                                                                          |
+| ------ | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/v1/conversations?after&limit` | The caller's own conversations as `{ conversations: [{ id, updatedAt, status? }], next? }`, most recently updated first. Pass `next` as `after`; `limit` is 1 to 100 (default 50) |
+| GET    | `/v1/conversations/{id}`        | `{ id, messages }` with user and assistant text and `{ role: "failure", code }` entries; summaries and tool turns are omitted. 404 if unknown or erased                           |
+| DELETE | `/v1/conversations/{id}`        | Erase via `eraseConversation`, including remembered approvals; 204. 404 if unknown; 409 while a run is unfinished                                                                 |
+
+Listing scans stored conversations, so it suits modest volumes per deployment.
+
+## Health, errors and webhooks
+
+`GET /healthz` returns 200 and `GET /readyz` checks storage (503 when unavailable); both are served without authentication. Pass `onError(error, request)` to `createHandler` and `createNodeServer` to log unexpected failures (clients still receive a sanitized 503). `createNodeServer(handler, options)` sets `requestTimeoutMs` (30 s), `headersTimeoutMs` (15 s) and `keepAliveTimeoutMs` (65 s) and accepts `maxConnections`. `closeNodeServer(server, graceMs = 10000)` stops accepting connections, closes idle ones, lets in-flight requests finish, then closes the rest after the grace period.
+
+Pass `webhooks: { url, secret }` (secret at least 16 characters) to `createWorker` to receive `POST` JSON `{ type, conversationId, runId, status }` on `completed`, `failed`, `cancelled` and `awaiting_approval`. The `x-yada-signature` header is `sha256=` plus the hex HMAC-SHA256 of the raw body. Delivery is best effort and at least once: three attempts with backoff, a 5 s timeout, no redirects, never blocking the worker. Fetch run details through the API.
+
+If a crash occurs between recording an approval decision and resuming the run, `GET /{id}` or the event stream resumes it.
 
 ## Live text
 
@@ -79,22 +99,24 @@ For clients in other languages (a Python package belongs in its own repository).
 
 Errors are `{ "error": string }` with these statuses:
 
-| Status | Meaning                                                                                                                                                |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 400    | Invalid request body or parameters                                                                                                                     |
-| 401    | Authentication required; renew credentials, then retry                                                                                                 |
-| 403    | Origin or profile denied; do not retry                                                                                                                 |
-| 404    | Unknown path, run or approval; also the response for runs of another tenant or actor                                                                   |
-| 409    | Conflict: run ID reused with different input, unfinished run in the conversation, approval not pending, or `after` beyond the stored events            |
-| 413    | Request body too large                                                                                                                                 |
-| 429    | Tenant or actor quota exceeded on run submission (`{ "error": "Rate limit exceeded" }`), or host rate limiting. Wait `Retry-After` seconds, then retry |
-| 503    | Temporary failure; retry with backoff                                                                                                                  |
+| Status | Meaning                                                                                                                                                                                        |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | Invalid request body, missing body or invalid parameters                                                                                                                                       |
+| 401    | Authentication required; renew credentials, then retry                                                                                                                                         |
+| 403    | Origin or profile denied; do not retry                                                                                                                                                         |
+| 404    | Unknown path, run or approval; also the response for runs of another tenant or actor                                                                                                           |
+| 409    | Conflict: run ID reused with different input, unfinished run in the conversation, approval not pending, or `after` beyond the stored events                                                    |
+| 410    | Conversation was erased                                                                                                                                                                        |
+| 413    | Request body too large                                                                                                                                                                         |
+| 429    | Tenant or actor quota exceeded on run submission, per-actor request limit, or too many concurrent event streams (`{ "error": "Rate limit exceeded" }`). Wait `Retry-After` seconds, then retry |
+| 415    | JSON endpoints require `Content-Type: application/json`                                                                                                                                        |
+| 503    | Temporary or unexpected failure; retry with backoff                                                                                                                                            |
 
 Event lines are JSON objects `{ version: 1, sequence, type, at }` plus optional `text`, `code`, `approvalId`, `expiresAt`, `tool`, `failed`, `inputTokens`, `outputTokens`. Types: `queued`, `running`, `progress`, `awaiting_approval`, `reconciling`, `completed`, `failed`, `cancelled`, `tool_started`, `tool_finished`, `usage`, `steering_received` and, only on a shared event bus, `text_delta`. Terminal types are `completed` (`text`), `failed` (`code`) and `cancelled`. `tests/fixtures/service-events.ndjson` holds a sample stream that the test suite validates against the event schema.
 
 Submit and follow a run:
 
-1. Generate a run ID and `POST /` with it. After a network error or 5xx, resend the identical body; a 409 for an identical resend means the run already exists, so continue to step 2.
+1. Generate a run ID and `POST /` with it. After a network error or 5xx, resend the identical body; an identical resend returns 202 with the existing run, so continue to step 2. A 409 means a different request reused the ID or another run is active.
 2. Set `cursor = 0`. Open `GET /{id}/events?after={cursor}`.
 3. For each line, skip `text_delta` events (they have no persisted sequence) and any event with `sequence <= cursor`; handle the rest and set `cursor = sequence`.
 4. On `awaiting_approval`, read the approval, show `preview`, and `POST` the decision before `expiresAt`. The stream keeps running afterwards.
