@@ -2,7 +2,7 @@ import type { McpConnection } from "./session.js";
 import type { Identity, Tool } from "../../core/contracts.js";
 import { abortable } from "../../core/abort.js";
 import { canonical } from "./discovery.js";
-import { mcpAccessDenied } from "./rpc.js";
+import { connectFailure, mcpAccessDenied, mcpToolChanged } from "./rpc.js";
 import { ToolCallError } from "../../core/tool.js";
 
 function contract(connection: McpConnection<Tool>): string {
@@ -59,6 +59,8 @@ export async function reconnectingMcp(
       pending ??= (async () => {
         try {
           const previous = current;
+          if (!inFlight.has(previous))
+            await previous.close().catch(() => undefined);
           const next = await connect(deadline());
           if (isClosed() || contract(next) !== expected) {
             await next.close();
@@ -67,8 +69,6 @@ export async function reconnectingMcp(
           current = next;
           expired = false;
           failure = undefined;
-          if (!inFlight.has(previous))
-            await previous.close().catch(() => undefined);
         } catch (error) {
           failure = { error, until: Date.now() + 30_000 };
           throw error;
@@ -80,11 +80,19 @@ export async function reconnectingMcp(
       await abortable(() => connecting, callSignal);
     }
   }
+  async function connected(callSignal: AbortSignal) {
+    try {
+      await ready(callSignal);
+    } catch (error) {
+      if (callSignal.aborted) throw error;
+      throw connectFailure(error);
+    }
+  }
   async function withSession<T>(
     callSignal: AbortSignal,
     operation: () => Promise<T>,
   ): Promise<T> {
-    await ready(callSignal);
+    await connected(callSignal);
     const used = current;
     try {
       return await tracked(operation);
@@ -93,7 +101,7 @@ export async function reconnectingMcp(
         throw error;
       if (current === used) expired = true;
     }
-    await ready(callSignal);
+    await connected(callSignal);
     return tracked(operation);
   }
   const tools: Tool[] = current.tools.map((original) => {
@@ -101,8 +109,7 @@ export async function reconnectingMcp(
       const tool = current.tools.find(
         (tool) => tool.spec.name === original.spec.name,
       );
-      if (!tool || tool.effect !== original.effect)
-        throw new Error("MCP tool changed");
+      if (!tool || tool.effect !== original.effect) throw mcpToolChanged();
       return tool;
     };
     const authorize = async (identity: Identity) => {
@@ -124,7 +131,7 @@ export async function reconnectingMcp(
     if (original.effect === "write") {
       const write = () => {
         const tool = find();
-        if (tool.effect !== "write") throw new Error("MCP tool changed");
+        if (tool.effect !== "write") throw mcpToolChanged();
         return tool;
       };
       return {
@@ -157,7 +164,7 @@ export async function reconnectingMcp(
       execute: (args, identity, callSignal, run) =>
         invoke(identity, callSignal, () => {
           const tool = find();
-          if (tool.effect !== "read") throw new Error("MCP tool changed");
+          if (tool.effect !== "read") throw mcpToolChanged();
           return tool.execute(args, identity, callSignal, run);
         }),
     };

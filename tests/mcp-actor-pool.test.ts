@@ -374,6 +374,19 @@ describe("createMcpActorPool", () => {
     ).rejects.toMatchObject({ code: "not_connected" });
   });
 
+  it("reports a write as not sent when the actor connection cannot open", async () => {
+    const s = await setup();
+    await s.connect(alice);
+    s.fetchMock.mockRejectedValueOnce(new Error("offline"));
+    await expect(
+      s.change.execute(
+        {},
+        { identity: alice, signal: signal(), operationId: "op", version: "1" },
+      ),
+    ).rejects.toMatchObject({ delivery: "not_sent" });
+    expect(s.calls).toHaveLength(0);
+  });
+
   it("serves concurrent actors when the pool is at its limit", async () => {
     const s = await setup({ maxConnections: 1 });
     await s.connect(alice);

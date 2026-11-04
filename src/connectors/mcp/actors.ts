@@ -12,7 +12,7 @@ import type { McpConfig } from "./config.js";
 import { connectMcp } from "./index.js";
 import { createMcpOAuth, oauthRecordKey, type McpOAuthStore } from "./oauth.js";
 import { reconnectingMcp } from "./reconnect.js";
-import { mcpAccessDenied } from "./rpc.js";
+import { connectFailure, mcpAccessDenied, mcpToolChanged } from "./rpc.js";
 import type { McpAccess, McpConnection } from "./session.js";
 
 const anonymous = Object.freeze({ tenantId: "", actorId: "anonymous" });
@@ -177,9 +177,15 @@ export async function createMcpActorPool(options: {
     signal: AbortSignal,
     operation: (connection: McpConnection<Tool>) => Promise<T>,
   ): Promise<T> {
-    const [key, entry] = await acquire(identity);
+    const refuse = (error: unknown): never => {
+      if (signal.aborted) throw error;
+      throw connectFailure(error);
+    };
+    const [key, entry] = await acquire(identity).catch(refuse);
     try {
-      return await operation(await abortable(() => entry.connection, signal));
+      return await operation(
+        await abortable(() => entry.connection, signal).catch(refuse),
+      );
     } catch (error) {
       if (
         error instanceof UnauthorizedError ||
@@ -220,7 +226,7 @@ export async function createMcpActorPool(options: {
           (found.effect === "write" &&
             found.version !== (tool as WriteTool).version)
         )
-          throw new Error("MCP tool changed");
+          throw mcpToolChanged();
         return operation(found, identity);
       });
     }

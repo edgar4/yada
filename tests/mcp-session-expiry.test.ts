@@ -108,6 +108,26 @@ it("retries an unsent write once, on a new session", async () => {
   expect(factory).toHaveBeenCalledTimes(2);
 });
 
+it("reports a write as not sent when the new session cannot open", async () => {
+  const { url, sessions, write } = await sessionServer();
+  const { factory, find } = await connect(url);
+  sessions.clear();
+  factory.mockRejectedValueOnce(new Error("offline"));
+  const tool = find("s__send");
+  if (tool.effect !== "write") throw new Error("write expected");
+  await expect(
+    tool.execute(
+      { to: "x" },
+      { identity, signal: signal(), operationId: "op", version: "1" },
+    ),
+  ).rejects.toMatchObject({
+    message: "offline",
+    code: "request_failed",
+    delivery: "not_sent",
+  });
+  expect(write).not.toHaveBeenCalled();
+});
+
 it("does not reconnect or repeat a write that may have run", async () => {
   const { url, write } = await sessionServer();
   const { factory, find } = await connect(url);

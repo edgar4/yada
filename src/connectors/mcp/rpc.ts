@@ -47,6 +47,15 @@ export function requestFailure(error: unknown): ToolCallError {
     refused ? "not_sent" : "maybe_sent",
   );
 }
+export function connectFailure(error: unknown): ToolCallError {
+  return new ToolCallError(
+    error instanceof Error ? error.message : "MCP connection failed",
+    requestFailure(error).code,
+    "not_sent",
+  );
+}
+export const mcpToolChanged = () =>
+  new ToolCallError("MCP tool changed", "request_failed", "not_sent");
 export const mcpAccessDenied = () =>
   new ToolCallError("MCP access denied", "access_denied", "not_sent");
 function compile(schema: Record<string, unknown>) {

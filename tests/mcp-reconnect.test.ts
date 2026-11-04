@@ -194,6 +194,27 @@ it("rethrows a failed reconnect without reconnecting until the backoff passes", 
   vi.useRealTimers();
   await resilient.close();
 });
+it("closes a dead connection before opening its replacement", async () => {
+  const order: string[] = [];
+  const first = connection();
+  first.close.mockImplementation(() => {
+    order.push("close");
+    return Promise.resolve();
+  });
+  const connect = vi
+    .fn()
+    .mockResolvedValueOnce(first)
+    .mockImplementationOnce(() => {
+      order.push("connect");
+      return Promise.resolve(connection());
+    });
+  const resilient = await reconnectingMcp(connect);
+  first.disconnect();
+  await resilient.tools[0]?.authorize(identity);
+  expect(order.slice(0, 2)).toEqual(["close", "connect"]);
+  await resilient.close();
+});
+
 it("handles connections without liveness hooks", async () => {
   const original = connection();
   const basic: McpConnection = {

@@ -14,6 +14,7 @@ import type {
 } from "../../core/contracts.js";
 import { abortable } from "../../core/abort.js";
 import { confirmTool } from "../../core/policy.js";
+import { ToolCallError } from "../../core/tool.js";
 import {
   mcpConfig,
   type McpConfig,
@@ -217,7 +218,11 @@ export async function connectParsed(
     const fresh = async () => {
       await checking;
       if (stale)
-        throw new Error("MCP tool contract changed; reconnect required");
+        throw new ToolCallError(
+          "MCP tool contract changed; reconnect required",
+          "request_failed",
+          "not_sent",
+        );
     };
     const base = mcpInvoker(client, selected, authorize, settings.timeoutMs);
     const rpc = {
