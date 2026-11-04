@@ -16,7 +16,7 @@ import {
   type Job,
   type RunEvent,
 } from "./contracts.js";
-import { quotaScopeKey, type QuotaOptions } from "./quota.js";
+import { admitRun, settleRun, type QuotaOptions } from "./quota.js";
 import { eventKey, type EventBus } from "./events.js";
 import { resumeDecided } from "./recovery.js";
 export async function readJson(
@@ -244,17 +244,28 @@ export function createHandler(options: {
           input.id,
         );
         if (state.erased) throw new HttpError(410, "Conversation erased");
-        if (quota && !state.active && !state.submitted) {
-          const denied = await options.storage.quota.consume(
-            quotaScopeKey(identity, quota),
+        const runKey = JSON.stringify([conversationId, input.id]);
+        const admitted = quota && !state.active && !state.submitted;
+        if (admitted) {
+          const denied = await admitRun(
+            options.storage.quota,
+            identity,
             quota,
+            runKey,
+            input.profileId,
           );
           if (denied) return throttle(denied.retryAfterMs);
         }
-        return json(
-          await options.storage.jobs.submit(identity, conversationId, input),
-          202,
-        );
+        try {
+          return json(
+            await options.storage.jobs.submit(identity, conversationId, input),
+            202,
+          );
+        } catch (error) {
+          if (admitted && quota.reserveCostMicros !== undefined)
+            await settleRun(options.storage.quota, identity, quota, runKey, 0);
+          throw error;
+        }
       }
       if (!id) return json({ error: "Method not allowed" }, 405);
       const job = await options.storage.jobs.load(identity, conversationId, id);

@@ -25,7 +25,7 @@ import type { YadaStorage } from "../storage/index.js";
 import type { JobStore } from "../storage/jobs.js";
 import { isTerminal, type RunEvent } from "./contracts.js";
 import { resumeDecided } from "./recovery.js";
-import { quotaScopeKey, type QuotaOptions } from "./quota.js";
+import { settleRun, type QuotaOptions } from "./quota.js";
 import { eventKey, type EventBus } from "./events.js";
 import { webhookSender, type WebhookOptions } from "./webhooks.js";
 import { composeHooks, type AgentEvent, type RunHooks } from "../core/hooks.js";
@@ -240,13 +240,16 @@ export function createWorker(options: {
     };
     const accrueCost = async () => {
       const { quota } = options;
+      if (!quota) return;
       const pricing = profile.limits?.pricing;
       const usage = (await runs.load(identity, runId))?.checkpoint?.usage;
-      if (!quota?.costMicros || !pricing || !usage) return;
-      await options.storage.quota.addCost(
-        quotaScopeKey(identity, quota),
-        quota.costMicros.windowMs,
-        Math.ceil(usageCostMicros(pricing, usage)),
+      if ((!pricing || !usage) && quota.reserveCostMicros === undefined) return;
+      await settleRun(
+        options.storage.quota,
+        identity,
+        quota,
+        runId,
+        pricing && usage ? Math.ceil(usageCostMicros(pricing, usage)) : 0,
       );
     };
     const finalize = async (result: TerminalResult) => {
@@ -297,13 +300,14 @@ export function createWorker(options: {
         latest.status !== "reconciling" &&
         !(await executing().catch(() => true));
       const lease = held?.token === token && held.expiresAt > Date.now();
-      if (exhausted)
+      if (exhausted) {
         await updateJob(
           { type: "failed", code: "retry_exhausted" },
           { status: "failed", code: "retry_exhausted" },
           lease ? owned() : undefined,
         );
-      else
+        await accrueCost().catch(() => undefined);
+      } else
         await options.storage.jobs.retry(
           identity,
           conversationId,
