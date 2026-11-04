@@ -32,7 +32,30 @@ const quota = {
 
 `scope` is `"tenant"` (default, shared by all actors) or `"actor"`. Counters are fixed windows kept in storage, so they hold across instances; one record per scope holds only the current window. `POST .../runs` consumes one request unit; resubmitting an existing run ID does not. Once a window is exhausted, or the cost window is at or over `limit`, submission returns `429` with `Retry-After` (seconds until the window ends) and `{ "error": "Rate limit exceeded" }`.
 
-The worker adds each finished run's reported usage, priced with the profile `limits.pricing` (including cache pricing), to the cost window. Runs of profiles without `pricing` or without reported usage add nothing. A run already in flight is never stopped, so spend can overshoot `limit` by one run. Without `quota`, nothing changes. Other endpoints, including steering messages, do not consume quota. Handler and worker must use the same `quota`; a worker without it does not accrue cost.
+The worker adds each finished run's reported usage, priced with the profile `limits.pricing` (including cache pricing), to the cost window. Runs of profiles without `pricing` or without reported usage add nothing. Without `reserveCostMicros`, cost is only checked at submission and nothing is held, so concurrent runs can all pass the check and overshoot `limit` by as many runs as are in flight. Without `quota`, nothing changes. Other endpoints, including steering messages, do not consume quota. Handler and worker must use the same `quota`; a worker without it does not accrue cost.
+
+### Cost reservations and a global budget
+
+```ts
+const quota = {
+  costMicros: { limit: 5_000_000, windowMs: 86_400_000 },
+  scope: "actor",
+  globalCostMicros: { limit: 50_000_000, windowMs: 86_400_000 },
+  reserveCostMicros: (profileId) => profiles[profileId].limits.maxCostMicros,
+  reservationTtlMs: 3_600_000,
+};
+```
+
+`reserveCostMicros` holds a run's maximum cost from submission until it ends, when the worker replaces the hold with the actual cost. A submission that does not fit returns `429`. `globalCostMicros` applies the same check to one budget shared by all tenants and actors. Holds and counters change atomically in shared storage, so this holds across workers and handlers.
+
+**Guarantee.** With reservations, spend finishing in a window, plus all current holds, stays within `limit`, provided that:
+
+- Each run's cost stays within its reservation. Set `limits.maxCostMicros` with `limits.pricing` on the profile and reserve at least that amount. The runtime checks `maxCostMicros` between model calls, so a run can pass it by up to one call; include that margin in the reservation, or set `limits.costPerCallMicros` to stop before a call that could pass it. Without `maxCostMicros` nothing stops a run from exceeding its hold, and the excess overshoots `limit`.
+- Each run ends within `reservationTtlMs` (default one hour), counted from submission and including queue time. An expired hold is dropped, and that budget can be admitted again while the run still spends.
+- Usage is reported. A run with no pricing or reported usage settles at zero.
+- Settlement succeeds. Each record is retried up to three times; if that fails, the hold stays until `reservationTtlMs` and that run's cost is not counted.
+
+Windows are fixed and cost counts in the window where a run ends, so a window can start with holds from earlier windows, and spend across a window boundary can reach twice `limit`. A worker crash between a run's terminal state and its settlement leaves the hold until it expires and then loses that run's cost. A reservation larger than `limit` can never be admitted. `Retry-After` is the time until the window ends; a hold may be released sooner. Tenant or actor and global budgets are separate records: a request denied by the second releases its hold in the first, and a crash in that gap leaves the hold until it expires. A global budget puts every submission on one record, so very high submission rates will contend on it; each record also lists its active holds.
 
 ## Backup, restore and encryption keys
 
@@ -51,6 +74,8 @@ The conformance suite verifies encrypted backup/restore and key rotation on SQLi
 `storage.jobs.prune(identity, conversationId, beforeTimestamp)` removes terminal job/event listings older than the cutoff. It retains conversation history and a `retired` record per run needed for later full erasure. Retired run IDs cannot be reused. Terminal jobs beyond the latest 20 per conversation are retired automatically.
 
 `storage.retention.eraseConversation(identity, conversationId)` removes conversation content, completed run checkpoints, and associated action records. Cancel or reconcile unfinished runs first. Erasure leaves an empty tombstone to prevent the same conversation ID from being recreated accidentally. Interrupted erasure can be retried; its pending cleanup references remain durable. OAuth grants belong to connections and are managed separately through disconnect/revocation.
+
+`storage.retention.eraseActor(identity)` erases all of an actor's conversations, memory and stored MCP OAuth records. It continues past conversations with unfinished runs or actions, or that changed while being erased, and returns them as `{ remaining: string[] }`; cancel or resolve those and call it again, since it is safe to repeat. It deletes OAuth tokens without revoking them, so call `oauth.disconnect()` or `pool.disconnect(identity)` first if the server should revoke them. It misses OAuth records last saved by Yada 0.3.0 or earlier ([details](mcp-oauth.md)), and a conversation created while it runs. Quota counters are not erased: they hold only usage numbers, expire with their window and are stored under a hash.
 
 `storage.retention.eraseActorMemory(identity)` deletes that actor's long-term memory record. Memory is a normal record, so backups and restores include it.
 

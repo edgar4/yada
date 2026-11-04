@@ -4,7 +4,7 @@ import { z } from "zod";
 import { abortable } from "../../core/abort.js";
 import type { Identity, ReadTool } from "../../core/contracts.js";
 import { readTool } from "../../core/tool.js";
-import { renderBlock, requestFailure } from "./rpc.js";
+import { mcpAccessDenied, renderBlock, requestFailure } from "./rpc.js";
 
 const limit = 32_000;
 export type McpPrompt = Pick<Prompt, "name" | "description" | "arguments">;
@@ -22,7 +22,7 @@ const guarded = async <T>(
   run: () => Promise<T>,
 ): Promise<T> => {
   if (!(await abortable(() => options.authorize(identity, name), signal)))
-    throw new Error("MCP access denied");
+    throw mcpAccessDenied();
   await options.fresh();
   return run();
 };

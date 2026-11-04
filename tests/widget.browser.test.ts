@@ -43,6 +43,12 @@ let decision: boolean | undefined;
 let decisionBody = "";
 let failureCode: string | undefined;
 const steered: string[] = [];
+let finished: "completed" | "cancelled" | undefined;
+let rememberDisabled = false;
+let runReadFailure = false;
+let steerConflict: "completed" | "cancelled" | undefined;
+let steerLost = false;
+let unconsumed: { id: string; input: string; consumed: boolean }[] = [];
 let cancelRequested = false;
 let reconnectOnce = false;
 let deltaMode = false;
@@ -175,6 +181,16 @@ const server = createServer((request, response) => {
       });
       request.on("end", () => {
         steered.push(body);
+        if (steerLost) {
+          response.destroy();
+          return;
+        }
+        if (steerConflict) {
+          finished = steerConflict;
+          response.writeHead(409);
+          response.end("{}");
+          return;
+        }
         response.writeHead(202);
         response.end("{}");
       });
@@ -220,11 +236,17 @@ const server = createServer((request, response) => {
           preview: malicious,
           status: "pending",
           expiresAt: Date.now() + 60_000,
+          ...(rememberDisabled ? { remember: [] } : {}),
         }),
       );
     } else {
       if (holdRun) {
         heldRun = response;
+        return;
+      }
+      if (runReadFailure) {
+        response.writeHead(400);
+        response.end("{}");
         return;
       }
       response.end(
@@ -234,10 +256,17 @@ const server = createServer((request, response) => {
           input: "Hello",
           createdAt: 1,
           updatedAt: 1,
-          status: "awaiting_approval",
+          status: finished ?? "awaiting_approval",
           cancelRequested: false,
           history: [],
-          events: [queued, waiting],
+          steering: unconsumed,
+          events: finished
+            ? [
+                queued,
+                waiting,
+                { version: 1, sequence: 3, type: finished, at: 1 },
+              ]
+            : [queued, waiting],
         }),
       );
     }
@@ -319,6 +348,11 @@ beforeEach(() => {
   decisionBody = "";
   failureCode = undefined;
   steered.length = 0;
+  steerConflict = finished = undefined;
+  steerLost = false;
+  rememberDisabled = false;
+  runReadFailure = false;
+  unconsumed = [];
   operationMode = undefined;
   heldOperation = heldRun = undefined;
   holdRun = false;
@@ -522,6 +556,199 @@ describe("browser widget", () => {
     await page.close();
   });
 
+  it.each([
+    ["completed", 2, ""],
+    ["cancelled", 1, "One more thing"],
+  ] as const)(
+    "handles a steering conflict on a %s run without losing the message",
+    async (status, runs, prompt) => {
+      const page = await open();
+      const widget = await start(page);
+      await widget.getByRole("button", { name: "Approve action" }).waitFor();
+      steerConflict = status;
+      await widget.getByRole("textbox").fill("One more thing");
+      await widget.getByRole("button", { name: "Send", exact: true }).click();
+      await expect.poll(() => inputs.length).toBe(runs);
+      await expect
+        .poll(() => widget.getByRole("textbox").inputValue())
+        .toBe(prompt);
+      expect(await widget.locator(".error").textContent()).not.toContain(
+        "Could not send",
+      );
+      if (runs === 2)
+        expect(JSON.parse(inputs[1] ?? "{}")).toMatchObject({
+          input: "One more thing",
+        });
+      expect(
+        await widget.locator(".user", { hasText: "One more thing" }).count(),
+      ).toBe(runs - 1);
+      await page.close();
+    },
+  );
+
+  it("retries a message with the same id when the response was lost", async () => {
+    const page = await open();
+    const widget = await start(page);
+    await widget.getByRole("button", { name: "Approve action" }).waitFor();
+    steerLost = true;
+    await widget.getByRole("textbox").fill("Once only");
+    await widget.getByRole("button", { name: "Send", exact: true }).click();
+    await expect
+      .poll(() => widget.locator(".error").textContent(), { timeout: 30_000 })
+      .toContain("Could not send");
+    steerLost = false;
+    await widget.getByRole("button", { name: "Send", exact: true }).click();
+    await expect.poll(() => widget.getByRole("textbox").inputValue()).toBe("");
+    const ids = steered.map((body) => (JSON.parse(body) as { id: string }).id);
+    expect(new Set(ids).size).toBe(1);
+    expect(
+      await widget.locator(".user", { hasText: "Once only" }).count(),
+    ).toBe(1);
+    await page.close();
+  });
+
+  it("resends an accepted message the finished run never consumed", async () => {
+    const page = await open();
+    const widget = await start(page);
+    await widget.getByRole("button", { name: "Approve action" }).waitFor();
+    await widget.getByRole("textbox").fill("Too late");
+    await widget.getByRole("button", { name: "Send", exact: true }).click();
+    await expect.poll(() => steered.length).toBe(1);
+    await expect
+      .poll(() => widget.locator(".user").last().textContent())
+      .toContain("Too late");
+    const { id } = JSON.parse(steered[0] ?? "{}") as { id: string };
+    unconsumed = [{ id, input: "Too late", consumed: false }];
+    finished = "completed";
+    finish("completed");
+    await expect.poll(() => inputs.length).toBe(2);
+    expect(JSON.parse(inputs[1] ?? "{}")).toMatchObject({ input: "Too late" });
+    expect(await widget.locator(".user", { hasText: "Too late" }).count()).toBe(
+      1,
+    );
+    await page.close();
+  });
+
+  it.each([
+    ["completed", 2, ""],
+    ["cancelled", 1, "First\n\nSecond"],
+  ] as const)(
+    "keeps an unread message when a later one conflicts on a %s run",
+    async (status, runs, prompt) => {
+      const page = await open();
+      const widget = await start(page);
+      await widget.getByRole("button", { name: "Approve action" }).waitFor();
+      await widget.getByRole("textbox").fill("First");
+      await widget.getByRole("button", { name: "Send", exact: true }).click();
+      await expect.poll(() => steered.length).toBe(1);
+      await expect
+        .poll(() => widget.locator(".user").last().textContent())
+        .toContain("First");
+      const { id } = JSON.parse(steered[0] ?? "{}") as { id: string };
+      unconsumed = [{ id, input: "First", consumed: false }];
+      steerConflict = status;
+      await widget.getByRole("textbox").fill("Second");
+      await widget.getByRole("button", { name: "Send", exact: true }).click();
+      await expect.poll(() => inputs.length).toBe(runs);
+      await expect
+        .poll(() => widget.getByRole("textbox").inputValue())
+        .toBe(prompt);
+      if (runs === 2)
+        expect(JSON.parse(inputs[1] ?? "{}")).toMatchObject({
+          input: "First\n\nSecond",
+        });
+      else expect(await widget.getByRole("textbox").isDisabled()).toBe(false);
+      await page.close();
+    },
+  );
+
+  it("recovers an unread message when the element is moved as the run ends", async () => {
+    const page = await open();
+    const widget = await start(page);
+    await widget.getByRole("button", { name: "Approve action" }).waitFor();
+    await widget.getByRole("textbox").fill("Too late");
+    await widget.getByRole("button", { name: "Send", exact: true }).click();
+    await expect.poll(() => steered.length).toBe(1);
+    await expect
+      .poll(() => widget.locator(".user").last().textContent())
+      .toContain("Too late");
+    const { id } = JSON.parse(steered[0] ?? "{}") as { id: string };
+    unconsumed = [{ id, input: "Too late", consumed: false }];
+    finished = "cancelled";
+    await page.evaluate(() => {
+      const element = document.querySelector("yada-chat");
+      element?.addEventListener(
+        "yada-run-end",
+        () => {
+          const parent = element.parentElement;
+          element.remove();
+          setTimeout(() => parent?.append(element), 50);
+        },
+        { once: true },
+      );
+    });
+    finish("cancelled");
+    await expect
+      .poll(() => widget.getByRole("textbox").inputValue())
+      .toBe("Too late");
+    expect(await widget.getByRole("textbox").isDisabled()).toBe(false);
+    await page.close();
+  });
+
+  it("restores an unconsumed message ahead of a draft after a cancelled run", async () => {
+    const page = await open();
+    const widget = await start(page);
+    await widget.getByRole("button", { name: "Approve action" }).waitFor();
+    await widget.getByRole("textbox").fill("Too late");
+    await widget.getByRole("button", { name: "Send", exact: true }).click();
+    await expect.poll(() => steered.length).toBe(1);
+    await expect
+      .poll(() => widget.locator(".user").last().textContent())
+      .toContain("Too late");
+    const { id } = JSON.parse(steered[0] ?? "{}") as { id: string };
+    unconsumed = [{ id, input: "Too late", consumed: false }];
+    finished = "cancelled";
+    await widget.getByRole("textbox").fill("My draft");
+    finish("cancelled");
+    await expect
+      .poll(() => widget.getByRole("textbox").inputValue())
+      .toBe("Too late\n\nMy draft");
+    expect(inputs).toHaveLength(1);
+    await page.close();
+  });
+
+  it("keeps the text and does not report a lost connection when the final read fails", async () => {
+    const page = await open();
+    const widget = await start(page);
+    await widget.getByRole("button", { name: "Approve action" }).waitFor();
+    await widget.getByRole("textbox").fill("Too late");
+    await widget.getByRole("button", { name: "Send", exact: true }).click();
+    await expect.poll(() => steered.length).toBe(1);
+    await expect
+      .poll(() => widget.locator(".user").last().textContent())
+      .toContain("Too late");
+    runReadFailure = true;
+    finish("completed");
+    await expect
+      .poll(() => widget.getByRole("textbox").inputValue(), { timeout: 15_000 })
+      .toBe("Too late");
+    expect(
+      await widget.getByRole("button", { name: "Reconnect" }).isVisible(),
+    ).toBe(false);
+    await page.close();
+  });
+
+  it("hides the remember checkbox when the service disallows it", async () => {
+    rememberDisabled = true;
+    const page = await open();
+    const widget = await start(page);
+    await widget.getByRole("button", { name: "Approve action" }).waitFor();
+    expect(await widget.getByRole("checkbox").isVisible()).toBe(false);
+    await widget.getByRole("button", { name: "Approve action" }).click();
+    await expect.poll(() => decisionBody).toBe('{"approved":true}');
+    await page.close();
+  });
+
   it("replays from the cursor across transport interruption and element reconnection", async () => {
     reconnectOnce = true;
     const page = await open();
@@ -568,6 +795,33 @@ describe("browser widget", () => {
         .count(),
     ).toBe(1);
     await widget.getByRole("button", { name: "Decline action" }).click();
+    await page.close();
+  });
+
+  it("emits yada-run-end once when a resumed run finishes", async () => {
+    const page = await open();
+    await page.evaluate(async () => {
+      document.addEventListener("yada-run-end", (event) => {
+        const ends: unknown[] = JSON.parse(
+          sessionStorage.getItem("ends") ?? "[]",
+        ) as unknown[];
+        ends.push((event as CustomEvent).detail);
+        sessionStorage.setItem("ends", JSON.stringify(ends));
+      });
+      await document.querySelector<YadaWidget>("yada-chat")?.resume("run");
+    });
+    const widget = page.locator("yada-chat").first();
+    await widget.getByRole("button", { name: "Approve action" }).click();
+    const ends = () =>
+      page.evaluate(() => sessionStorage.getItem("ends") ?? "[]");
+    await expect.poll(ends).not.toBe("[]");
+    expect(JSON.parse(await ends())).toEqual([
+      {
+        conversationId: expect.any(String) as string,
+        runId: "run",
+        status: "completed",
+      },
+    ]);
     await page.close();
   });
 

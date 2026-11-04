@@ -5,9 +5,10 @@ import { isTerminal } from "../service/terminal.js";
 import { conversationStateSchema } from "./jobs.js";
 import { conversationKey, retiredKey } from "./conversations.js";
 import { actionSchema, eraseGrants, runTree } from "./actions.js";
-import type { recordStore } from "./records.js";
+import { isRetryable, type recordStore } from "./records.js";
 import { memoryKey } from "./memory.js";
 import { createRunStore } from "./runs.js";
+import { createOAuthStore } from "./oauth.js";
 export function createRetention(records: ReturnType<typeof recordStore>) {
   const stateSchema = conversationStateSchema.pick({
     jobs: true,
@@ -62,9 +63,48 @@ export function createRetention(records: ReturnType<typeof recordStore>) {
     }
     return { keys, runIds: tree.runIds };
   }
-  return {
+  const listedSchema = z.object({
+    id: z.string(),
+    deleted: z.boolean().optional(),
+    purgeRuns: z.array(z.string()).optional(),
+  });
+  const retention = {
     eraseActorMemory: (identity: Identity) =>
       records.remove(memoryKey(identity)),
+    async eraseActor(identity: Identity) {
+      const remaining: string[] = [];
+      let cursor: { at: number; id: string } | undefined;
+      try {
+        for (;;) {
+          const rows = await records.recent(
+            "conversation",
+            conversationKey(identity, "-"),
+            cursor,
+            100,
+          );
+          for (const { at, id, value } of rows) {
+            cursor = { at, id };
+            const state = listedSchema.safeParse(value).data;
+            if (!state || (state.deleted && !state.purgeRuns?.length)) continue;
+            try {
+              await retention.eraseConversation(identity, state.id);
+            } catch (error) {
+              if (
+                !(error instanceof HttpError && error.status === 409) &&
+                !isRetryable(error)
+              )
+                throw error;
+              remaining.push(state.id);
+            }
+          }
+          if (rows.length < 100) break;
+        }
+      } finally {
+        await retention.eraseActorMemory(identity);
+        await createOAuthStore(records).eraseActor(identity);
+      }
+      return { remaining };
+    },
     async eraseConversation(identity: Identity, id: string) {
       const key = conversationKey(identity, id);
       const planned = await records.read(key);
@@ -106,4 +146,5 @@ export function createRetention(records: ReturnType<typeof recordStore>) {
       }));
     },
   };
+  return retention;
 }

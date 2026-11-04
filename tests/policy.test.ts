@@ -265,6 +265,128 @@ for (const driver of drivers)
         ),
       ).toMatchObject({ status: "awaiting_approval" });
     });
+    it("omits remember from approvals unless configured", async () => {
+      const s = await storageFixture(driver);
+      const handler = createHandler({
+        storage: s.storage,
+        origins: [],
+        authenticate: () => Promise.resolve(s.identity),
+        authorizeProfile: () => Promise.resolve(true),
+      });
+      await s.storage.jobs.submit(s.identity, "chat", {
+        id: "a",
+        input: "Hi",
+        profileId: "v1",
+      });
+      const runId = JSON.stringify(["chat", "a"]);
+      const id = operationId(s.identity, runId, "c1");
+      await s.storage.actions.propose(s.identity, {
+        id,
+        runId,
+        callId: "c1",
+        tool: "write",
+        toolVersion: "1",
+        args: {},
+        preview: "write",
+        version: "1",
+        expiresAt: Date.now() + 60_000,
+        status: "pending",
+      });
+      const response = await handler(
+        new Request(
+          `http://localhost/v1/conversations/chat/runs/a/approvals/${id}`,
+        ),
+      );
+      expect(await response.json()).not.toHaveProperty("remember");
+    });
+
+    it("restricts remembered scopes with rememberApprovals", async () => {
+      const s = await storageFixture(driver);
+      const handler = createHandler({
+        storage: s.storage,
+        origins: [],
+        authenticate: () => Promise.resolve(s.identity),
+        authorizeProfile: () => Promise.resolve(true),
+        rememberApprovals: [],
+      });
+      await s.storage.jobs.submit(s.identity, "chat", {
+        id: "a",
+        input: "Hi",
+        profileId: "v1",
+      });
+      const runId = JSON.stringify(["chat", "a"]);
+      const id = operationId(s.identity, runId, "c1");
+      await s.storage.actions.propose(s.identity, {
+        id,
+        runId,
+        callId: "c1",
+        tool: "write",
+        toolVersion: "1",
+        args: { q: "x" },
+        preview: "write",
+        version: "1",
+        expiresAt: Date.now() + 60_000,
+        status: "pending",
+      });
+      await s.storage.jobs.update(s.identity, "chat", "a", {
+        type: "awaiting_approval",
+        approvalId: id,
+      });
+      const url = `http://localhost/v1/conversations/chat/runs/a/approvals/${id}`;
+      expect(
+        await (
+          await handler(new Request(url, { headers: { host: "localhost" } }))
+        ).json(),
+      ).toMatchObject({ remember: [] });
+      const decided = await handler(
+        new Request(`${url}/decision`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ approved: true, remember: "run" }),
+        }),
+      );
+      expect(decided.status).toBe(202);
+      expect((await s.storage.actions.load(s.identity, id))?.status).toBe(
+        "approved",
+      );
+      expect(
+        await s.storage.actions.remembered(s.identity, runId, "write", "1", {
+          q: "x",
+        }),
+      ).toBe(false);
+    });
+
+    it("ignores existing grants for scopes the executor disallows", async () => {
+      const s = await storageFixture(driver);
+      const tool = confirmTool(readFixture("lookup"));
+      const runId = JSON.stringify(["chat", "a"]);
+      const call = { id: "first", name: tool.spec.name, args: { q: "x" } };
+      const signal = AbortSignal.timeout(3000);
+      const first = await actionExecutor(s.storage.actions, s.identity, runId)(
+        tool,
+        call,
+        signal,
+      );
+      if (typeof first === "string" || !("approvalId" in first))
+        throw new Error("approval expected");
+      await s.storage.actions.remember(
+        s.identity,
+        await s.storage.actions.decide(s.identity, first.approvalId, true),
+        "run",
+      );
+      const again = (scopes?: readonly ("run" | "conversation")[]) =>
+        actionExecutor(
+          s.storage.actions,
+          s.identity,
+          runId,
+          undefined,
+          undefined,
+          scopes,
+        )(tool, { ...call, id: scopes ? "off" : "on" }, signal);
+      expect(await again([])).toMatchObject({ status: "awaiting_approval" });
+      expect(await again()).not.toMatchObject({ status: "awaiting_approval" });
+    });
+
     it("does not remember declined decisions", async () => {
       const s = await storageFixture(driver);
       const tool = confirmTool(readFixture("lookup"));

@@ -3,7 +3,7 @@ import { drivers, storageFixture } from "./helpers/storage.js";
 import { createHandler } from "../src/service/http.js";
 import { createWorker } from "../src/service/worker.js";
 import { createFakeProvider } from "../src/providers/fake.js";
-import type { QuotaOptions } from "../src/service/quota.js";
+import { settleRun, type QuotaOptions } from "../src/service/quota.js";
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(1_000_000);
@@ -107,6 +107,247 @@ describe.each(drivers)("tenant quotas on %s", (driver) => {
     vi.setSystemTime(1_060_000);
     expect((await s.submit("c")).status).toBe(202);
     await worker.stop();
+  });
+  const worker = (
+    s: Awaited<ReturnType<typeof setup>>,
+    quota: QuotaOptions,
+    usage: { inputTokens: number; outputTokens: number } | null = {
+      inputTokens: 1000,
+      outputTokens: 0,
+    },
+  ) =>
+    createWorker({
+      storage: s.storage,
+      quota,
+      concurrency: 16,
+      profiles: {
+        v1: {
+          provider: createFakeProvider(() => ({
+            content: "Hello",
+            toolCalls: [],
+            finishReason: "stop",
+            ...(usage ? { usage } : {}),
+          })),
+          tools: [],
+          system: "Help",
+          limits: { pricing: { inputMicrosPer1k: 100, outputMicrosPer1k: 0 } },
+        },
+      },
+    });
+  const admitted = async (
+    s: Awaited<ReturnType<typeof setup>>,
+    prefix: string,
+    count: number,
+    as?: string,
+  ) => {
+    const results = await Promise.all(
+      Array.from({ length: count }, (_, index) =>
+        s.submit(`${prefix}${String(index)}`, `${prefix}${String(index)}`, as),
+      ),
+    );
+    return results.filter((result) => result.status === 202).length;
+  };
+  it("overshoots under concurrency without a reservation", async () => {
+    const s = await setup(driver, {
+      costMicros: { limit: 1000, windowMs: 60_000 },
+    });
+    expect(await admitted(s, "r", 8)).toBe(8);
+  });
+  it("holds concurrent runs to the budget with a reservation", async () => {
+    const s = await setup(driver, {
+      costMicros: { limit: 1000, windowMs: 60_000 },
+      reserveCostMicros: 400,
+    });
+    expect(await admitted(s, "r", 8)).toBe(2);
+    expect((await s.submit("late")).status).toBe(429);
+  });
+  it("settles to the actual cost and frees the rest", async () => {
+    const quota: QuotaOptions = {
+      costMicros: { limit: 1000, windowMs: 60_000 },
+      reserveCostMicros: () => 400,
+    };
+    const s = await setup(driver, quota);
+    const running = worker(s, quota);
+    expect(await admitted(s, "a", 4)).toBe(2);
+    await running.tick();
+    await vi.waitFor(async () => {
+      expect((await s.submit("next", "next")).status).toBe(202);
+    });
+    await running.stop();
+  });
+  it("releases the reservation when a run reports no usage", async () => {
+    const quota: QuotaOptions = {
+      costMicros: { limit: 400, windowMs: 60_000 },
+      reserveCostMicros: 400,
+    };
+    const s = await setup(driver, quota);
+    const running = worker(s, quota, null);
+    expect((await s.submit("a")).status).toBe(202);
+    expect((await s.submit("b")).status).toBe(429);
+    await running.tick();
+    await vi.waitFor(async () => {
+      expect((await s.submit("b")).status).toBe(202);
+    });
+    await running.stop();
+  });
+  it("releases the reservation when retries are exhausted", async () => {
+    const quota: QuotaOptions = {
+      costMicros: { limit: 400, windowMs: 60_000 },
+      reserveCostMicros: 400,
+    };
+    const s = await setup(driver, quota);
+    const running = createWorker({
+      storage: {
+        ...s.storage,
+        runs: {
+          ...s.storage.runs,
+          claim: () => Promise.reject(new Error("db down")),
+        },
+      },
+      quota,
+      maxAttempts: 1,
+      profiles: {
+        v1: {
+          provider: createFakeProvider(() => ({
+            content: "Hello",
+            toolCalls: [],
+            finishReason: "stop",
+          })),
+          tools: [],
+          system: "Help",
+        },
+      },
+    });
+    expect((await s.submit("a")).status).toBe(202);
+    expect((await s.submit("b")).status).toBe(429);
+    await running.tick();
+    await vi.waitFor(async () => {
+      expect((await s.storage.jobs.load(s.identity, "a", "a"))?.status).toBe(
+        "failed",
+      );
+    });
+    await vi.waitFor(async () => {
+      expect((await s.submit("b")).status).toBe(202);
+    });
+    await running.stop();
+  });
+  it("drops a reservation after its ttl", async () => {
+    const s = await setup(driver, {
+      costMicros: { limit: 400, windowMs: 3_600_000 },
+      reserveCostMicros: 400,
+      reservationTtlMs: 1000,
+    });
+    expect((await s.submit("a")).status).toBe(202);
+    expect((await s.submit("b")).status).toBe(429);
+    vi.setSystemTime(1_001_001);
+    expect((await s.submit("b")).status).toBe(202);
+  });
+  it("releases the reservation when submission fails", async () => {
+    const s = await setup(driver, {
+      costMicros: { limit: 400, windowMs: 60_000 },
+      reserveCostMicros: 400,
+    });
+    const spy = vi
+      .spyOn(s.storage.jobs, "submit")
+      .mockRejectedValueOnce(new Error("boom"));
+    await s.submit("b", "other").catch(() => undefined);
+    spy.mockRestore();
+    expect((await s.submit("c", "third")).status).toBe(202);
+  });
+  it("keeps a hold when a duplicate submission of its run fails", async () => {
+    const s = await setup(driver, {
+      costMicros: { limit: 400, windowMs: 60_000 },
+      reserveCostMicros: 400,
+    });
+    expect((await s.submit("a", "chat")).status).toBe(202);
+    const inspect = vi
+      .spyOn(s.storage.conversations, "inspect")
+      .mockResolvedValueOnce({
+        exists: false,
+        active: false,
+        submitted: false,
+        erased: false,
+      });
+    const submit = vi
+      .spyOn(s.storage.jobs, "submit")
+      .mockRejectedValueOnce(new Error("conflict"));
+    await s.submit("a", "chat").catch(() => undefined);
+    inspect.mockRestore();
+    submit.mockRestore();
+    expect((await s.submit("b", "other")).status).toBe(429);
+  });
+  it("holds separately for actors reusing a run id", async () => {
+    const s = await setup(driver, {
+      costMicros: { limit: 800, windowMs: 60_000 },
+      reserveCostMicros: 400,
+    });
+    expect((await s.submit("a", "chat")).status).toBe(202);
+    expect((await s.submit("a", "chat", "other")).status).toBe(202);
+    expect((await s.submit("b", "other")).status).toBe(429);
+  });
+  it("retries a failed settle and settles each record independently", async () => {
+    const quota: QuotaOptions = {
+      scope: "actor",
+      globalCostMicros: { limit: 400, windowMs: 60_000 },
+      costMicros: { limit: 400, windowMs: 60_000 },
+      reserveCostMicros: 400,
+    };
+    const s = await setup(driver, quota);
+    expect((await s.submit("a", "chat")).status).toBe(202);
+    const real = s.storage.quota.settle.bind(s.storage.quota);
+    let failures = 0;
+    const settle = vi
+      .spyOn(s.storage.quota, "settle")
+      .mockImplementation((...args) =>
+        failures++ === 0 ? Promise.reject(new Error("busy")) : real(...args),
+      );
+    const runKey = JSON.stringify(["chat", "a"]);
+    await settleRun(s.storage.quota, s.identity, quota, runKey, 0);
+    settle.mockRestore();
+    expect(failures).toBe(3);
+    expect((await s.submit("b", "b")).status).toBe(202);
+  });
+  it("is idempotent for a resubmitted run", async () => {
+    const s = await setup(driver, {
+      costMicros: { limit: 400, windowMs: 60_000 },
+      reserveCostMicros: 400,
+    });
+    expect((await s.submit("a", "chat")).status).toBe(202);
+    expect((await s.submit("a", "chat")).status).toBe(202);
+  });
+  it("enforces a global budget across actors", async () => {
+    const s = await setup(driver, {
+      scope: "actor",
+      globalCostMicros: { limit: 400, windowMs: 60_000 },
+      costMicros: { limit: 400, windowMs: 60_000 },
+      reserveCostMicros: 400,
+    });
+    expect((await s.submit("a")).status).toBe(202);
+    expect((await s.submit("b", "b", "other")).status).toBe(429);
+  });
+  it("returns the global hold when the scope denies", async () => {
+    const s = await setup(driver, {
+      scope: "actor",
+      globalCostMicros: { limit: 800, windowMs: 60_000 },
+      costMicros: { limit: 400, windowMs: 60_000 },
+      reserveCostMicros: 400,
+    });
+    expect((await s.submit("a")).status).toBe(202);
+    expect((await s.submit("b")).status).toBe(429);
+    expect((await s.submit("c", "c", "other")).status).toBe(202);
+  });
+  it("accrues global cost without reservations", async () => {
+    const quota: QuotaOptions = {
+      globalCostMicros: { limit: 100, windowMs: 60_000 },
+    };
+    const s = await setup(driver, quota);
+    const running = worker(s, quota);
+    expect((await s.submit("a")).status).toBe(202);
+    await running.tick();
+    await vi.waitFor(async () => {
+      expect((await s.submit("b", "b", "other")).status).toBe(429);
+    });
+    await running.stop();
   });
   it("leaves submissions unchanged without quota", async () => {
     const s = await setup(driver);

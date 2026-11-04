@@ -28,6 +28,7 @@ const approvalStatuses = [
   "completed",
   "expired",
   "unknown",
+  "undelivered",
 ];
 
 type Obj = Record<string, unknown>;
@@ -185,10 +186,17 @@ export function parseApproval(value: unknown): Approval {
     "preview",
     "status",
     "expiresAt",
+    "remember",
   ]);
   str(record["id"], "approval");
   str(record["preview"], "approval");
   check(approvalStatuses.includes(record["status"] as string), "approval");
   num(record["expiresAt"], "approval");
+  check(
+    record["remember"] === undefined ||
+      (Array.isArray(record["remember"]) &&
+        record["remember"].every((scope) => typeof scope === "string")),
+    "approval",
+  );
   return record as Approval;
 }

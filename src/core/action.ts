@@ -1,6 +1,6 @@
-import { Ajv } from "ajv";
 import { z } from "zod";
 import type { Identity, ToolSpec, ToolCall } from "./contracts.js";
+import { compileSchema } from "./json-schema.js";
 export type Preparation = Readonly<{ preview: string; version: string }>;
 export type ActionContext = Readonly<{
   identity: Identity;
@@ -48,7 +48,7 @@ export function validElicitation(
   content: unknown,
 ) {
   const { requestedSchema } = action.args as Elicitation;
-  return new Ajv({ strict: false }).validate(requestedSchema, content);
+  return compileSchema(requestedSchema)(content);
 }
 export type ActionExecutor = ((
   tool: WriteTool,

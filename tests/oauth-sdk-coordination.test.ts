@@ -242,7 +242,7 @@ it("preserves a pending login and fences provider callbacks inherited from a com
     finish = resolve;
   });
   let delayed: Promise<void> | undefined;
-  await oauth.coordinate?.(() => {
+  await oauth.coordinate(() => {
     delayed = waiting.then(() =>
       oauth.provider.saveTokens({
         access_token: "stale",
@@ -266,16 +266,16 @@ it("preserves a pending login and fences provider callbacks inherited from a com
   const ready = new Promise<void>((resolve) => {
     started = resolve;
   });
-  const owner = oauth.coordinate?.(() => {
+  const owner = oauth.coordinate(() => {
     started();
     return held;
   });
   await ready;
   await expect(
-    second.coordinate?.(() => Promise.resolve(), AbortSignal.timeout(20)),
+    second.coordinate(() => Promise.resolve(), AbortSignal.timeout(20)),
   ).rejects.toThrow();
   const third = vi.fn(() => Promise.resolve());
-  const queued = second.coordinate?.(third);
+  const queued = second.coordinate(third);
   await delay(30);
   expect(third).not.toHaveBeenCalled();
   release();

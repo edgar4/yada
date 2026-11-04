@@ -1,12 +1,24 @@
 import { z } from "zod";
 import type { recordStore } from "./records.js";
 export type QuotaWindow = Readonly<{ limit: number; windowMs: number }>;
+export type QuotaReservation = Readonly<{
+  id: string;
+  micros: number;
+  ttlMs: number;
+}>;
 export interface QuotaStore {
   consume(
     scopeKey: string,
     quota: Readonly<{ requests?: QuotaWindow; costMicros?: QuotaWindow }>,
+    reservation?: QuotaReservation,
   ): Promise<{ retryAfterMs: number } | undefined>;
   addCost(scopeKey: string, windowMs: number, micros: number): Promise<void>;
+  settle(
+    scopeKey: string,
+    windowMs: number,
+    id: string,
+    micros: number,
+  ): Promise<void>;
   lease(
     scopeKey: string,
     id: string,
@@ -19,6 +31,9 @@ const counterSchema = z.object({ start: z.number(), used: z.number() });
 const storedSchema = z.object({
   requests: counterSchema.optional(),
   cost: counterSchema.optional(),
+  reserved: z
+    .record(z.string(), z.object({ micros: z.number(), expiresAt: z.number() }))
+    .optional(),
 });
 const leasesSchema = z.object({ leases: z.record(z.string(), z.number()) });
 const current = (
@@ -30,8 +45,31 @@ const current = (
 export function createQuotaStore(
   records: ReturnType<typeof recordStore>,
 ): QuotaStore {
+  const settle: QuotaStore["settle"] = async (
+    scopeKey,
+    windowMs,
+    id,
+    micros,
+  ) => {
+    await records.mutate(scopeKey, (value) => {
+      const stored = storedSchema.parse(value ?? {});
+      const cost = current(stored.cost, windowMs, Date.now());
+      const reserved = Object.fromEntries(
+        Object.entries(stored.reserved ?? {}).filter(([key]) => key !== id),
+      );
+      return {
+        value: {
+          ...stored,
+          ...(stored.reserved ? { reserved } : {}),
+          cost: { ...cost, used: cost.used + micros },
+        },
+        result: undefined,
+      };
+    });
+  };
   return {
-    consume: (scopeKey, quota) =>
+    settle,
+    consume: (scopeKey, quota, reservation) =>
       records.mutate(scopeKey, (value) => {
         const now = Date.now();
         const stored = storedSchema.parse(value ?? {});
@@ -45,16 +83,48 @@ export function createQuotaStore(
           counter && window && counter.used >= window.limit
             ? counter.start + window.windowMs - now
             : undefined;
+        const reserved = Object.fromEntries(
+          Object.entries(stored.reserved ?? {}).filter(
+            ([id, item]) => item.expiresAt > now && id !== reservation?.id,
+          ),
+        );
+        const held = Object.values(reserved).reduce(
+          (sum, item) => sum + item.micros,
+          0,
+        );
+        const unaffordable =
+          reservation &&
+          cost &&
+          quota.costMicros &&
+          cost.used + held + reservation.micros > quota.costMicros.limit
+            ? cost.start + quota.costMicros.windowMs - now
+            : 0;
         const retryAfterMs = Math.max(
           wait(cost, quota.costMicros) ?? 0,
           wait(requests, quota.requests) ?? 0,
+          unaffordable,
         );
         if (retryAfterMs > 0)
-          return { value: { requests, cost }, result: { retryAfterMs } };
+          return {
+            value: { ...stored, requests, cost },
+            result: { retryAfterMs },
+          };
         return {
           value: {
+            ...stored,
             requests: requests && { ...requests, used: requests.used + 1 },
             cost,
+            ...(reservation && cost
+              ? {
+                  reserved: {
+                    ...reserved,
+                    [reservation.id]: {
+                      micros: reservation.micros,
+                      expiresAt: now + reservation.ttlMs,
+                    },
+                  },
+                }
+              : {}),
           },
           result: undefined,
         };
@@ -81,21 +151,7 @@ export function createQuotaStore(
         return { value: { leases }, result: undefined };
       });
     },
-    addCost: async (scopeKey, windowMs, micros) => {
-      await records.mutate(scopeKey, (value) => {
-        const cost = current(
-          storedSchema.parse(value ?? {}).cost,
-          windowMs,
-          Date.now(),
-        );
-        return {
-          value: {
-            ...storedSchema.parse(value ?? {}),
-            cost: { ...cost, used: cost.used + micros },
-          },
-          result: undefined,
-        };
-      });
-    },
+    addCost: (scopeKey, windowMs, micros) =>
+      settle(scopeKey, windowMs, "", micros),
   };
 }

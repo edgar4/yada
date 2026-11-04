@@ -12,8 +12,7 @@ export type {
   ConversationMessage,
 } from "./conversations.js";
 import { createRunStore, type RunStore } from "./runs.js";
-import { createOAuthStore } from "./oauth.js";
-import type { McpOAuthStore } from "../connectors/mcp/oauth.js";
+import { createOAuthStore, type OAuthRecordStore } from "./oauth.js";
 import { createMemoryStore } from "./memory.js";
 import type { MemoryStore } from "../core/memory.js";
 import { createQuotaStore, type QuotaStore } from "./quota.js";
@@ -29,7 +28,7 @@ export interface YadaStorage {
   actions: ActionStore;
   retention: ReturnType<typeof createRetention>;
   conversations: ConversationStore & ConversationQueries;
-  oauth: McpOAuthStore;
+  oauth: OAuthRecordStore;
   memory: MemoryStore;
   quota: QuotaStore;
   close: () => Promise<void>;

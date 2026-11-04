@@ -16,7 +16,7 @@ import {
   type Job,
   type RunEvent,
 } from "./contracts.js";
-import { quotaScopeKey, type QuotaOptions } from "./quota.js";
+import { admitRun, settleRun, type QuotaOptions } from "./quota.js";
 import { eventKey, type EventBus } from "./events.js";
 import { resumeDecided } from "./recovery.js";
 export async function readJson(
@@ -69,6 +69,8 @@ export type HandlerLimits = Readonly<{
   requestsPerMinute?: number;
   streamsPerActor?: number;
 }>;
+export type RememberScope = "run" | "conversation";
+
 export function createHandler(options: {
   storage: YadaStorage;
   origins: readonly string[];
@@ -77,9 +79,12 @@ export function createHandler(options: {
   bus?: EventBus;
   quota?: QuotaOptions;
   limits?: HandlerLimits;
+  rememberApprovals?: readonly RememberScope[];
   onError?: (error: unknown, request: Request) => void;
 }) {
   const pollMs = options.bus ? 500 : 100;
+  const allowsRemember = (scope: RememberScope) =>
+    options.rememberApprovals?.includes(scope) ?? true;
   const requestsPerMinute = options.limits?.requestsPerMinute ?? 600;
   const maxStreams = options.limits?.streamsPerActor ?? 8;
   const windows = new Map<string, { start: number; used: number }>();
@@ -237,17 +242,36 @@ export function createHandler(options: {
           input.id,
         );
         if (state.erased) throw new HttpError(410, "Conversation erased");
-        if (quota && !state.active && !state.submitted) {
-          const denied = await options.storage.quota.consume(
-            quotaScopeKey(identity, quota),
+        const runKey = JSON.stringify([conversationId, input.id]);
+        const admitted = quota && !state.active && !state.submitted;
+        if (admitted) {
+          const denied = await admitRun(
+            options.storage.quota,
+            identity,
             quota,
+            runKey,
+            input.profileId,
           );
           if (denied) return throttle(denied.retryAfterMs);
         }
-        return json(
-          await options.storage.jobs.submit(identity, conversationId, input),
-          202,
-        );
+        try {
+          return json(
+            await options.storage.jobs.submit(identity, conversationId, input),
+            202,
+          );
+        } catch (error) {
+          if (
+            admitted &&
+            quota.reserveCostMicros !== undefined &&
+            !(await options.storage.jobs.load(
+              identity,
+              conversationId,
+              input.id,
+            ))
+          )
+            await settleRun(options.storage.quota, identity, quota, runKey, 0);
+          throw error;
+        }
       }
       if (!id) return json({ error: "Method not allowed" }, 405);
       const job = await options.storage.jobs.load(identity, conversationId, id);
@@ -265,6 +289,9 @@ export function createHandler(options: {
             preview: action.preview,
             status: action.status,
             expiresAt: action.expiresAt,
+            ...(options.rememberApprovals
+              ? { remember: options.rememberApprovals }
+              : {}),
           });
         if (request.method !== "POST" || !match[3].endsWith("/decision"))
           return json({ error: "Method not allowed" }, 405);
@@ -284,9 +311,13 @@ export function createHandler(options: {
           const applied =
             action.status === "declined"
               ? !decision.approved
-              : ["approved", "executing", "completed", "unknown"].includes(
-                  action.status,
-                ) && decision.approved;
+              : [
+                  "approved",
+                  "executing",
+                  "completed",
+                  "unknown",
+                  "undelivered",
+                ].includes(action.status) && decision.approved;
           if (applied) return json({ accepted: true }, 202);
           return json({ error: "Run is not awaiting this approval" }, 409);
         }
@@ -310,7 +341,11 @@ export function createHandler(options: {
           decision.approved,
           content,
         );
-        if (decision.remember && decided.status === "approved")
+        if (
+          decision.remember &&
+          allowsRemember(decision.remember) &&
+          decided.status === "approved"
+        )
           await options.storage.actions.remember(
             identity,
             decided,

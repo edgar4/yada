@@ -1,5 +1,6 @@
 import {
   BrowserClient,
+  ClientError,
   type Job,
   type JobInput,
   type RunEvent,
@@ -79,6 +80,8 @@ export type WidgetRunDetail = Readonly<{
   conversationId: string;
   runId: string;
 }>;
+export type WidgetRunEndDetail = WidgetRunDetail &
+  Readonly<{ status: "completed" | "failed" | "cancelled" }>;
 export interface YadaWidget extends HTMLElement {
   configure(options: WidgetOptions): void;
   resume(runId: string): Promise<void>;
@@ -213,6 +216,9 @@ function markdown(text: string): DocumentFragment {
   return fragment;
 }
 
+const isFinished = (status: string) =>
+  ["completed", "failed", "cancelled"].includes(status);
+
 export function defineYadaWidget(name = "yada-chat"): void {
   if (typeof customElements === "undefined") return;
   if (customElements.get(name)) return;
@@ -239,6 +245,9 @@ export function defineYadaWidget(name = "yada-chat"): void {
     private readonly approve = document.createElement("button");
     private readonly decline = document.createElement("button");
     private approvalId: string | undefined;
+    private readonly steered = new Map<string, string>();
+    private settling = false;
+    private unconfirmedSteer: { id: string; text: string } | undefined;
     private live: HTMLElement | undefined;
     private liveText = "";
     private labels: WidgetLabels = defaultLabels;
@@ -302,29 +311,14 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.status.textContent = this.labels.ready;
       form.addEventListener("submit", (event) => {
         event.preventDefault();
-        if (!this.options || !this.prompt.value.trim()) return;
+        if (!this.options || this.settling || !this.prompt.value.trim()) return;
         if (this.active) {
           void this.steerRun();
           return;
         }
-        this.input = this.options.client.createInput(
-          this.options.profileId,
-          this.prompt.value,
-        );
-        this.cursor = 0;
         this.appendMessage(this.prompt.value, "user");
+        this.submit(this.prompt.value);
         this.prompt.value = "";
-        this.dispatchEvent(
-          new CustomEvent<WidgetRunDetail>("yada-run", {
-            detail: {
-              conversationId: this.options.conversationId,
-              runId: this.input.id,
-            },
-            bubbles: true,
-            composed: true,
-          }),
-        );
-        void this.start(true);
       });
       this.prompt.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
@@ -344,6 +338,28 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.decline.addEventListener("click", () => {
         void this.decide(false);
       });
+    }
+
+    private submit(text: string): void {
+      if (!this.options) return;
+      this.input = this.options.client.createInput(
+        this.options.profileId,
+        text,
+      );
+      this.cursor = 0;
+      this.steered.clear();
+      this.unconfirmedSteer = undefined;
+      this.dispatchEvent(
+        new CustomEvent<WidgetRunDetail>("yada-run", {
+          detail: {
+            conversationId: this.options.conversationId,
+            runId: this.input.id,
+          },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      void this.start(true);
     }
 
     private applyLabels(
@@ -375,6 +391,9 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.applyLabels();
       this.input = undefined;
       this.cursor = 0;
+      this.steered.clear();
+      this.unconfirmedSteer = undefined;
+      this.settling = false;
       this.active = false;
       this.cancel.disabled = false;
       this.log.replaceChildren();
@@ -426,7 +445,13 @@ export function defineYadaWidget(name = "yada-chat"): void {
 
     connectedCallback(): void {
       this.update();
-      if (this.input && this.active) void this.start(false);
+      if (!this.input) return;
+      if (this.active) void this.start(false);
+      else if (this.steered.size) {
+        const controller = new AbortController();
+        this.controller = controller;
+        void this.resendUnconsumed(controller);
+      }
     }
 
     disconnectedCallback(): void {
@@ -435,7 +460,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
 
     private update(): void {
       this.send.disabled = this.prompt.disabled =
-        !this.options || (this.active && !this.input);
+        !this.options || this.settling || (this.active && !this.input);
       this.cancel.hidden = !this.active || !this.input;
       this.typing.hidden = !this.active || !this.approval.hidden || !!this.live;
     }
@@ -503,6 +528,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
           this.cursor = event.sequence;
           await this.showEvent(event, controller.signal);
         }
+        if (this.isCurrent(controller)) await this.resendUnconsumed(controller);
       } catch {
         if (!this.isCurrent(controller)) return;
         this.error.textContent = this.labels.connectionFailed;
@@ -568,6 +594,9 @@ export function defineYadaWidget(name = "yada-chat"): void {
         signal.throwIfAborted();
         this.approvalId = approval.id;
         this.remember.checked = false;
+        this.rememberLabel.hidden = !(approval.remember ?? ["run"]).includes(
+          "run",
+        );
         this.preview.textContent = approval.preview;
         this.approve.disabled = this.decline.disabled =
           approval.status !== "pending" || approval.expiresAt <= Date.now();
@@ -575,10 +604,23 @@ export function defineYadaWidget(name = "yada-chat"): void {
         this.update();
         this.approve.focus();
       }
-      if (["completed", "failed", "cancelled"].includes(event.type)) {
+      if (isFinished(event.type)) {
         this.active = false;
+        this.settling = this.steered.size > 0;
         this.update();
         this.prompt.focus();
+        if (this.options && this.input)
+          this.dispatchEvent(
+            new CustomEvent<WidgetRunEndDetail>("yada-run-end", {
+              detail: {
+                conversationId: this.options.conversationId,
+                runId: this.input.id,
+                status: event.type as WidgetRunEndDetail["status"],
+              },
+              bubbles: true,
+              composed: true,
+            }),
+          );
       }
     }
 
@@ -609,24 +651,98 @@ export function defineYadaWidget(name = "yada-chat"): void {
       if (!options || !input || !controller || !this.isCurrent(controller))
         return;
       this.send.disabled = true;
+      const id =
+        this.unconfirmedSteer?.text === text
+          ? this.unconfirmedSteer.id
+          : crypto.randomUUID();
+      this.unconfirmedSteer = { id, text };
       try {
         await options.client.steer(
           options.conversationId,
           input.id,
           text,
-          undefined,
+          id,
           controller.signal,
         );
         if (!this.isCurrent(controller)) return;
+        this.unconfirmedSteer = undefined;
+        this.steered.set(id, text);
         this.appendMessage(text, "user");
         this.prompt.value = "";
         this.error.textContent = "";
-      } catch {
-        if (this.isCurrent(controller))
+        if (!this.active) await this.resendUnconsumed(controller);
+      } catch (error) {
+        if (!this.isCurrent(controller)) return;
+        if (
+          !(error instanceof ClientError && error.status === 409) ||
+          !(await this.startFollowUp(text, controller))
+        )
           this.error.textContent = this.labels.steerFailed;
       } finally {
-        if (this.isCurrent(controller)) this.update();
+        this.update();
       }
+    }
+
+    private async startFollowUp(
+      text: string,
+      stale: AbortController,
+    ): Promise<boolean> {
+      const { options, input } = this;
+      if (!options || !input) return false;
+      const job = await options.client
+        .getRun(options.conversationId, input.id, stale.signal)
+        .catch(() => undefined);
+      if (!job || !this.isCurrent(stale) || !isFinished(job.status))
+        return false;
+      stale.abort();
+      const controller = new AbortController();
+      this.controller = controller;
+      for (const event of job.events)
+        if (event.sequence > this.cursor) {
+          this.cursor = event.sequence;
+          await this.showEvent(event, controller.signal);
+        }
+      this.settling = false;
+      this.restoreUnconsumed(job, text);
+      this.update();
+      return true;
+    }
+
+    private async resendUnconsumed(controller: AbortController): Promise<void> {
+      const { options, input } = this;
+      if (!options || !input || !this.steered.size) return;
+      this.settling = true;
+      this.update();
+      const job = await options.client
+        .getRun(options.conversationId, input.id, controller.signal)
+        .catch(() => undefined);
+      this.settling = false;
+      this.update();
+      if (!this.isCurrent(controller)) return;
+      if (!job) this.error.textContent = this.labels.steerFailed;
+      this.restoreUnconsumed(job);
+    }
+
+    private restoreUnconsumed(job: Job | undefined, followUp = ""): void {
+      const unread = job
+        ? job.steering
+            .filter((item) => !item.consumed && this.steered.has(item.id))
+            .map((item) => contentText(item.input))
+        : [...this.steered.values()];
+      if (job) for (const { id } of job.steering) this.steered.delete(id);
+      else this.steered.clear();
+      if (job?.status === "completed") {
+        if (followUp) {
+          this.appendMessage(followUp, "user");
+          this.prompt.value = "";
+        }
+        const text = [...unread, ...(followUp ? [followUp] : [])].join("\n\n");
+        if (text) this.submit(text);
+      } else if (unread.length)
+        this.prompt.value = [...unread, this.prompt.value]
+          .filter(Boolean)
+          .join("\n\n");
+      this.prompt.focus();
     }
 
     private async decide(approved: boolean): Promise<void> {

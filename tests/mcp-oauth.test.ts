@@ -227,6 +227,140 @@ it("isolates actors and rejects mismatched MCP connections", async () => {
     ),
   ).rejects.toThrow("mismatch");
 });
+it("revokes tokens at the advertised endpoint on disconnect, best effort", async () => {
+  const s = setup();
+  await s.seed();
+  const discovery = await s.oauth.provider.discoveryState?.();
+  await s.oauth.provider.saveDiscoveryState?.({
+    authorizationServerUrl: "https://auth.example",
+    ...discovery,
+    authorizationServerMetadata: {
+      ...discovery?.authorizationServerMetadata,
+      revocation_endpoint: "https://auth.example/revoke",
+    } as never,
+  });
+  await s.oauth.provider.saveTokens({
+    access_token: "access",
+    refresh_token: "refresh",
+    token_type: "Bearer",
+  });
+  const fetchMock = vi.fn<typeof fetch>(() =>
+    Promise.reject(new Error("unavailable")),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  await s.oauth.disconnect();
+  expect(await s.oauth.provider.tokens()).toBeUndefined();
+  expect(
+    fetchMock.mock.calls.map(([url, init]) => [
+      url,
+      Object.fromEntries(init?.body as URLSearchParams),
+    ]),
+  ).toEqual([
+    [
+      "https://auth.example/revoke",
+      {
+        token: "refresh",
+        token_type_hint: "refresh_token",
+        client_id: "yada-client",
+      },
+    ],
+    [
+      "https://auth.example/revoke",
+      {
+        token: "access",
+        token_type_hint: "access_token",
+        client_id: "yada-client",
+      },
+    ],
+  ]);
+});
+it.each([
+  ["client_secret_basic", { authorization: "Basic aWQ6c2VjcmV0" }, {}],
+  ["client_secret_post", {}, { client_id: "id", client_secret: "secret" }],
+] as const)(
+  "authenticates revocation with %s",
+  async (method, headers, body) => {
+    const s = setup();
+    const oauth = createMcpOAuth({
+      ...s.options,
+      clientId: "id",
+      clientSecret: "secret",
+      clientAuthMethod: method,
+    });
+    await oauth.provider.saveDiscoveryState?.({
+      authorizationServerUrl: "https://auth.example",
+      authorizationServerMetadata: {
+        issuer: "https://auth.example",
+        authorization_endpoint: "https://auth.example/authorize",
+        token_endpoint: "https://auth.example/token",
+        response_types_supported: ["code"],
+        revocation_endpoint: "https://auth.example/revoke",
+      },
+    });
+    await oauth.provider.saveTokens({
+      access_token: "a",
+      token_type: "Bearer",
+    });
+    const fetchMock = vi.fn<typeof fetch>(() =>
+      Promise.resolve(new Response(null)),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await oauth.disconnect();
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(init?.headers).toEqual(headers);
+    expect(Object.fromEntries(init?.body as URLSearchParams)).toEqual({
+      token: "a",
+      token_type_hint: "access_token",
+      ...body,
+    });
+  },
+);
+it("authenticates revocation as the registered client was told to", async () => {
+  const s = setup();
+  await s.seed();
+  const discovery = await s.oauth.provider.discoveryState?.();
+  await s.oauth.provider.saveDiscoveryState?.({
+    authorizationServerUrl: "https://auth.example",
+    ...discovery,
+    authorizationServerMetadata: {
+      ...discovery?.authorizationServerMetadata,
+      revocation_endpoint: "https://auth.example/revoke",
+    } as never,
+  });
+  await s.oauth.provider.saveClientInformation?.({
+    client_id: "id",
+    client_secret: "secret",
+    token_endpoint_auth_method: "client_secret_post",
+  });
+  await s.oauth.provider.saveTokens({
+    access_token: "a",
+    token_type: "Bearer",
+  });
+  const fetchMock = vi.fn<typeof fetch>(() =>
+    Promise.resolve(new Response(null)),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  await s.oauth.disconnect();
+  const init = fetchMock.mock.calls[0]?.[1];
+  expect(init?.headers).toEqual({});
+  expect(Object.fromEntries(init?.body as URLSearchParams)).toMatchObject({
+    client_id: "id",
+    client_secret: "secret",
+  });
+});
+it("does not revoke without a usable endpoint", async () => {
+  const s = setup();
+  await s.seed();
+  await s.oauth.provider.saveTokens({
+    access_token: "a",
+    token_type: "Bearer",
+  });
+  const fetchMock = vi.fn<typeof fetch>();
+  vi.stubGlobal("fetch", fetchMock);
+  await s.oauth.disconnect();
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(await s.oauth.provider.tokens()).toBeUndefined();
+});
 it("invalidates credentials and disconnects locally", async () => {
   const s = setup();
   await s.seed();

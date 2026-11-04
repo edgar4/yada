@@ -53,13 +53,55 @@ Pass the complete query, including `state`, `code`, and `iss` when returned. Yad
 
 The SDK refreshes stored credentials when the server rejects an expired token. If refresh cannot recover the session, another browser authorization may be required. Close old connections before reconnecting.
 
+## Per-actor connections
+
+`createMcpActorPool` serves one tool catalog to many signed-in actors, each through their own OAuth connection. Pass its `tools` to a worker profile.
+
+```ts
+const pool = await createMcpActorPool({
+  config: {
+    name: "crm",
+    url,
+    readTools: ["search", "get_account"],
+    confirmTools: ["update_account"],
+  },
+  redirectUrl: "https://your-app.example/oauth/mcp/callback",
+  store: storage.oauth,
+  authorize: async (identity, tool) => canUse(identity, tool),
+  publicTools: ["search"],
+  idleMs: 300_000,
+  maxConnections: 100,
+});
+
+const profile = { /* ... */ tools: pool.tools };
+
+// A signed-in route: send the browser to the returned URL.
+const url = await pool.beginConnect(identity);
+
+// The public callback route needs no session: the actor comes from the state.
+const actor = await pool.completeConnect(new URL(request.url).searchParams);
+```
+
+`client` takes the same `clientId`, `clientSecret`, `clientAuthMethod` and `clientMetadataUrl` as `createMcpOAuth`.
+
+- **Catalog.** The pool discovers tools once, on a shared connection made with `config` as given, so the server must list tools anonymously or `config` must carry a service credential in `token` or `headers`. Otherwise creating the pool rejects with `UnauthorizedError`. Actor connections use neither `token` nor `headers`, only OAuth and any `actorHeaders` you pass.
+- **Public tools.** Remote names in `publicTools` run on the shared connection, for any actor `authorize` allows, connected or not. The server sees no actor credentials on those calls and `_meta` names the actor `anonymous`.
+- **Other tools.** They run on the actor's connection, opened on first use and reconnected as with `reconnectingMcp`. A connection idle for `idleMs` closes, and past `maxConnections` the least recently used idle one closes. A connection in use is never evicted, so connections can exceed `maxConnections` under load.
+- **No connection.** A call from an actor with no tokens, or whose tokens the server rejects, throws `ToolCallError` with `code: "not_connected"`. The model receives `{"error":"account_not_connected","message":...}`. A write stops at preparation, before any approval, or at the recheck after approval. If the connection is lost during execution the action ends as `undelivered`. Tool calls never start a login, and rejected tokens are cleared, so `isConnected` turns false. If a refresh fails because the authorization server is unavailable, the tokens stay and the call throws `ToolCallError` with `code: "oauth_failed"`, so the next call can succeed.
+- **Connect flow.** `beginConnect(identity)` starts a new login, replacing any pending one, and returns the authorization URL, or `undefined` when stored credentials refresh without one. `completeConnect(params)` looks up the actor from a one-time record keyed by a hash of `state`, finishes the exchange and returns the identity. An unknown `state` is rejected without writing.
+- **Bind the callback to the browser.** Without a binding, anyone holding an authorization URL can finish the flow: an attacker who sends their own URL to a victim gets the victim's account linked to the attacker's actor. Set a random value in a cookie on the sign-in route, pass it as `beginConnect(identity, signal, value)`, and pass the cookie's value as `completeConnect(params, signal, value)`. A mismatch is rejected before the state is used.
+- **Other methods.** `isConnected(identity)` reads the store only. `disconnect(identity)` revokes and clears tokens. `close()` closes everything.
+
+The one-time records expire after ten minutes and are removed on use; `storage.oauth.prune()` removes abandoned ones. `eraseActor` removes them too. A custom store without `remove` keeps used records as empty rows.
+
 ## Store contract
 
 Implement `McpOAuthStore` in your server's storage layer:
 
 - `load(key)` returns the session record or `undefined`.
 - `update(key, patch)` atomically merges fields; explicit `undefined` deletes a field.
-- `consumePending(key, state)` atomically compares state, removes the matching pending record, and returns it. A mismatch returns `undefined` without consuming another flow.
+- `consumePending(key, state)` atomically compares state, removes the matching pending record, and returns it. A mismatch returns `undefined` without consuming another flow, and must not create a record.
+- `remove(key)`, optional, deletes the record. `oauth.forget()` uses it.
 
 Keys include tenant, actor, MCP endpoint, and callback URL. Preserve token, client-registration, and discovery objects unchanged, including their issuer stamps. Protect tokens and PKCE verifiers at rest. Do not log records or expose them to the browser. A pending login remains valid for ten minutes; another attempt fails with `OAuth login already pending` until that state is consumed, expired, or disconnected.
 
@@ -75,6 +117,8 @@ Use `storage.oauth` from [durable storage](storage.md), or implement this interf
 
 `oauth.cancelPending()` clears an abandoned pending login so the user can retry immediately; tokens are kept.
 
-`oauth.disconnect()` deletes local tokens and pending login state. Close active MCP connections as well. This does not revoke the upstream authorization grant; use the provider's account controls when revocation is required.
+`oauth.disconnect()` deletes local tokens and pending login state, then revokes the refresh and access tokens (RFC 7009) at the `revocation_endpoint` in the server's OAuth metadata, using the configured client authentication. Revocation is best effort: failures are ignored and local tokens are gone either way. A server that advertises no endpoint needs its own revocation flow. Close active MCP connections as well.
+
+`oauth.forget()` does the same, then deletes the whole record, including client registration and discovery. `storage.oauth.eraseActor(identity)` deletes every record of an actor without revoking. `storage.oauth.prune()` deletes records holding no tokens, no client registration, no unexpired login and no live lease, and returns how many it removed; run it periodically if logins are often abandoned. `eraseActor` finds records by a scope written on each save, so it misses records last saved by Yada 0.3.0 or earlier: call `forget()` for those, or let them be rewritten first. A callback whose `state` does not match a pending login is rejected before anything is written, and `consumePending` never writes for an unknown state.
 
 Use HTTPS endpoints and callbacks; HTTP is accepted only for loopback development. OAuth network redirects are refused. Protocol behavior follows the [MCP SDK OAuth provider contract](https://ts.sdk.modelcontextprotocol.io/client).

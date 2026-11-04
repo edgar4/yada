@@ -3,6 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import { abortable } from "../core/abort.js";
 import type { McpOAuthStore } from "../connectors/mcp/oauth.js";
+import type { Identity } from "../core/contracts.js";
 import { oauthSessionSchema } from "./oauth-schema.js";
 import type { recordStore } from "./records.js";
 
@@ -10,10 +11,14 @@ const recordSchema = oauthSessionSchema.extend({
   lease: z.object({ token: z.string(), expiresAt: z.number() }).optional(),
 });
 class OAuthBusy extends Error {}
+export type OAuthRecordStore = McpOAuthStore & {
+  eraseActor(identity: Identity): Promise<void>;
+  prune(): Promise<number>;
+};
 export function createOAuthStore(
   records: ReturnType<typeof recordStore>,
   leaseMs = 30_000,
-): McpOAuthStore {
+): OAuthRecordStore {
   z.number().int().min(100).max(300_000).parse(leaseMs);
   const key = (id: string) => JSON.stringify(["oauth", id]);
   const state = (value: unknown) => recordSchema.parse(value ?? {});
@@ -24,6 +29,14 @@ export function createOAuthStore(
       throw lost();
     return current;
   };
+  async function* allRows() {
+    for (let after = ""; ;) {
+      const rows = await records.scan("oauth", after);
+      yield* rows;
+      if (rows.length < 100) return;
+      after = rows[rows.length - 1]?.id ?? "";
+    }
+  }
   function sessionStore(token?: string): McpOAuthStore {
     const writable = (value: unknown) => {
       const current = token === undefined ? state(value) : owned(value, token);
@@ -52,19 +65,52 @@ export function createOAuthStore(
             result: undefined,
           };
         }),
-      consumePending: (id, pendingState) =>
-        records.mutate(key(id), (value) => {
+      async consumePending(id, pendingState) {
+        const record = await records.read(key(id));
+        if (token !== undefined) owned(record?.value, token);
+        if (state(record?.value).pending?.state !== pendingState)
+          return undefined;
+        return records.mutate(key(id), (value) => {
           const current = writable(value);
           const pending = current.pending;
           if (!pending || pending.state !== pendingState)
             return { value: current, result: undefined };
           delete current.pending;
           return { value: current, result: pending };
-        }),
+        });
+      },
+      remove: (id) => records.remove(key(id)),
     };
   }
   return {
     ...sessionStore(),
+    async eraseActor({ tenantId, actorId }: Identity) {
+      await records.removeScope(
+        "oauth",
+        key(JSON.stringify([tenantId, actorId])),
+      );
+      // Connect-state rows are keyed by the state alone, so only their contents name the actor.
+      const prefix = JSON.stringify({ tenantId, actorId }).slice(0, -1);
+      for await (const { id, revision, value } of allRows())
+        if (state(value).pending?.state.startsWith(prefix))
+          await records.removeRow(id, revision);
+    },
+    async prune() {
+      const now = Date.now();
+      let removed = 0;
+      for await (const { id, revision, value } of allRows()) {
+        const { tokens, client, pending, lease } = state(value);
+        if (
+          !tokens &&
+          !client &&
+          !(pending && pending.expiresAt > now) &&
+          !(lease && lease.expiresAt > now) &&
+          (await records.removeRow(id, revision))
+        )
+          removed++;
+      }
+      return removed;
+    },
     async coordinate(id, operation, signal = AbortSignal.timeout(10_000)) {
       const token = randomUUID();
       for (;;) {

@@ -1,6 +1,26 @@
 import { z } from "zod";
 import type { Content, Identity, ReadTool, ToolRun } from "./contracts.js";
 export class InvalidArguments extends Error {}
+export type ToolCallErrorCode =
+  | "access_denied"
+  | "unauthorized"
+  | "not_connected"
+  | "oauth_failed"
+  | "session_expired"
+  | "request_failed"
+  | "invalid_arguments"
+  | "tool_failed"
+  | "invalid_output";
+export type ToolCallDelivery = "not_sent" | "maybe_sent" | "received";
+export class ToolCallError extends Error {
+  constructor(
+    message: string,
+    readonly code: ToolCallErrorCode,
+    readonly delivery: ToolCallDelivery,
+  ) {
+    super(message);
+  }
+}
 export function readTool<S extends z.ZodType>(options: {
   name: string;
   description: string;

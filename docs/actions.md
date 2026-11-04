@@ -26,9 +26,15 @@ Persist operation receipts in the system that owns the mutation. If the backend 
 
 `reconcile` is optional. Without it, an execution whose outcome is uncertain (a thrown error, cancellation, or a crash after execution began) marks the action `unknown` and returns `Action outcome unknown; it may or may not have been applied. Do not retry automatically.` as the tool result. The write is never repeated. Confirmed read tools have no `reconcile`.
 
+A tool that knows its request never reached the backend throws `ToolCallError` with `delivery: "not_sent"`. The action then ends as `undelivered` and returns `Action request was not delivered; no change was made.`, skipping `reconcile`. Any other failure stays uncertain as described above.
+
 ## Remembered approvals
 
 A decision may include `remember: "run" | "conversation"`. Later actions with the same tool name, tool version and identical arguments are approved automatically within that run, or within any run of that same conversation. Grants belong to the authenticated tenant and actor and never apply to another conversation or identity. Auto-approved actions still recheck authorization and prepared state before executing. Declined or expired decisions are never remembered. Conversation grants have no expiry; they last until the conversation is erased, so offer `"conversation"` only for low-risk tools. Upgrading deletes grants stored by earlier versions, which could not be tied to a conversation; users approve those actions again.
+
+`createHandler({ rememberApprovals })` restricts the scopes the service accepts. It defaults to `["run", "conversation"]`; `["run"]` keeps only run grants and `[]` turns remembering off. A disallowed `remember` is ignored and the decision still applies. When the option is set, `GET` on an approval reports the allowed scopes as `remember`, and the widget hides its checkbox when `"run"` is not among them. The option governs new grants only: grants stored before it was set keep applying until their run or conversation is erased.
+
+`createWorker({ rememberApprovals })` takes the same list and decides which existing grants still apply, so `[]` also stops grants made before you turned remembering off. Set it on both to turn remembering off completely.
 
 Set the approval lifetime with the `ttlMs` argument of `actionExecutor` or the worker profile `approvalTtlMs`. A run waiting for approval is woken when that lifetime ends.
 

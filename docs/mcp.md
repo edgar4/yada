@@ -97,7 +97,22 @@ Remote tool names are exposed as `<server>__<name>` with characters outside `[a-
 
 Discovery follows pagination with bounded page/tool counts and rejects duplicate tools, repeated cursors, or missing configured tools. The combined `server__tool` name must fit the provider-compatible 64-character limit; longer names fail with an error stating that limit. Reconnect to refresh a changed tool catalog.
 
-Inputs are validated against the advertised JSON Schema before transmission. Draft 7 and draft 2020-12 schemas are supported; external references are not fetched and asynchronous schema extensions are rejected. Tool arguments and rendered results are bounded to 32,000 UTF-8 bytes. Structured read results become JSON text; text blocks are joined in order. A read tool that returns `isError: true` yields `{"error":"tool_failed","message":...}` (message bounded to 4,000 characters) so the model can react; write-path errors still fail. Non-text blocks render as placeholders: `[image: mime]`, `[audio: mime]`, `[resource: uri]`, `[resource_link: uri name]`. Declared output schemas are validated against the discovered schema, including tools from earlier discovery pages.
+Inputs are validated against the advertised JSON Schema before transmission. Draft 7 and draft 2020-12 schemas are supported; external references are not fetched and asynchronous schema extensions are rejected. Standard `format` keywords (`uuid`, `email`, `date-time`, `uri` and the rest of `ajv-formats`) are enforced, on inputs, outputs and elicitation answers; unknown custom formats are ignored. Tool arguments and rendered results are bounded to 32,000 UTF-8 bytes. Structured read results become JSON text; text blocks are joined in order. A read tool that returns `isError: true` yields `{"error":"tool_failed","message":...}` (message bounded to 4,000 characters) so the model can react; write-path errors still fail. Non-text blocks render as placeholders: `[image: mime]`, `[audio: mime]`, `[resource: uri]`, `[resource_link: uri name]`. Declared output schemas are validated against the discovered schema, including tools from earlier discovery pages.
+
+**Errors.** Failed calls throw `ToolCallError` (exported from the package root) with a `code` and a `delivery`. The runtime gives the model a generic `tool_failed` result (`account_not_connected` for `not_connected`) and reports both fields as `error` on the `tool_finished` hook event.
+
+| `code`                           | Meaning                                                                                     | `delivery`                                                                                                     |
+| -------------------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `access_denied`                  | `authorize` refused the call                                                                | `not_sent`                                                                                                     |
+| `unauthorized`                   | The server returned 401 or the OAuth tokens are unusable                                    | `not_sent`                                                                                                     |
+| `not_connected`                  | The actor has no connection in a [`createMcpActorPool`](mcp-oauth.md#per-actor-connections) | `not_sent`                                                                                                     |
+| `session_expired`                | The server returned 404 for the session                                                     | `not_sent`                                                                                                     |
+| `invalid_arguments`              | Arguments failed the advertised schema                                                      | `not_sent`                                                                                                     |
+| `oauth_failed`, `request_failed` | Transport failure                                                                           | `not_sent` for other 4xx responses, connection refused, DNS failure or a closed client; otherwise `maybe_sent` |
+| `tool_failed`                    | The server returned `isError: true`                                                         | `received`                                                                                                     |
+| `invalid_output`                 | The result failed the output schema                                                         | `received`                                                                                                     |
+
+`maybe_sent` means the server may have run the call. A timeout, a dropped connection or a 5xx response is `maybe_sent`.
 
 Connection setup defaults to the server's `timeoutMs`, which can be overridden with the third `connectMcp` argument. Discovery and calls use `timeoutMs` as the request timeout and honor cancellation signals. Always close connections after use. Image blocks in read results become image parts when they are png, jpeg, webp or gif, within 5 MB, and at most 4 per result; otherwise (and for audio) they render as `[image: mime]` placeholders. External tool content remains untrusted data.
 
@@ -163,6 +178,25 @@ The adapter's `WriteTool.version` combines the reviewed version with a fingerpri
 
 Read-only literals retain `McpConnection<ReadTool>` through overloads. Configurations that might include `writeTools` return `McpConnection<Tool>`; narrow `tool.effect` before calling phase-specific methods. `McpReadConfig` expresses a configuration that cannot contain writes.
 
+## Hidden arguments
+
+`hiddenArguments` removes named arguments from the model's schema of a write or confirmed tool, and fills them when the tool executes:
+
+```ts
+await connectMcp(
+  {
+    name: "orders",
+    url,
+    confirmTools: ["place_order"],
+    hiddenArguments: { place_order: ["request_id"] },
+  },
+  access,
+  signal,
+);
+```
+
+Each value is a UUID-shaped string derived from the durable operation ID and the argument name, so every retry of one operation sends the same value and different operations send different ones. A value the model supplies for that name is replaced. The arguments must be declared in the tool's input schema and accept such a string. Preparation validates with a placeholder value and does not send the arguments to the helper.
+
 ## Confirmed tools
 
 `confirmTools` exposes the mutating tools of any MCP server, with no server changes, through `confirmTool`: each call needs one approval in the [durable worker flow](actions.md) and runs at most once. There is no receipt helper, so an uncertain outcome (timeout, transport failure) becomes "outcome unknown" and is never retried.
@@ -187,6 +221,8 @@ With `resources: true`, the model gets `<server>__list_resources` (optional `cur
 `connection.prompts(identity)` lists the server's prompts and `connection.getPrompt(identity, name, args)` returns the rendered messages as text for the host to use as system or user input. Both are host calls, always present on `connectMcp` and `reconnectingMcp` connections. They run the same checks as tools: `access.authorize` is called with the names `list_prompts` and `get_prompt`, the identity must match the connection owner, and they fail after `close()` and with the stale error below when applicable. Listing follows at most 100 cursor pages and throws beyond that, like tool discovery.
 
 When the server sends `notifications/tools/list_changed`, Yada rediscovers the catalog and compares the tools it exposes (names, descriptions, schemas, annotations). If unchanged, the connection continues. Otherwise it is stale: `isConnected()` returns `false` and new calls fail with `MCP tool contract changed; reconnect required` until the host reconnects. `reconnectingMcp` does this automatically and accepts the new connection only if its contract matches the original. After a failed reconnect it rethrows the same error without reconnecting for 30 seconds.
+
+A server may also expire an HTTP session on its own, which `isConnected()` cannot see. When a call gets a 404 for its session, `reconnectingMcp` re-initializes and retries that call once, writes included: a 404 means the server rejected the session before running anything. It never retries a call that may have been sent. A bare `connectMcp` connection throws `ToolCallError` with `code: "session_expired"` instead.
 
 ## Optional environment configuration
 

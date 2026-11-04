@@ -4,6 +4,7 @@ import {
   ClientError,
   type RunEvent,
 } from "../src/client/index.js";
+import { parseApproval } from "../src/client/validate.js";
 
 const event = (
   sequence: number,
@@ -150,6 +151,18 @@ describe("browser client", () => {
       "https://host.test/api/v1/conversations/chat/runs/run/cancel",
     ]);
     expect(transport.mock.calls[2]?.[1]?.body).toBe('{"approved":false}');
+  });
+
+  it("rejects a malformed remember list on an approval", () => {
+    const approval = {
+      id: "a",
+      preview: "p",
+      status: "pending",
+      expiresAt: 1,
+    };
+    expect(parseApproval({ ...approval, remember: ["run"] })).toBeDefined();
+    expect(() => parseApproval({ ...approval, remember: "run" })).toThrow();
+    expect(() => parseApproval({ ...approval, remember: [1] })).toThrow();
   });
 
   it("sends a remembered approval scope", async () => {

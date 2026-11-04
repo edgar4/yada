@@ -5,10 +5,13 @@ import {
   type Suspension,
 } from "../core/action.js";
 import type { Identity } from "../core/contracts.js";
+import { ToolCallError } from "../core/tool.js";
 import {
   operationId,
+  undeliveredOutcome,
   unknownOutcome,
   type ActionStore,
+  type RememberScope,
 } from "../storage/actions.js";
 import { CheckpointError } from "../core/checkpoint.js";
 export function actionExecutor(
@@ -17,6 +20,7 @@ export function actionExecutor(
   runId: string,
   ttlMs = 600_000,
   leaseToken?: string,
+  rememberScopes?: readonly RememberScope[],
 ): ActionExecutor {
   const execute: ActionExecutor = async (tool, call, signal) => {
     const id = operationId(identity, runId, call.id);
@@ -41,6 +45,7 @@ export function actionExecutor(
           tool.spec.name,
           tool.version,
           call.args,
+          rememberScopes,
         ))
           ? "approved"
           : "pending",
@@ -52,7 +57,7 @@ export function actionExecutor(
       JSON.stringify(state.args) !== JSON.stringify(call.args)
     )
       throw new Error("Action mismatch");
-    if (state.status === "completed" || state.status === "unknown")
+    if (["completed", "unknown", "undelivered"].includes(state.status))
       return state.receipt ?? "";
     const unresolved = async (): Promise<string | Suspension> => {
       if (tool.reconcile) return { status: "reconciling", approvalId: id };
@@ -99,7 +104,11 @@ export function actionExecutor(
           );
           await store.receipt(identity, id, receipt);
           return receipt;
-        } catch {
+        } catch (error) {
+          if (error instanceof ToolCallError && error.delivery === "not_sent") {
+            await store.undelivered(identity, id);
+            return undeliveredOutcome;
+          }
           return unresolved();
         }
       }
@@ -176,6 +185,6 @@ export function actionExecutor(
     };
   };
   execute.withLease = (token) =>
-    actionExecutor(store, identity, runId, ttlMs, token);
+    actionExecutor(store, identity, runId, ttlMs, token, rememberScopes);
   return execute;
 }

@@ -34,19 +34,29 @@ export const conversationOf = (runId: string) => {
     ? parsed[0]
     : runId;
 };
+const oauthOwner = (id: string) => {
+  try {
+    const parsed: unknown = JSON.parse(id);
+    return Array.isArray(parsed) ? parsed.slice(0, 2) : undefined;
+  } catch {
+    return undefined;
+  }
+};
 export function scopeFor(key: string) {
   const [kind, ...parts] = z.array(z.string()).parse(JSON.parse(key));
   const length = { conversation: 2, retired: 3 }[kind ?? ""];
   const owner =
-    kind === "grant"
-      ? [
-          parts[0],
-          parts[1],
-          parts[2] === "run" ? conversationOf(parts[3] ?? "") : parts[3],
-        ]
-      : length === undefined
-        ? undefined
-        : parts.slice(0, length);
+    kind === "oauth"
+      ? oauthOwner(parts[0] ?? "")
+      : kind === "grant"
+        ? [
+            parts[0],
+            parts[1],
+            parts[2] === "run" ? conversationOf(parts[3] ?? "") : parts[3],
+          ]
+        : length === undefined
+          ? undefined
+          : parts.slice(0, length);
   return (
     owner && createHash("sha256").update(JSON.stringify(owner)).digest("hex")
   );
@@ -148,7 +158,11 @@ export function recordStore(
     return z
       .array(rowSchema.extend({ id: z.string() }))
       .parse(rows)
-      .map((row) => ({ id: row.id, value: cipher.open(row.id, row.value) }));
+      .map((row) => ({
+        id: row.id,
+        revision: row.revision,
+        value: cipher.open(row.id, row.value),
+      }));
   }
   async function recent(
     kind: string,
@@ -187,6 +201,14 @@ export function recordStore(
       .where({ id: idFor(key) })
       .delete();
   }
+  async function removeRow(id: string, revision: number) {
+    return (await db("yada_records").where({ id, revision }).delete()) > 0;
+  }
+  async function removeScope(kind: string, scopeKey: string) {
+    await db("yada_records")
+      .where({ kind, scope: scopeFor(scopeKey) })
+      .delete();
+  }
   function transaction<T>(
     operation: (records: ReturnType<typeof recordStore>) => Promise<T>,
   ): Promise<T> {
@@ -209,5 +231,16 @@ export function recordStore(
     }
     throw new StorageConflict();
   }
-  return { read, write, mutate, scan, recent, remove, transaction, transact };
+  return {
+    read,
+    write,
+    mutate,
+    scan,
+    recent,
+    remove,
+    removeRow,
+    removeScope,
+    transaction,
+    transact,
+  };
 }

@@ -1,3 +1,4 @@
+import type { ActionContext } from "../../core/action.js";
 import { createRequire } from "node:module";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
@@ -13,6 +14,7 @@ import type {
 } from "../../core/contracts.js";
 import { abortable } from "../../core/abort.js";
 import { confirmTool } from "../../core/policy.js";
+import { ToolCallError } from "../../core/tool.js";
 import {
   mcpConfig,
   type McpConfig,
@@ -23,7 +25,7 @@ import { clientRequests } from "./client-requests.js";
 import { canonical, discoverMcpTools } from "./discovery.js";
 import { promptApi, resourceTools, type McpPrompt } from "./resources.js";
 import { mcpInvoker, readResult } from "./rpc.js";
-import { mcpWriteTool } from "./write.js";
+import { injectArguments, mcpWriteTool } from "./write.js";
 export type McpAccess = Readonly<{
   identity: Identity;
   authorize: (identity: Identity, tool: string) => Promise<boolean>;
@@ -32,6 +34,7 @@ export type McpAccess = Readonly<{
 export type McpConnection<T extends Tool = ReadTool> = Readonly<{
   tools: readonly T[];
   skipped?: readonly Readonly<{ tool: string; reason: string }>[];
+  toolNames?: ReadonlyMap<string, string>;
   close: () => Promise<void>;
   isConnected?: () => boolean;
   timeoutMs?: number;
@@ -215,7 +218,11 @@ export async function connectParsed(
     const fresh = async () => {
       await checking;
       if (stale)
-        throw new Error("MCP tool contract changed; reconnect required");
+        throw new ToolCallError(
+          "MCP tool contract changed; reconnect required",
+          "request_failed",
+          "not_sent",
+        );
     };
     const base = mcpInvoker(client, selected, authorize, settings.timeoutMs);
     const rpc = {
@@ -228,6 +235,56 @@ export async function connectParsed(
         await fresh();
         return base.read(...args);
       },
+    };
+    const hidden = settings.hiddenArguments ?? {};
+    const hiddenFor = (name: string) =>
+      Object.hasOwn(hidden, name) ? hidden[name] : undefined;
+    for (const [name, args] of Object.entries(hidden)) {
+      if (!confirms.some((tool) => tool.name === name) && !writes.has(name))
+        throw new Error(`MCP hidden arguments need a write tool: ${name}`);
+      const { properties } = required(name).inputSchema;
+      if (args.some((arg) => !properties || !Object.hasOwn(properties, arg)))
+        throw new Error(`Unknown MCP hidden argument on ${name}`);
+    }
+    const visibleSchema = ({ name, inputSchema }: RemoteTool) => {
+      const names = hiddenFor(name);
+      if (!names) return inputSchema;
+      const { properties, required: needed, ...rest } = inputSchema;
+      return {
+        ...rest,
+        properties: Object.fromEntries(
+          Object.entries(properties ?? {}).filter(
+            ([key]) => !names.includes(key),
+          ),
+        ),
+        ...(needed
+          ? { required: needed.filter((key) => !names.includes(key)) }
+          : {}),
+      };
+    };
+    const confirm = (remote: RemoteTool): Tool => {
+      const tool = confirmTool(read(remote));
+      const names = hiddenFor(remote.name);
+      return names
+        ? {
+            ...tool,
+            prepare: (args: unknown, identity: Identity, signal: AbortSignal) =>
+              tool.prepare(
+                Object.fromEntries(
+                  Object.entries(args as object).filter(
+                    ([key]) => !names.includes(key),
+                  ),
+                ),
+                identity,
+                signal,
+              ),
+            execute: (args: unknown, context: ActionContext) =>
+              tool.execute(
+                injectArguments(names, args, context.operationId),
+                context,
+              ),
+          }
+        : tool;
     };
     const exposed = new Map<string, string>();
     const spec = (remote: RemoteTool) => {
@@ -246,7 +303,7 @@ export async function connectParsed(
       return {
         name,
         description: remote.description ?? "",
-        parameters: remote.inputSchema,
+        parameters: visibleSchema(remote),
       };
     };
     const read = (remote: RemoteTool): ReadTool => ({
@@ -261,12 +318,10 @@ export async function connectParsed(
         );
       },
     });
-    const tools: Tool[] = [
-      ...reads.map(read),
-      ...confirms.map((remote) => confirmTool(read(remote))),
-    ];
+    const tools: Tool[] = [...reads.map(read), ...confirms.map(confirm)];
     const writeTools = [...writes].map(([name, mapping]) => {
       const remote = required(name);
+      const hiddenNames = hiddenFor(name);
       return mcpWriteTool({
         config: settings,
         mapping,
@@ -274,6 +329,7 @@ export async function connectParsed(
         prepare: required(mapping.prepareTool),
         receipt: required(mapping.receiptTool),
         spec: spec(remote),
+        ...(hiddenNames ? { hidden: hiddenNames } : {}),
         owner,
         authorize,
         invoke: rpc.call,
@@ -308,6 +364,7 @@ export async function connectParsed(
     return {
       tools,
       skipped,
+      toolNames: new Map([...exposed].map(([remote, name]) => [name, remote])),
       close,
       isConnected: () => connected && !closed && !stale,
       timeoutMs: settings.timeoutMs,

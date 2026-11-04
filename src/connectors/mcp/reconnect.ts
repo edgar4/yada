@@ -2,6 +2,8 @@ import type { McpConnection } from "./session.js";
 import type { Identity, Tool } from "../../core/contracts.js";
 import { abortable } from "../../core/abort.js";
 import { canonical } from "./discovery.js";
+import { connectFailure, mcpAccessDenied, mcpToolChanged } from "./rpc.js";
+import { ToolCallError } from "../../core/tool.js";
 
 function contract(connection: McpConnection<Tool>): string {
   return canonical(
@@ -33,20 +35,39 @@ export async function reconnectingMcp(
   const isClosed = () => closed;
   let pending: Promise<void> | undefined;
   let failure: { error: unknown; until: number } | undefined;
+  let expired = false;
+  const inFlight = new Map<McpConnection<Tool>, number>();
+  async function tracked<T>(operation: () => Promise<T>): Promise<T> {
+    const used = current;
+    inFlight.set(used, (inFlight.get(used) ?? 0) + 1);
+    try {
+      return await operation();
+    } finally {
+      const left = (inFlight.get(used) ?? 1) - 1;
+      if (left) inFlight.set(used, left);
+      else {
+        inFlight.delete(used);
+        if (used !== current) await used.close().catch(() => undefined);
+      }
+    }
+  }
   async function ready(callSignal: AbortSignal) {
     callSignal.throwIfAborted();
     if (closed) throw new Error("MCP connection closed");
-    if (current.isConnected?.() === false) {
+    if (expired || current.isConnected?.() === false) {
       if (failure && Date.now() < failure.until) throw failure.error;
       pending ??= (async () => {
         try {
-          await current.close();
+          const previous = current;
+          if (!inFlight.has(previous))
+            await previous.close().catch(() => undefined);
           const next = await connect(deadline());
           if (isClosed() || contract(next) !== expected) {
             await next.close();
             throw new Error("MCP discovery changed");
           }
           current = next;
+          expired = false;
           failure = undefined;
         } catch (error) {
           failure = { error, until: Date.now() + 30_000 };
@@ -59,13 +80,36 @@ export async function reconnectingMcp(
       await abortable(() => connecting, callSignal);
     }
   }
+  async function connected(callSignal: AbortSignal) {
+    try {
+      await ready(callSignal);
+    } catch (error) {
+      if (callSignal.aborted) throw error;
+      throw connectFailure(error);
+    }
+  }
+  async function withSession<T>(
+    callSignal: AbortSignal,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    await connected(callSignal);
+    const used = current;
+    try {
+      return await tracked(operation);
+    } catch (error) {
+      if (!(error instanceof ToolCallError) || error.code !== "session_expired")
+        throw error;
+      if (current === used) expired = true;
+    }
+    await connected(callSignal);
+    return tracked(operation);
+  }
   const tools: Tool[] = current.tools.map((original) => {
     const find = () => {
       const tool = current.tools.find(
         (tool) => tool.spec.name === original.spec.name,
       );
-      if (!tool || tool.effect !== original.effect)
-        throw new Error("MCP tool changed");
+      if (!tool || tool.effect !== original.effect) throw mcpToolChanged();
       return tool;
     };
     const authorize = async (identity: Identity) => {
@@ -78,15 +122,16 @@ export async function reconnectingMcp(
       callSignal: AbortSignal,
       operation: () => Promise<T>,
     ): Promise<T> {
-      await ready(callSignal);
-      if (!(await abortable(() => find().authorize(identity), callSignal)))
-        throw new Error("MCP access denied");
-      return operation();
+      return withSession(callSignal, async () => {
+        if (!(await abortable(() => find().authorize(identity), callSignal)))
+          throw mcpAccessDenied();
+        return operation();
+      });
     }
     if (original.effect === "write") {
       const write = () => {
         const tool = find();
-        if (tool.effect !== "write") throw new Error("MCP tool changed");
+        if (tool.effect !== "write") throw mcpToolChanged();
         return tool;
       };
       return {
@@ -119,7 +164,7 @@ export async function reconnectingMcp(
       execute: (args, identity, callSignal, run) =>
         invoke(identity, callSignal, () => {
           const tool = find();
-          if (tool.effect !== "read") throw new Error("MCP tool changed");
+          if (tool.effect !== "read") throw mcpToolChanged();
           return tool.execute(args, identity, callSignal, run);
         }),
     };
@@ -127,14 +172,18 @@ export async function reconnectingMcp(
   return {
     tools,
     ...(current.skipped ? { skipped: current.skipped } : {}),
+    ...(current.toolNames ? { toolNames: current.toolNames } : {}),
+    ...(current.timeoutMs ? { timeoutMs: current.timeoutMs } : {}),
     isConnected: () => !closed && (current.isConnected?.() ?? true),
     prompts: async (identity, callSignal) => {
-      await ready(callSignal ?? deadline());
-      return current.prompts(identity, callSignal);
+      return withSession(callSignal ?? deadline(), () =>
+        current.prompts(identity, callSignal),
+      );
     },
     getPrompt: async (identity, name, args, callSignal) => {
-      await ready(callSignal ?? deadline());
-      return current.getPrompt(identity, name, args, callSignal);
+      return withSession(callSignal ?? deadline(), () =>
+        current.getPrompt(identity, name, args, callSignal),
+      );
     },
     async close() {
       closed = true;

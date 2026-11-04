@@ -12,6 +12,7 @@ export type { Job, JobInput, RunEvent };
 export type Approval = Readonly<{
   id: string;
   preview: string;
+  remember?: readonly string[];
   status:
     | "pending"
     | "approved"
@@ -19,7 +20,8 @@ export type Approval = Readonly<{
     | "executing"
     | "completed"
     | "expired"
-    | "unknown";
+    | "unknown"
+    | "undelivered";
   expiresAt: number;
 }>;
 export type ClientOptions = Readonly<{

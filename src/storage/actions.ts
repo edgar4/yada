@@ -28,6 +28,7 @@ export const actionSchema = z.object({
     "completed",
     "expired",
     "unknown",
+    "undelivered",
   ]),
   receipt: z.string().max(32_000).optional(),
   content: z.record(z.string(), z.unknown()).optional(),
@@ -69,6 +70,8 @@ export async function runTree(
 export type RememberScope = "run" | "conversation";
 export const unknownOutcome =
   "Action outcome unknown; it may or may not have been applied. Do not retry automatically.";
+export const undeliveredOutcome =
+  "Action request was not delivered; no change was made.";
 export class ActionConflict extends Error {
   constructor() {
     super("Action decision conflict");
@@ -129,6 +132,7 @@ export interface ActionStore {
   ): Promise<boolean>;
   receipt(identity: Identity, id: string, receipt: string): Promise<void>;
   unknown(identity: Identity, id: string): Promise<void>;
+  undelivered(identity: Identity, id: string): Promise<void>;
   remember(
     identity: Identity,
     action: Action,
@@ -140,6 +144,7 @@ export interface ActionStore {
     tool: string,
     toolVersion: string,
     args: unknown,
+    scopes?: readonly RememberScope[],
   ): Promise<boolean>;
 }
 export function createActionStore(
@@ -234,6 +239,18 @@ export function createActionStore(
         return { value: state, result: undefined };
       });
     },
+    async undelivered(identity, id) {
+      await records.mutate(key(identity, id), (value) => {
+        const state = actionSchema.parse(value);
+        if (state.status === "undelivered")
+          return { value: state, result: undefined };
+        if (state.status !== "executing")
+          throw new Error("Action not executing");
+        state.status = "undelivered";
+        state.receipt = undeliveredOutcome;
+        return { value: state, result: undefined };
+      });
+    },
     async remember(identity, action, scope) {
       if (action.status !== "approved")
         throw new Error("Only approved actions can be remembered");
@@ -255,8 +272,15 @@ export function createActionStore(
         result: undefined,
       }));
     },
-    async remembered(identity, runId, tool, toolVersion, args) {
-      for (const scope of ["run", "conversation"] as const)
+    async remembered(
+      identity,
+      runId,
+      tool,
+      toolVersion,
+      args,
+      scopes = ["run", "conversation"],
+    ) {
+      for (const scope of scopes)
         if (
           await records.read(
             grantKey(identity, scope, runId, tool, toolVersion, args),
