@@ -254,6 +254,36 @@ describe.each(drivers)("tenant quotas on %s", (driver) => {
     spy.mockRestore();
     expect((await s.submit("c", "third")).status).toBe(202);
   });
+  it("keeps a hold when a duplicate submission of its run fails", async () => {
+    const s = await setup(driver, {
+      costMicros: { limit: 400, windowMs: 60_000 },
+      reserveCostMicros: 400,
+    });
+    expect((await s.submit("a", "chat")).status).toBe(202);
+    const inspect = vi
+      .spyOn(s.storage.conversations, "inspect")
+      .mockResolvedValueOnce({
+        active: false,
+        submitted: false,
+        erased: false,
+      });
+    const submit = vi
+      .spyOn(s.storage.jobs, "submit")
+      .mockRejectedValueOnce(new Error("conflict"));
+    await s.submit("a", "chat").catch(() => undefined);
+    inspect.mockRestore();
+    submit.mockRestore();
+    expect((await s.submit("b", "other")).status).toBe(429);
+  });
+  it("holds separately for actors reusing a run id", async () => {
+    const s = await setup(driver, {
+      costMicros: { limit: 800, windowMs: 60_000 },
+      reserveCostMicros: 400,
+    });
+    expect((await s.submit("a", "chat")).status).toBe(202);
+    expect((await s.submit("a", "chat", "other")).status).toBe(202);
+    expect((await s.submit("b", "other")).status).toBe(429);
+  });
   it("is idempotent for a resubmitted run", async () => {
     const s = await setup(driver, {
       costMicros: { limit: 400, windowMs: 60_000 },

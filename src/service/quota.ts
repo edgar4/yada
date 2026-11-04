@@ -15,6 +15,8 @@ export const quotaScopeKey = (identity: Identity, quota: QuotaOptions) =>
       ? ["quota", identity.tenantId, identity.actorId]
       : ["quota", identity.tenantId],
   );
+const holdId = (identity: Identity, runKey: string) =>
+  JSON.stringify([identity.tenantId, identity.actorId, runKey]);
 export async function admitRun(
   store: QuotaStore,
   identity: Identity,
@@ -30,7 +32,7 @@ export async function admitRun(
     micros === undefined
       ? undefined
       : {
-          id: runKey,
+          id: holdId(identity, runKey),
           micros,
           ttlMs: quota.reservationTtlMs ?? 3_600_000,
         };
@@ -49,7 +51,7 @@ export async function admitRun(
     reservation,
   );
   if (denied && global && reservation)
-    await store.settle(globalKey, global.windowMs, runKey, 0);
+    await store.settle(globalKey, global.windowMs, holdId(identity, runKey), 0);
   return denied;
 }
 export async function settleRun(
@@ -59,18 +61,14 @@ export async function settleRun(
   runKey: string,
   micros: number,
 ) {
+  const id = holdId(identity, runKey);
   if (quota.globalCostMicros)
-    await store.settle(
-      globalKey,
-      quota.globalCostMicros.windowMs,
-      runKey,
-      micros,
-    );
+    await store.settle(globalKey, quota.globalCostMicros.windowMs, id, micros);
   if (quota.costMicros)
     await store.settle(
       quotaScopeKey(identity, quota),
       quota.costMicros.windowMs,
-      runKey,
+      id,
       micros,
     );
 }

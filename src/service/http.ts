@@ -260,7 +260,15 @@ export function createHandler(options: {
             202,
           );
         } catch (error) {
-          if (admitted && quota.reserveCostMicros !== undefined)
+          if (
+            admitted &&
+            quota.reserveCostMicros !== undefined &&
+            !(await options.storage.jobs.load(
+              identity,
+              conversationId,
+              input.id,
+            ))
+          )
             await settleRun(options.storage.quota, identity, quota, runKey, 0);
           throw error;
         }
