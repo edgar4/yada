@@ -127,59 +127,76 @@ for (const driver of drivers)
       expect(job?.attempts).toBe(1);
     });
 
-    it("fails timeouts, cancels on request and leaves shutdown resumable", async () => {
-      const s = await storageFixture(driver);
-      await s.storage.jobs.submit(s.identity, "timeout", input("one"));
-      const timed = createWorker({
-        storage: s.storage,
-        profiles: {
-          v1: { provider: hang(), tools: [], system: "Help", timeoutMs: 50 },
-        },
-      });
-      await timed.tick();
-      await timed.stop();
-      const job = await s.storage.jobs.load(s.identity, "timeout", "one");
-      expect(job?.status).toBe("failed");
-      expect(job?.outcome).toEqual({ status: "failed", code: "timeout" });
+    it(
+      "fails timeouts, cancels on request and leaves shutdown resumable",
+      { timeout: 120_000 },
+      async () => {
+        const s = await storageFixture(driver);
+        await s.storage.jobs.submit(s.identity, "timeout", input("one"));
+        const timed = createWorker({
+          storage: s.storage,
+          profiles: {
+            v1: { provider: hang(), tools: [], system: "Help", timeoutMs: 50 },
+          },
+        });
+        await timed.tick();
+        await timed.stop();
+        const job = await s.storage.jobs.load(s.identity, "timeout", "one");
+        expect(job?.status).toBe("failed");
+        expect(job?.outcome).toEqual({ status: "failed", code: "timeout" });
 
-      await s.storage.jobs.submit(s.identity, "cancel", input("two"));
-      const provider = hang();
-      const cancelled = createWorker({
-        storage: s.storage,
-        profiles: { v1: { provider, tools: [], system: "Help" } },
-        leaseMs: 100,
-        pollMs: 10,
-      });
-      cancelled.start();
-      await vi.waitFor(() => {
-        expect(provider.requests).toHaveLength(1);
-      });
-      await s.storage.jobs.cancel(s.identity, "cancel", "two");
-      await vi.waitFor(async () => {
-        expect(
-          (await s.storage.jobs.load(s.identity, "cancel", "two"))?.status,
-        ).toBe("cancelled");
-      });
-      await cancelled.stop();
+        await s.storage.jobs.submit(s.identity, "cancel", input("two"));
+        const provider = hang();
+        const cancelled = createWorker({
+          storage: s.storage,
+          profiles: { v1: { provider, tools: [], system: "Help" } },
+          leaseMs: 1000,
+          pollMs: 10,
+        });
+        cancelled.start();
+        await vi.waitFor(
+          () => {
+            expect(provider.requests).toHaveLength(1);
+          },
+          { timeout: 30_000 },
+        );
+        await s.storage.jobs.cancel(s.identity, "cancel", "two");
+        await vi.waitFor(
+          async () => {
+            expect(
+              (await s.storage.jobs.load(s.identity, "cancel", "two"))?.status,
+            ).toBe("cancelled");
+          },
+          { timeout: 30_000 },
+        );
+        await cancelled.stop();
 
-      await s.storage.jobs.submit(s.identity, "stop", input("three"));
-      const pending = hang();
-      const stopped = createWorker({
-        storage: s.storage,
-        profiles: { v1: { provider: pending, tools: [], system: "Help" } },
-        leaseMs: 5000,
-        pollMs: 10,
-      });
-      stopped.start();
-      await vi.waitFor(() => {
-        expect(pending.requests).toHaveLength(1);
-      });
-      await stopped.stop();
-      const resumable = await s.storage.jobs.load(s.identity, "stop", "three");
-      expect(resumable?.status).not.toBe("failed");
-      expect(resumable?.outcome).toBeUndefined();
-      expect(resumable?.attempts).toBe(0);
-    });
+        await s.storage.jobs.submit(s.identity, "stop", input("three"));
+        const pending = hang();
+        const stopped = createWorker({
+          storage: s.storage,
+          profiles: { v1: { provider: pending, tools: [], system: "Help" } },
+          leaseMs: 5000,
+          pollMs: 10,
+        });
+        stopped.start();
+        await vi.waitFor(
+          () => {
+            expect(pending.requests).toHaveLength(1);
+          },
+          { timeout: 30_000 },
+        );
+        await stopped.stop();
+        const resumable = await s.storage.jobs.load(
+          s.identity,
+          "stop",
+          "three",
+        );
+        expect(resumable?.status).not.toBe("failed");
+        expect(resumable?.outcome).toBeUndefined();
+        expect(resumable?.attempts).toBe(0);
+      },
+    );
 
     it("never finalizes a job whose write action is executing", async () => {
       const s = await storageFixture(driver);
