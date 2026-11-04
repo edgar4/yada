@@ -655,6 +655,33 @@ describe("browser widget", () => {
     await page.close();
   });
 
+  it("emits yada-run-end once when a resumed run finishes", async () => {
+    const page = await open();
+    await page.evaluate(async () => {
+      document.addEventListener("yada-run-end", (event) => {
+        const ends: unknown[] = JSON.parse(
+          sessionStorage.getItem("ends") ?? "[]",
+        ) as unknown[];
+        ends.push((event as CustomEvent).detail);
+        sessionStorage.setItem("ends", JSON.stringify(ends));
+      });
+      await document.querySelector<YadaWidget>("yada-chat")?.resume("run");
+    });
+    const widget = page.locator("yada-chat").first();
+    await widget.getByRole("button", { name: "Approve action" }).click();
+    const ends = () =>
+      page.evaluate(() => sessionStorage.getItem("ends") ?? "[]");
+    await expect.poll(ends).not.toBe("[]");
+    expect(JSON.parse(await ends())).toEqual([
+      {
+        conversationId: expect.any(String) as string,
+        runId: "run",
+        status: "completed",
+      },
+    ]);
+    await page.close();
+  });
+
   it("retries failed creation with the same id and reports failed decisions and cancellation", async () => {
     createFailure = true;
     const page = await open();

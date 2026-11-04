@@ -80,6 +80,8 @@ export type WidgetRunDetail = Readonly<{
   conversationId: string;
   runId: string;
 }>;
+export type WidgetRunEndDetail = WidgetRunDetail &
+  Readonly<{ status: "completed" | "failed" | "cancelled" }>;
 export interface YadaWidget extends HTMLElement {
   configure(options: WidgetOptions): void;
   resume(runId: string): Promise<void>;
@@ -595,6 +597,18 @@ export function defineYadaWidget(name = "yada-chat"): void {
         this.active = false;
         this.update();
         this.prompt.focus();
+        if (this.options && this.input)
+          this.dispatchEvent(
+            new CustomEvent<WidgetRunEndDetail>("yada-run-end", {
+              detail: {
+                conversationId: this.options.conversationId,
+                runId: this.input.id,
+                status: event.type as WidgetRunEndDetail["status"],
+              },
+              bubbles: true,
+              composed: true,
+            }),
+          );
       }
     }
 
