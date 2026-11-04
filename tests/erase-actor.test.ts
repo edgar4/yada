@@ -4,7 +4,10 @@ import { drivers, storageFixture } from "./helpers/storage.js";
 describe.each(drivers)("%s eraseActor", (driver) => {
   it("erases conversations, memory and OAuth, and reports what remains", async () => {
     const s = await storageFixture(driver);
-    const other = { ...s.identity, actorId: "other" as typeof s.identity.actorId };
+    const other = {
+      ...s.identity,
+      actorId: "other" as typeof s.identity.actorId,
+    };
     const key = (actorId: string) =>
       JSON.stringify([s.identity.tenantId, actorId, "server", "redirect"]);
     const tokens = { access_token: "a", token_type: "Bearer" };

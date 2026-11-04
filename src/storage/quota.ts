@@ -54,7 +54,9 @@ export function createQuotaStore(
     await records.mutate(scopeKey, (value) => {
       const stored = storedSchema.parse(value ?? {});
       const cost = current(stored.cost, windowMs, Date.now());
-      const { [id]: _settled, ...reserved } = stored.reserved ?? {};
+      const reserved = Object.fromEntries(
+        Object.entries(stored.reserved ?? {}).filter(([key]) => key !== id),
+      );
       return {
         value: {
           ...stored,
