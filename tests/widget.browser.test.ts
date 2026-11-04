@@ -47,6 +47,7 @@ let finished: "completed" | "cancelled" | undefined;
 let rememberDisabled = false;
 let runReadFailure = false;
 let steerConflict: "completed" | "cancelled" | undefined;
+let steerLost = false;
 let unconsumed: { id: string; input: string; consumed: boolean }[] = [];
 let cancelRequested = false;
 let reconnectOnce = false;
@@ -180,6 +181,10 @@ const server = createServer((request, response) => {
       });
       request.on("end", () => {
         steered.push(body);
+        if (steerLost) {
+          response.destroy();
+          return;
+        }
         if (steerConflict) {
           finished = steerConflict;
           response.writeHead(409);
@@ -344,6 +349,7 @@ beforeEach(() => {
   failureCode = undefined;
   steered.length = 0;
   steerConflict = finished = undefined;
+  steerLost = false;
   rememberDisabled = false;
   runReadFailure = false;
   unconsumed = [];
@@ -579,6 +585,27 @@ describe("browser widget", () => {
       await page.close();
     },
   );
+
+  it("retries a message with the same id when the response was lost", async () => {
+    const page = await open();
+    const widget = await start(page);
+    await widget.getByRole("button", { name: "Approve action" }).waitFor();
+    steerLost = true;
+    await widget.getByRole("textbox").fill("Once only");
+    await widget.getByRole("button", { name: "Send", exact: true }).click();
+    await expect
+      .poll(() => widget.locator(".error").textContent(), { timeout: 30_000 })
+      .toContain("Could not send");
+    steerLost = false;
+    await widget.getByRole("button", { name: "Send", exact: true }).click();
+    await expect.poll(() => widget.getByRole("textbox").inputValue()).toBe("");
+    const ids = steered.map((body) => (JSON.parse(body) as { id: string }).id);
+    expect(new Set(ids).size).toBe(1);
+    expect(
+      await widget.locator(".user", { hasText: "Once only" }).count(),
+    ).toBe(1);
+    await page.close();
+  });
 
   it("resends an accepted message the finished run never consumed", async () => {
     const page = await open();

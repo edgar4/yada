@@ -247,6 +247,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
     private approvalId: string | undefined;
     private readonly steered = new Map<string, string>();
     private settling = false;
+    private unconfirmedSteer: { id: string; text: string } | undefined;
     private live: HTMLElement | undefined;
     private liveText = "";
     private labels: WidgetLabels = defaultLabels;
@@ -347,6 +348,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       );
       this.cursor = 0;
       this.steered.clear();
+      this.unconfirmedSteer = undefined;
       this.dispatchEvent(
         new CustomEvent<WidgetRunDetail>("yada-run", {
           detail: {
@@ -390,6 +392,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.input = undefined;
       this.cursor = 0;
       this.steered.clear();
+      this.unconfirmedSteer = undefined;
       this.settling = false;
       this.active = false;
       this.cancel.disabled = false;
@@ -648,7 +651,11 @@ export function defineYadaWidget(name = "yada-chat"): void {
       if (!options || !input || !controller || !this.isCurrent(controller))
         return;
       this.send.disabled = true;
-      const id = crypto.randomUUID();
+      const id =
+        this.unconfirmedSteer?.text === text
+          ? this.unconfirmedSteer.id
+          : crypto.randomUUID();
+      this.unconfirmedSteer = { id, text };
       try {
         await options.client.steer(
           options.conversationId,
@@ -658,6 +665,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
           controller.signal,
         );
         if (!this.isCurrent(controller)) return;
+        this.unconfirmedSteer = undefined;
         this.steered.set(id, text);
         this.appendMessage(text, "user");
         this.prompt.value = "";
