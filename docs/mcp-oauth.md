@@ -59,7 +59,8 @@ Implement `McpOAuthStore` in your server's storage layer:
 
 - `load(key)` returns the session record or `undefined`.
 - `update(key, patch)` atomically merges fields; explicit `undefined` deletes a field.
-- `consumePending(key, state)` atomically compares state, removes the matching pending record, and returns it. A mismatch returns `undefined` without consuming another flow.
+- `consumePending(key, state)` atomically compares state, removes the matching pending record, and returns it. A mismatch returns `undefined` without consuming another flow, and must not create a record.
+- `remove(key)`, optional, deletes the record. `oauth.forget()` uses it.
 
 Keys include tenant, actor, MCP endpoint, and callback URL. Preserve token, client-registration, and discovery objects unchanged, including their issuer stamps. Protect tokens and PKCE verifiers at rest. Do not log records or expose them to the browser. A pending login remains valid for ten minutes; another attempt fails with `OAuth login already pending` until that state is consumed, expired, or disconnected.
 
@@ -76,5 +77,7 @@ Use `storage.oauth` from [durable storage](storage.md), or implement this interf
 `oauth.cancelPending()` clears an abandoned pending login so the user can retry immediately; tokens are kept.
 
 `oauth.disconnect()` deletes local tokens and pending login state, then revokes the refresh and access tokens (RFC 7009) at the `revocation_endpoint` in the server's OAuth metadata, using the configured client authentication. Revocation is best effort: failures are ignored and local tokens are gone either way. A server that advertises no endpoint needs its own revocation flow. Close active MCP connections as well.
+
+`oauth.forget()` does the same, then deletes the whole record, including client registration and discovery. `storage.oauth.eraseActor(identity)` deletes every record of an actor without revoking. `storage.oauth.prune()` deletes records holding no tokens, no client registration, no unexpired login and no live lease, and returns how many it removed; run it periodically if logins are often abandoned. `eraseActor` finds records by a scope written on each save, so it misses records last saved by Yada 0.3.0 or earlier: call `forget()` for those, or let them be rewritten first. A callback whose `state` does not match a pending login is rejected before anything is written, and `consumePending` never writes for an unknown state.
 
 Use HTTPS endpoints and callbacks; HTTP is accepted only for loopback development. OAuth network redirects are refused. Protocol behavior follows the [MCP SDK OAuth provider contract](https://ts.sdk.modelcontextprotocol.io/client).

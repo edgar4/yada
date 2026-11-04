@@ -27,6 +27,7 @@ export interface McpOAuthStore {
   load(key: string): Promise<OAuthSession | undefined>;
   update(key: string, patch: Partial<OAuthSession>): Promise<void>;
   consumePending(key: string, state: string): Promise<OAuthPending | undefined>;
+  remove?(key: string): Promise<void>;
   coordinate?<T>(
     key: string,
     operation: (store: McpOAuthStore, signal: AbortSignal) => Promise<T>,
@@ -65,7 +66,7 @@ export function createMcpOAuth(options: {
   clientSecret?: string;
   clientAuthMethod?: "client_secret_basic" | "client_secret_post";
   clientMetadataUrl?: string;
-}): McpOAuth {
+}): McpOAuth & { forget: (signal?: AbortSignal) => Promise<void> } {
   if (options.clientSecret && !options.clientId)
     throw new Error("OAuth clientSecret requires clientId");
   if (options.clientMetadataUrl) {
@@ -142,6 +143,45 @@ export function createMcpOAuth(options: {
   const load = () => coordinate(async () => (await store().load(key)) ?? {});
   const update = (patch: Partial<OAuthSession>) =>
     coordinate(() => store().update(key, patch));
+  const disconnect = async (signal = AbortSignal.timeout(10_000)) => {
+    const session = await coordinate(async () => {
+      const current = await load();
+      await update({ tokens: undefined, pending: undefined });
+      return current;
+    }, signal);
+    const { revocation_endpoint: endpoint } = z
+      .object({ revocation_endpoint: z.url().optional() })
+      .catch({})
+      .parse(session.discovery?.authorizationServerMetadata ?? {});
+    if (!endpoint || !allowedEndpoint(new URL(endpoint))) return;
+    const clientId = options.clientId ?? session.client?.client_id;
+    const secret =
+      options.clientSecret ??
+      (session.client as { client_secret?: string } | undefined)?.client_secret;
+    const post = options.clientAuthMethod === "client_secret_post";
+    for (const [hint, token] of [
+      ["refresh_token", session.tokens?.refresh_token],
+      ["access_token", session.tokens?.access_token],
+    ])
+      if (token)
+        await fetch(endpoint, {
+          method: "POST",
+          redirect: "error",
+          signal,
+          headers:
+            secret && clientId && !post
+              ? {
+                  authorization: `Basic ${Buffer.from(`${encodeURIComponent(clientId)}:${encodeURIComponent(secret)}`).toString("base64")}`,
+                }
+              : {},
+          body: new URLSearchParams({
+            token,
+            token_type_hint: hint ?? "",
+            ...(clientId && (!secret || post) ? { client_id: clientId } : {}),
+            ...(secret && post ? { client_secret: secret } : {}),
+          }),
+        }).catch(() => undefined);
+  };
   const provider: OAuthClientProvider = {
     redirectUrl: redirect.href,
     clientMetadata: {
@@ -220,13 +260,15 @@ export function createMcpOAuth(options: {
     signal: () => context.getStore()?.signal,
     serverUrl: server.href,
     identity,
-    complete(params, signal = AbortSignal.timeout(10_000)) {
+    async complete(params, signal = AbortSignal.timeout(10_000)) {
+      for (const name of ["state", "code", "error", "iss"])
+        if (params.getAll(name).length > 1)
+          throw new Error("Invalid OAuth callback");
+      const state = params.get("state");
+      if (!state) throw new Error("Missing OAuth state");
+      if ((await options.store.load(key))?.pending?.state !== state)
+        throw new Error("Invalid or expired OAuth state");
       return coordinate(async () => {
-        for (const name of ["state", "code", "error", "iss"])
-          if (params.getAll(name).length > 1)
-            throw new Error("Invalid OAuth callback");
-        const state = params.get("state");
-        if (!state) throw new Error("Missing OAuth state");
         const pending = await store().consumePending(key, state);
         if (!pending || pending.expiresAt <= Date.now() || !pending.verifier)
           throw new Error("Invalid or expired OAuth state");
@@ -275,45 +317,10 @@ export function createMcpOAuth(options: {
         }
       }, signal);
     },
-    async disconnect(signal = AbortSignal.timeout(10_000)) {
-      const session = await coordinate(async () => {
-        const current = await load();
-        await update({ tokens: undefined, pending: undefined });
-        return current;
-      }, signal);
-      const { revocation_endpoint: endpoint } = z
-        .object({ revocation_endpoint: z.url().optional() })
-        .catch({})
-        .parse(session.discovery?.authorizationServerMetadata ?? {});
-      if (!endpoint || !allowedEndpoint(new URL(endpoint))) return;
-      const clientId = options.clientId ?? session.client?.client_id;
-      const secret =
-        options.clientSecret ??
-        (session.client as { client_secret?: string } | undefined)
-          ?.client_secret;
-      const post = options.clientAuthMethod === "client_secret_post";
-      for (const [hint, token] of [
-        ["refresh_token", session.tokens?.refresh_token],
-        ["access_token", session.tokens?.access_token],
-      ])
-        if (token)
-          await fetch(endpoint, {
-            method: "POST",
-            redirect: "error",
-            signal,
-            headers:
-              secret && clientId && !post
-                ? {
-                    authorization: `Basic ${Buffer.from(`${encodeURIComponent(clientId)}:${encodeURIComponent(secret)}`).toString("base64")}`,
-                  }
-                : {},
-            body: new URLSearchParams({
-              token,
-              token_type_hint: hint ?? "",
-              ...(clientId && (!secret || post) ? { client_id: clientId } : {}),
-              ...(secret && post ? { client_secret: secret } : {}),
-            }),
-          }).catch(() => undefined);
+    disconnect,
+    async forget(signal) {
+      await disconnect(signal);
+      await options.store.remove?.(key);
     },
     cancelPending: () => update({ pending: undefined }),
   };
