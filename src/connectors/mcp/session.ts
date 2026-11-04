@@ -268,6 +268,16 @@ export async function connectParsed(
       return names
         ? {
             ...tool,
+            prepare: (args: unknown, identity: Identity, signal: AbortSignal) =>
+              tool.prepare(
+                Object.fromEntries(
+                  Object.entries(args as object).filter(
+                    ([key]) => !names.includes(key),
+                  ),
+                ),
+                identity,
+                signal,
+              ),
             execute: (args: unknown, context: ActionContext) =>
               tool.execute(
                 injectArguments(names, args, context.operationId),

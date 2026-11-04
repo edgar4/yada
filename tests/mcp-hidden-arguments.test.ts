@@ -104,6 +104,19 @@ describe("hidden argument configuration", () => {
   const writeTools = {
     place: { version: "1", prepareTool: "prepare", receiptTool: "receipt" },
   };
+  it("leaves hidden arguments out of a confirmed tool's preview", async () => {
+    const { tool } = await connect({
+      confirmTools: ["place"],
+      hiddenArguments: { place: ["key"] },
+    });
+    const { preview } = await tool.prepare(
+      { item: "a", key: "from-model" },
+      identity,
+      signal(),
+    );
+    expect(preview).toContain('"item":"a"');
+    expect(preview).not.toContain("from-model");
+  });
   it("prepares without sending hidden arguments", async () => {
     const { tool, seen } = await connect({
       writeTools,
