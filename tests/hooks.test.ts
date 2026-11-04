@@ -5,6 +5,7 @@ import {
   createFakeProvider,
   readTool,
   run,
+  ToolCallError,
 } from "../src/index.js";
 import type {
   AgentEvent,
@@ -101,6 +102,33 @@ describe("run hooks", () => {
     });
     expect(s.provider.requests[1]?.messages.at(-1)).toMatchObject({
       content: "[x]-value",
+    });
+  });
+  it("reports typed tool errors on tool_finished", async () => {
+    const s = setup();
+    const events: AgentEvent[] = [];
+    await run({
+      ...s.options,
+      tools: [
+        readTool({
+          name: "lookup",
+          description: "lookup",
+          input: z.object({}).loose(),
+          authorize: () => Promise.resolve(true),
+          execute: () =>
+            Promise.reject(
+              new ToolCallError("denied", "unauthorized", "not_sent"),
+            ),
+        }),
+      ],
+      hooks: { onEvent: (event) => void events.push(event) },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(
+      events.find((event) => event.type === "tool_finished"),
+    ).toMatchObject({
+      failed: true,
+      error: { code: "unauthorized", delivery: "not_sent" },
     });
   });
   it("emits events in order with usage", async () => {

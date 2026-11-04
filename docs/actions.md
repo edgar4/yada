@@ -26,6 +26,8 @@ Persist operation receipts in the system that owns the mutation. If the backend 
 
 `reconcile` is optional. Without it, an execution whose outcome is uncertain (a thrown error, cancellation, or a crash after execution began) marks the action `unknown` and returns `Action outcome unknown; it may or may not have been applied. Do not retry automatically.` as the tool result. The write is never repeated. Confirmed read tools have no `reconcile`.
 
+A tool that knows its request never reached the backend throws `ToolCallError` with `delivery: "not_sent"`. The action then ends as `undelivered` and returns `Action request was not delivered; no change was made.`, skipping `reconcile`. Any other failure stays uncertain as described above.
+
 ## Remembered approvals
 
 A decision may include `remember: "run" | "conversation"`. Later actions with the same tool name, tool version and identical arguments are approved automatically within that run, or within any run of that same conversation. Grants belong to the authenticated tenant and actor and never apply to another conversation or identity. Auto-approved actions still recheck authorization and prepared state before executing. Declined or expired decisions are never remembered. Conversation grants have no expiry; they last until the conversation is erased, so offer `"conversation"` only for low-risk tools. Upgrading deletes grants stored by earlier versions, which could not be tied to a conversation; users approve those actions again.

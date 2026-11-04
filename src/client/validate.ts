@@ -28,6 +28,7 @@ const approvalStatuses = [
   "completed",
   "expired",
   "unknown",
+  "undelivered",
 ];
 
 type Obj = Record<string, unknown>;

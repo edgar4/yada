@@ -292,9 +292,13 @@ export function createHandler(options: {
           const applied =
             action.status === "declined"
               ? !decision.approved
-              : ["approved", "executing", "completed", "unknown"].includes(
-                  action.status,
-                ) && decision.approved;
+              : [
+                  "approved",
+                  "executing",
+                  "completed",
+                  "unknown",
+                  "undelivered",
+                ].includes(action.status) && decision.approved;
           if (applied) return json({ accepted: true }, 202);
           return json({ error: "Run is not awaiting this approval" }, 409);
         }

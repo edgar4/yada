@@ -4,14 +4,12 @@ import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { McpOAuth } from "./oauth.js";
 
 async function safe<T>(operation: () => Promise<T>): Promise<T> {
-  let unauthorized: boolean;
   try {
     return await operation();
   } catch (error) {
-    unauthorized = error instanceof UnauthorizedError;
+    if (error instanceof UnauthorizedError) throw new UnauthorizedError();
+    throw new Error("MCP OAuth request failed", { cause: error });
   }
-  if (unauthorized) throw new UnauthorizedError();
-  throw new Error("MCP OAuth request failed");
 }
 
 export function coordinateOAuthTransport(

@@ -9,7 +9,12 @@ import { Suspended, type ActionExecutor } from "./action.js";
 import type { AgentEvent, ModelCall, RunHooks } from "./hooks.js";
 import { abortable } from "./abort.js";
 import { contentText, hasImages, mapText, messagesSize } from "./content.js";
-import { InvalidArguments } from "./tool.js";
+import {
+  InvalidArguments,
+  ToolCallError,
+  type ToolCallDelivery,
+  type ToolCallErrorCode,
+} from "./tool.js";
 import { transient } from "./transient.js";
 import {
   checkpointSchema,
@@ -92,7 +97,12 @@ type Loop = {
   emit: (event: AgentEvent) => void;
 };
 type ToolOutcome =
-  | { content: Content; failed: boolean; cause?: string }
+  | {
+      content: Content;
+      failed: boolean;
+      cause?: string;
+      error?: { code: ToolCallErrorCode; delivery: ToolCallDelivery };
+    }
   | { stop: RunResult }
   | { terminal: TerminalResult };
 const causeText = (error: unknown) =>
@@ -385,7 +395,7 @@ async function executeGroup(
       loop.signal.throwIfAborted();
       if ("stop" in outcome) return outcome.stop;
       if ("terminal" in outcome) return await loop.finish(outcome.terminal);
-      const { content, failed, cause } = outcome;
+      const { content, failed, cause, error } = outcome;
       state.messages.push({
         role: "tool",
         toolCallId: call.id,
@@ -403,6 +413,7 @@ async function executeGroup(
         content: contentText(content),
         failed,
         ...(cause ? { cause } : {}),
+        ...(error ? { error } : {}),
       });
     }
     return undefined;
@@ -502,6 +513,9 @@ async function executeCall(loop: Loop, call: ToolCall): Promise<ToolOutcome> {
     return {
       failed: true,
       ...(cause ? { cause } : {}),
+      ...(error instanceof ToolCallError
+        ? { error: { code: error.code, delivery: error.delivery } }
+        : {}),
       content:
         error instanceof InvalidArguments
           ? toolError("invalid_arguments", error.message)

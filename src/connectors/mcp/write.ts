@@ -5,7 +5,12 @@ import type { WriteTool } from "../../core/action.js";
 import type { Identity, ToolSpec } from "../../core/contracts.js";
 import type { McpConfig, McpWriteMapping } from "./config.js";
 import { canonical } from "./discovery.js";
-import { structuredResult, type McpInvoke, type McpValidate } from "./rpc.js";
+import {
+  mcpAccessDenied,
+  structuredResult,
+  type McpInvoke,
+  type McpValidate,
+} from "./rpc.js";
 import { abortable } from "../../core/abort.js";
 
 const preparation = z.strictObject({
@@ -62,7 +67,7 @@ export function mcpWriteTool(options: {
     options.authorize(identity, remote.name);
   const access = async (identity: Identity, signal: AbortSignal) => {
     if (!(await abortable(() => authorize(identity), signal)))
-      throw new Error("MCP access denied");
+      throw mcpAccessDenied();
   };
   return {
     effect: "write",

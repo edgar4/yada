@@ -1,3 +1,4 @@
+import type { ToolCallDelivery, ToolCallErrorCode } from "./tool.js";
 import type { Suspension } from "./action.js";
 import type {
   ProviderRequest,
@@ -16,6 +17,7 @@ export type AgentEvent =
       content: string;
       failed: boolean;
       cause?: string;
+      error?: Readonly<{ code: ToolCallErrorCode; delivery: ToolCallDelivery }>;
     }>
   | Readonly<{ type: "steering_unconsumed"; count: number }>
   | Readonly<{

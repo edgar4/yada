@@ -2,6 +2,7 @@ import type { McpConnection } from "./session.js";
 import type { Identity, Tool } from "../../core/contracts.js";
 import { abortable } from "../../core/abort.js";
 import { canonical } from "./discovery.js";
+import { mcpAccessDenied } from "./rpc.js";
 
 function contract(connection: McpConnection<Tool>): string {
   return canonical(
@@ -80,7 +81,7 @@ export async function reconnectingMcp(
     ): Promise<T> {
       await ready(callSignal);
       if (!(await abortable(() => find().authorize(identity), callSignal)))
-        throw new Error("MCP access denied");
+        throw mcpAccessDenied();
       return operation();
     }
     if (original.effect === "write") {
