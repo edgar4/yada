@@ -92,7 +92,7 @@ const actor = await pool.completeConnect(new URL(request.url).searchParams);
 - **Bind the callback to the browser.** Without a binding, anyone holding an authorization URL can finish the flow: an attacker who sends their own URL to a victim gets the victim's account linked to the attacker's actor. Set a random value in a cookie on the sign-in route, pass it as `beginConnect(identity, signal, value)`, and pass the cookie's value as `completeConnect(params, signal, value)`. A mismatch is rejected before the state is used.
 - **Other methods.** `isConnected(identity)` reads the store only. `disconnect(identity)` revokes and clears tokens. `close()` closes everything.
 
-The one-time records expire after ten minutes and are removed on use; `storage.oauth.prune()` removes abandoned ones. `eraseActor` cannot find them, so an erased actor's identifiers can remain encrypted in such a record until it is pruned. A custom store without `remove` keeps used records as empty rows.
+The one-time records expire after ten minutes and are removed on use; `storage.oauth.prune()` removes abandoned ones. `eraseActor` removes them too. A custom store without `remove` keeps used records as empty rows.
 
 ## Store contract
 

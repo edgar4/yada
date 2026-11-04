@@ -119,6 +119,25 @@ describe.each(drivers)("%s eraseActor", (driver) => {
     }
   });
 
+  it("erases the actor's pending connect state and no one else's", async () => {
+    const s = await storageFixture(driver);
+    const pending = (actorId: string) => ({
+      pending: {
+        state: JSON.stringify({
+          tenantId: s.identity.tenantId,
+          actorId,
+        }),
+        expiresAt: Date.now() + 60_000,
+      },
+    });
+    const mine = JSON.stringify(["connect-state", "mine"]);
+    const other = JSON.stringify(["connect-state", "other"]);
+    await s.storage.oauth.update(mine, pending(s.identity.actorId));
+    await s.storage.oauth.update(other, pending(`${s.identity.actorId}2`));
+    await s.storage.retention.eraseActor(s.identity);
+    expect(await s.storage.oauth.load(mine)).toBeUndefined();
+    expect(await s.storage.oauth.load(other)).toBeDefined();
+  });
   it("still erases memory and OAuth when a conversation fails", async () => {
     const s = await storageFixture(driver);
     await s.storage.memory.put(s.identity, { key: "k", text: "mine" });

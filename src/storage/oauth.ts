@@ -29,6 +29,14 @@ export function createOAuthStore(
       throw lost();
     return current;
   };
+  async function* allRows() {
+    for (let after = ""; ;) {
+      const rows = await records.scan("oauth", after);
+      yield* rows;
+      if (rows.length < 100) return;
+      after = rows[rows.length - 1]?.id ?? "";
+    }
+  }
   function sessionStore(token?: string): McpOAuthStore {
     const writable = (value: unknown) => {
       const current = token === undefined ? state(value) : owned(value, token);
@@ -76,30 +84,32 @@ export function createOAuthStore(
   }
   return {
     ...sessionStore(),
-    eraseActor: (identity: Identity) =>
-      records.removeScope(
+    async eraseActor({ tenantId, actorId }: Identity) {
+      await records.removeScope(
         "oauth",
-        key(JSON.stringify([identity.tenantId, identity.actorId])),
-      ),
+        key(JSON.stringify([tenantId, actorId])),
+      );
+      // Connect-state rows are keyed by the state alone, so only their contents name the actor.
+      const prefix = JSON.stringify({ tenantId, actorId }).slice(0, -1);
+      for await (const { id, revision, value } of allRows())
+        if (state(value).pending?.state.startsWith(prefix))
+          await records.removeRow(id, revision);
+    },
     async prune() {
       const now = Date.now();
       let removed = 0;
-      for (let after = ""; ;) {
-        const rows = await records.scan("oauth", after);
-        for (const { id, revision, value } of rows) {
-          const { tokens, client, pending, lease } = state(value);
-          if (
-            !tokens &&
-            !client &&
-            !(pending && pending.expiresAt > now) &&
-            !(lease && lease.expiresAt > now) &&
-            (await records.removeRow(id, revision))
-          )
-            removed++;
-        }
-        if (rows.length < 100) return removed;
-        after = rows[rows.length - 1]?.id ?? "";
+      for await (const { id, revision, value } of allRows()) {
+        const { tokens, client, pending, lease } = state(value);
+        if (
+          !tokens &&
+          !client &&
+          !(pending && pending.expiresAt > now) &&
+          !(lease && lease.expiresAt > now) &&
+          (await records.removeRow(id, revision))
+        )
+          removed++;
       }
+      return removed;
     },
     async coordinate(id, operation, signal = AbortSignal.timeout(10_000)) {
       const token = randomUUID();
