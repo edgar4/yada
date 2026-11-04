@@ -265,6 +265,41 @@ for (const driver of drivers)
         ),
       ).toMatchObject({ status: "awaiting_approval" });
     });
+    it("omits remember from approvals unless configured", async () => {
+      const s = await storageFixture(driver);
+      const handler = createHandler({
+        storage: s.storage,
+        origins: [],
+        authenticate: () => Promise.resolve(s.identity),
+        authorizeProfile: () => Promise.resolve(true),
+      });
+      await s.storage.jobs.submit(s.identity, "chat", {
+        id: "a",
+        input: "Hi",
+        profileId: "v1",
+      });
+      const runId = JSON.stringify(["chat", "a"]);
+      const id = operationId(s.identity, runId, "c1");
+      await s.storage.actions.propose(s.identity, {
+        id,
+        runId,
+        callId: "c1",
+        tool: "write",
+        toolVersion: "1",
+        args: {},
+        preview: "write",
+        version: "1",
+        expiresAt: Date.now() + 60_000,
+        status: "pending",
+      });
+      const response = await handler(
+        new Request(
+          `http://localhost/v1/conversations/chat/runs/a/approvals/${id}`,
+        ),
+      );
+      expect(await response.json()).not.toHaveProperty("remember");
+    });
+
     it("restricts remembered scopes with rememberApprovals", async () => {
       const s = await storageFixture(driver);
       const handler = createHandler({

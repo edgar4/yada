@@ -315,6 +315,39 @@ it.each([
     });
   },
 );
+it("authenticates revocation as the registered client was told to", async () => {
+  const s = setup();
+  await s.seed();
+  const discovery = await s.oauth.provider.discoveryState?.();
+  await s.oauth.provider.saveDiscoveryState?.({
+    authorizationServerUrl: "https://auth.example",
+    ...discovery,
+    authorizationServerMetadata: {
+      ...discovery?.authorizationServerMetadata,
+      revocation_endpoint: "https://auth.example/revoke",
+    } as never,
+  });
+  await s.oauth.provider.saveClientInformation?.({
+    client_id: "id",
+    client_secret: "secret",
+    token_endpoint_auth_method: "client_secret_post",
+  });
+  await s.oauth.provider.saveTokens({
+    access_token: "a",
+    token_type: "Bearer",
+  });
+  const fetchMock = vi.fn<typeof fetch>(() =>
+    Promise.resolve(new Response(null)),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  await s.oauth.disconnect();
+  const init = fetchMock.mock.calls[0]?.[1];
+  expect(init?.headers).toEqual({});
+  expect(Object.fromEntries(init?.body as URLSearchParams)).toMatchObject({
+    client_id: "id",
+    client_secret: "secret",
+  });
+});
 it("does not revoke without a usable endpoint", async () => {
   const s = setup();
   await s.seed();

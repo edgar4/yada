@@ -245,7 +245,8 @@ export function defineYadaWidget(name = "yada-chat"): void {
     private readonly approve = document.createElement("button");
     private readonly decline = document.createElement("button");
     private approvalId: string | undefined;
-    private readonly steered = new Set<string>();
+    private readonly steered = new Map<string, string>();
+    private settling = false;
     private live: HTMLElement | undefined;
     private liveText = "";
     private labels: WidgetLabels = defaultLabels;
@@ -309,7 +310,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.status.textContent = this.labels.ready;
       form.addEventListener("submit", (event) => {
         event.preventDefault();
-        if (!this.options || !this.prompt.value.trim()) return;
+        if (!this.options || this.settling || !this.prompt.value.trim()) return;
         if (this.active) {
           void this.steerRun();
           return;
@@ -389,6 +390,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.input = undefined;
       this.cursor = 0;
       this.steered.clear();
+      this.settling = false;
       this.active = false;
       this.cancel.disabled = false;
       this.log.replaceChildren();
@@ -449,7 +451,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
 
     private update(): void {
       this.send.disabled = this.prompt.disabled =
-        !this.options || (this.active && !this.input);
+        !this.options || this.settling || (this.active && !this.input);
       this.cancel.hidden = !this.active || !this.input;
       this.typing.hidden = !this.active || !this.approval.hidden || !!this.live;
     }
@@ -595,6 +597,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       }
       if (isFinished(event.type)) {
         this.active = false;
+        this.settling = this.steered.size > 0;
         this.update();
         this.prompt.focus();
         if (this.options && this.input)
@@ -649,7 +652,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
           controller.signal,
         );
         if (!this.isCurrent(controller)) return;
-        this.steered.add(id);
+        this.steered.set(id, text);
         this.appendMessage(text, "user");
         this.prompt.value = "";
         this.error.textContent = "";
@@ -696,20 +699,30 @@ export function defineYadaWidget(name = "yada-chat"): void {
     private async resendUnconsumed(controller: AbortController): Promise<void> {
       const { options, input } = this;
       if (!options || !input || !this.steered.size) return;
-      const job = await options.client.getRun(
-        options.conversationId,
-        input.id,
-        controller.signal,
-      );
-      if (!this.isCurrent(controller)) return;
-      const text = job.steering
-        .filter((item) => !item.consumed && this.steered.has(item.id))
-        .map((item) => contentText(item.input))
-        .join("\n\n");
+      const sent = new Map(this.steered);
       this.steered.clear();
-      if (!text) return;
-      if (job.status === "completed") this.submit(text);
-      else if (!this.prompt.value) this.prompt.value = text;
+      this.settling = true;
+      this.update();
+      const job = await options.client
+        .getRun(options.conversationId, input.id, controller.signal)
+        .catch(() => undefined);
+      this.settling = false;
+      this.update();
+      if (!this.isCurrent(controller)) return;
+      const text = (
+        job
+          ? job.steering
+              .filter((item) => !item.consumed && sent.has(item.id))
+              .map((item) => contentText(item.input))
+          : [...sent.values()]
+      ).join("\n\n");
+      if (!job) this.error.textContent = this.labels.steerFailed;
+      if (text && job?.status === "completed") this.submit(text);
+      else if (text)
+        this.prompt.value = [text, this.prompt.value]
+          .filter(Boolean)
+          .join("\n\n");
+      this.prompt.focus();
     }
 
     private async decide(approved: boolean): Promise<void> {

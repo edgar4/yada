@@ -167,7 +167,11 @@ export function createMcpOAuth(options: {
     const secret =
       options.clientSecret ??
       (session.client as { client_secret?: string } | undefined)?.client_secret;
-    const post = options.clientAuthMethod === "client_secret_post";
+    const method = options.clientSecret
+      ? options.clientAuthMethod
+      : (session.client as { token_endpoint_auth_method?: string } | undefined)
+          ?.token_endpoint_auth_method;
+    const post = method === "client_secret_post";
     for (const [hint, token] of [
       ["refresh_token", session.tokens?.refresh_token],
       ["access_token", session.tokens?.access_token],

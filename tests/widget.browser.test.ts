@@ -45,6 +45,7 @@ let failureCode: string | undefined;
 const steered: string[] = [];
 let finished: "completed" | "cancelled" | undefined;
 let rememberDisabled = false;
+let runReadFailure = false;
 let steerConflict: "completed" | "cancelled" | undefined;
 let unconsumed: { id: string; input: string; consumed: boolean }[] = [];
 let cancelRequested = false;
@@ -238,6 +239,11 @@ const server = createServer((request, response) => {
         heldRun = response;
         return;
       }
+      if (runReadFailure) {
+        response.writeHead(400);
+        response.end("{}");
+        return;
+      }
       response.end(
         JSON.stringify({
           id: "run",
@@ -339,6 +345,7 @@ beforeEach(() => {
   steered.length = 0;
   steerConflict = finished = undefined;
   rememberDisabled = false;
+  runReadFailure = false;
   unconsumed = [];
   operationMode = undefined;
   heldOperation = heldRun = undefined;
@@ -592,6 +599,49 @@ describe("browser widget", () => {
     expect(await widget.locator(".user", { hasText: "Too late" }).count()).toBe(
       1,
     );
+    await page.close();
+  });
+
+  it("restores an unconsumed message ahead of a draft after a cancelled run", async () => {
+    const page = await open();
+    const widget = await start(page);
+    await widget.getByRole("button", { name: "Approve action" }).waitFor();
+    await widget.getByRole("textbox").fill("Too late");
+    await widget.getByRole("button", { name: "Send", exact: true }).click();
+    await expect.poll(() => steered.length).toBe(1);
+    await expect
+      .poll(() => widget.locator(".user").last().textContent())
+      .toContain("Too late");
+    const { id } = JSON.parse(steered[0] ?? "{}") as { id: string };
+    unconsumed = [{ id, input: "Too late", consumed: false }];
+    finished = "cancelled";
+    await widget.getByRole("textbox").fill("My draft");
+    finish("cancelled");
+    await expect
+      .poll(() => widget.getByRole("textbox").inputValue())
+      .toBe("Too late\n\nMy draft");
+    expect(inputs).toHaveLength(1);
+    await page.close();
+  });
+
+  it("keeps the text and does not report a lost connection when the final read fails", async () => {
+    const page = await open();
+    const widget = await start(page);
+    await widget.getByRole("button", { name: "Approve action" }).waitFor();
+    await widget.getByRole("textbox").fill("Too late");
+    await widget.getByRole("button", { name: "Send", exact: true }).click();
+    await expect.poll(() => steered.length).toBe(1);
+    await expect
+      .poll(() => widget.locator(".user").last().textContent())
+      .toContain("Too late");
+    runReadFailure = true;
+    finish("completed");
+    await expect
+      .poll(() => widget.getByRole("textbox").inputValue(), { timeout: 15_000 })
+      .toBe("Too late");
+    expect(
+      await widget.getByRole("button", { name: "Reconnect" }).isVisible(),
+    ).toBe(false);
     await page.close();
   });
 

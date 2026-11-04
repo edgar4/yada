@@ -307,6 +307,57 @@ describe("createMcpActorPool", () => {
     await expect(
       s.read("mine").execute({}, alice, signal()),
     ).rejects.toMatchObject({ code: "not_connected" });
+    expect(await s.pool.isConnected(alice)).toBe(false);
+  });
+
+  it("reports not connected on connect failure with a login pending, and starts none", async () => {
+    const s = await setup();
+    await s.connect(alice);
+    s.valid.clear();
+    await expect(
+      s.read("mine").execute({}, alice, signal()),
+    ).rejects.toMatchObject({ code: "not_connected" });
+    const record = [...s.records.values()].find((item) => item.client);
+    expect(record?.pending).toBeUndefined();
+
+    await s.connect(bob);
+    const url = await s.pool.beginConnect(bob, signal());
+    s.valid.clear();
+    expect(url).toBeDefined();
+    await expect(
+      s.read("mine").execute({}, bob, signal()),
+    ).rejects.toMatchObject({ code: "not_connected" });
+  });
+
+  it("serves concurrent actors when the pool is at its limit", async () => {
+    const s = await setup({ maxConnections: 1 });
+    await s.connect(alice);
+    await s.connect(bob);
+    expect(
+      await Promise.all([
+        s.read("mine").execute({}, alice, signal()),
+        s.read("mine").execute({}, bob, signal()),
+      ]),
+    ).toEqual(["mine:token-alice", "mine:token-bob"]);
+  });
+
+  it("requires the browser binding when one was given", async () => {
+    const s = await setup();
+    const url = await s.pool.beginConnect(alice, signal(), "cookie");
+    const params = new URLSearchParams({
+      state: String(url?.searchParams.get("state")),
+      code: "alice",
+      iss: "https://auth.example",
+    });
+    await expect(s.pool.completeConnect(params, signal())).rejects.toThrow(
+      "does not match the browser",
+    );
+    await expect(
+      s.pool.completeConnect(params, signal(), "other"),
+    ).rejects.toThrow("does not match the browser");
+    expect(await s.pool.completeConnect(params, signal(), "cookie")).toEqual(
+      alice,
+    );
   });
 
   it("evicts idle connections and reconnects on next use", async () => {
@@ -344,6 +395,44 @@ describe("createMcpActorPool", () => {
     expect(
       s.fetchMock.mock.calls.some(([url]) => String(url).endsWith("/revoke")),
     ).toBe(true);
+  });
+
+  it("drops service headers and adds actorHeaders on actor connections", async () => {
+    const backend = fakeServer();
+    const memory = memoryStore();
+    const pool = await createMcpActorPool({
+      config: {
+        name: "s",
+        url: server,
+        readTools: ["mine"],
+        headers: { "x-api-key": "service" },
+      },
+      actorHeaders: { "x-client": "app" },
+      redirectUrl: "https://app.example/callback",
+      store: memory.store,
+      authorize: () => Promise.resolve(true),
+    });
+    close.push(() => pool.close());
+    const url = await pool.beginConnect(alice, signal());
+    await pool.completeConnect(
+      new URLSearchParams({
+        state: String(url?.searchParams.get("state")),
+        code: "alice",
+        iss: "https://auth.example",
+      }),
+      signal(),
+    );
+    const mine = pool.tools[0];
+    if (mine?.effect !== "read") throw new Error("read expected");
+    await mine.execute({}, alice, signal());
+    const headers = backend.fetchMock.mock.calls
+      .map(([, init]) => new Headers(init?.headers))
+      .filter((item) => item.get("authorization") === "Bearer token-alice");
+    expect(headers.length).toBeGreaterThan(0);
+    for (const item of headers) {
+      expect(item.get("x-api-key")).toBeNull();
+      expect(item.get("x-client")).toBe("app");
+    }
   });
 
   it("drops service credentials from actor connections", async () => {

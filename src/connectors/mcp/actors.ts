@@ -17,7 +17,13 @@ import type { McpAccess, McpConnection } from "./session.js";
 
 const anonymous = Object.freeze({ tenantId: "", actorId: "anonymous" });
 const stateTtlMs = 600_000;
-const identitySchema = z.object({ tenantId: z.string(), actorId: z.string() });
+const pendingSchema = z.object({
+  tenantId: z.string(),
+  actorId: z.string(),
+  binding: z.string().optional(),
+});
+const digest = (value: string) =>
+  createHash("sha256").update(value).digest("hex");
 const notConnected = () =>
   new ToolCallError(
     "Account not connected; the user must connect it before this tool can run.",
@@ -25,10 +31,7 @@ const notConnected = () =>
     "not_sent",
   );
 const stateKey = (state: string) =>
-  JSON.stringify([
-    "connect-state",
-    createHash("sha256").update(state).digest("hex"),
-  ]);
+  JSON.stringify(["connect-state", digest(state)]);
 type Entry = {
   connection: Promise<McpConnection<Tool>>;
   active: number;
@@ -42,6 +45,7 @@ export async function createMcpActorPool(options: {
   store: McpOAuthStore;
   authorize: McpAccess["authorize"];
   publicTools?: readonly string[];
+  actorHeaders?: Record<string, string>;
   idleMs?: number;
   maxConnections?: number;
   provider?: McpAccess["provider"];
@@ -59,15 +63,11 @@ export async function createMcpActorPool(options: {
     idleMs = 300_000,
     maxConnections = 100,
   } = options;
-  const actorConfig: McpConfig = {
+  const actorConfig = {
     ...config,
     token: undefined,
-    headers: Object.fromEntries(
-      Object.entries(config.headers ?? {}).filter(
-        ([name]) => name.toLowerCase() !== "authorization",
-      ),
-    ),
-  };
+    headers: options.actorHeaders,
+  } as McpConfig;
   const provider = options.provider ? { provider: options.provider } : {};
   const serverUrl = new URL(config.url).href;
   const oauthFor = (
@@ -82,6 +82,18 @@ export async function createMcpActorPool(options: {
       redirect,
       ...options.client,
     });
+  const silentOAuth = (identity: Identity) => {
+    const oauth = oauthFor(identity);
+    const refuse = () => Promise.reject(new UnauthorizedError());
+    return {
+      ...oauth,
+      provider: {
+        ...oauth.provider,
+        state: refuse,
+        redirectToAuthorization: refuse,
+      },
+    };
+  };
   const catalog = await reconnectingMcp(
     (signal) =>
       connectMcp(
@@ -121,11 +133,15 @@ export async function createMcpActorPool(options: {
   async function acquire(identity: Identity): Promise<[string, Entry]> {
     if (closed) throw new Error("MCP connection closed");
     const key = poolKey(identity);
+    const held = (entry: Entry): [string, Entry] => {
+      entry.active++;
+      return [key, entry];
+    };
     const existing = pool.get(key);
-    if (existing) return [key, existing];
+    if (existing) return held(existing);
     if (!(await isConnected(identity))) throw notConnected();
     const raced = pool.get(key);
-    if (raced) return [key, raced];
+    if (raced) return held(raced);
     if (pool.size >= maxConnections) {
       const [oldest] = [...pool]
         .filter(([, entry]) => !entry.active)
@@ -137,7 +153,8 @@ export async function createMcpActorPool(options: {
       active: 0,
       usedAt: Date.now(),
       connection: reconnectingMcp(
-        (signal) => connectMcp(actorConfig, access, signal, oauthFor(identity)),
+        (signal) =>
+          connectMcp(actorConfig, access, signal, silentOAuth(identity)),
         AbortSignal.timeout(catalog.timeoutMs ?? 30_000),
       ),
     };
@@ -145,7 +162,7 @@ export async function createMcpActorPool(options: {
     entry.connection.catch(() => {
       if (pool.get(key) === entry) pool.delete(key);
     });
-    return [key, entry];
+    return held(entry);
   }
   async function withActor<T>(
     identity: Identity,
@@ -153,7 +170,6 @@ export async function createMcpActorPool(options: {
     operation: (connection: McpConnection<Tool>) => Promise<T>,
   ): Promise<T> {
     const [key, entry] = await acquire(identity);
-    entry.active++;
     try {
       return await operation(await abortable(() => entry.connection, signal));
     } catch (error) {
@@ -161,7 +177,12 @@ export async function createMcpActorPool(options: {
         error instanceof UnauthorizedError ||
         (error instanceof ToolCallError && error.code === "unauthorized")
       ) {
-        void evict(key, entry);
+        if (pool.get(key) === entry) {
+          void evict(key, entry);
+          await Promise.resolve(
+            oauthFor(identity).provider.invalidateCredentials?.("tokens"),
+          ).catch(() => undefined);
+        }
         throw notConnected();
       }
       throw error;
@@ -232,6 +253,7 @@ export async function createMcpActorPool(options: {
     async beginConnect(
       identity: Identity,
       signal: AbortSignal = AbortSignal.timeout(10_000),
+      binding?: string,
     ): Promise<URL | undefined> {
       let target: URL | undefined;
       const oauth = oauthFor(identity, (url) => {
@@ -253,7 +275,11 @@ export async function createMcpActorPool(options: {
       if (state)
         await store.update(stateKey(state), {
           pending: {
-            state: JSON.stringify(identity),
+            state: JSON.stringify({
+              tenantId: identity.tenantId,
+              actorId: identity.actorId,
+              ...(binding === undefined ? {} : { binding: digest(binding) }),
+            }),
             expiresAt: Date.now() + stateTtlMs,
           },
         });
@@ -262,15 +288,25 @@ export async function createMcpActorPool(options: {
     async completeConnect(
       params: URLSearchParams,
       signal: AbortSignal = AbortSignal.timeout(10_000),
+      binding?: string,
     ): Promise<Identity> {
       const key = stateKey(params.get("state") ?? "");
       const pending = (await store.load(key))?.pending;
       if (!pending || pending.expiresAt <= Date.now())
         throw new Error("Invalid or expired OAuth state");
+      const started = pendingSchema.parse(JSON.parse(pending.state));
+      if (
+        started.binding !== undefined &&
+        (binding === undefined || digest(binding) !== started.binding)
+      )
+        throw new Error("OAuth callback does not match the browser");
       if (!(await store.consumePending(key, pending.state)))
         throw new Error("Invalid or expired OAuth state");
       await store.remove?.(key);
-      const identity = identitySchema.parse(JSON.parse(pending.state));
+      const identity = {
+        tenantId: started.tenantId,
+        actorId: started.actorId,
+      };
       await oauthFor(identity).complete(params, signal);
       const entry = pool.get(poolKey(identity));
       if (entry) await evict(poolKey(identity), entry);

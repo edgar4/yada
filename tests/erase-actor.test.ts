@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { drivers, storageFixture } from "./helpers/storage.js";
+import { openDatabase } from "../src/storage/database.js";
+import { recordStore, StorageConflict } from "../src/storage/records.js";
+import { createRetention } from "../src/storage/retention.js";
 
 describe.each(drivers)("%s eraseActor", (driver) => {
   it("erases conversations, memory and OAuth, and reports what remains", async () => {
@@ -65,6 +68,84 @@ describe.each(drivers)("%s eraseActor", (driver) => {
     expect(await s.storage.retention.eraseActor(s.identity)).toEqual({
       remaining: [],
     });
+  });
+
+  it("reports a conversation that changes during erasure and still erases the rest", async () => {
+    const s = await storageFixture(driver);
+    const key = JSON.stringify([
+      s.identity.tenantId,
+      s.identity.actorId,
+      "s",
+      "r",
+    ]);
+    await s.storage.oauth.update(key, {
+      tokens: { access_token: "a", token_type: "Bearer" },
+    });
+    await s.storage.memory.put(s.identity, { key: "k", text: "mine" });
+    for (const id of ["racing", "plain"]) {
+      await s.storage.jobs.submit(s.identity, id, {
+        id: "run",
+        input: "Hi",
+        profileId: "p",
+      });
+      await s.storage.jobs.update(
+        s.identity,
+        id,
+        "run",
+        { type: "completed", text: "ok" },
+        { status: "completed", text: "ok" },
+      );
+    }
+    const db = await openDatabase(s.config);
+    try {
+      const records = recordStore(db, s.config.encryptionKey);
+      const retention = createRetention({
+        ...records,
+        write: (...args: Parameters<typeof records.write>) =>
+          args[0].includes("racing")
+            ? Promise.reject(new StorageConflict())
+            : records.write(...args),
+      });
+      expect(await retention.eraseActor(s.identity)).toEqual({
+        remaining: ["racing"],
+      });
+      expect(
+        (await s.storage.conversations.inspect(s.identity, "plain")).erased,
+      ).toBe(true);
+      expect(await s.storage.memory.list(s.identity)).toEqual([]);
+      expect(await s.storage.oauth.load(key)).toBeUndefined();
+    } finally {
+      await db.destroy();
+    }
+  });
+
+  it("still erases memory and OAuth when a conversation fails", async () => {
+    const s = await storageFixture(driver);
+    await s.storage.memory.put(s.identity, { key: "k", text: "mine" });
+    await s.storage.jobs.submit(s.identity, "broken", {
+      id: "run",
+      input: "Hi",
+      profileId: "p",
+    });
+    await s.storage.jobs.update(
+      s.identity,
+      "broken",
+      "run",
+      { type: "completed", text: "ok" },
+      { status: "completed", text: "ok" },
+    );
+    const db = await openDatabase(s.config);
+    try {
+      const records = recordStore(db, s.config.encryptionKey);
+      const retention = createRetention({
+        ...records,
+        write: () => Promise.reject(new Error("offline")),
+      });
+      await expect(retention.eraseActor(s.identity)).rejects.toThrow("offline");
+      expect(await s.storage.memory.list(s.identity)).toEqual([]);
+    } finally {
+      await db.destroy();
+    }
   });
 
   it("pages past 100 conversations", async () => {
