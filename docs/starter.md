@@ -32,7 +32,7 @@ npm run starter:init
 
 This creates `.env` from `.env.example`, the same file the rest of the docs use, and adds a generated `YADA_STORAGE_KEY`. If `.env` already exists, only the key is added. Set your provider configuration:
 
-```dotenv
+```sh
 YADA_LLM_PROVIDER=anthropic
 YADA_LLM_MODEL=claude-opus-5-5
 YADA_LLM_API_KEY=your-provider-api-key

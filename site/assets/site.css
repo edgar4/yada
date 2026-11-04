@@ -321,3 +321,68 @@ h3 {
     transition: none !important;
   }
 }
+
+.highlight .c,
+.highlight .c1,
+.highlight .cm,
+.highlight .cs,
+.highlight .ch,
+.highlight .cp {
+  color: #b5b0cc;
+  font-style: italic;
+}
+.highlight .k,
+.highlight .kd,
+.highlight .kc,
+.highlight .kn,
+.highlight .kr,
+.highlight .kt,
+.highlight .kp,
+.highlight .ow {
+  color: #c4b8ff;
+}
+.highlight .s,
+.highlight .s1,
+.highlight .s2,
+.highlight .sb,
+.highlight .sc,
+.highlight .sd,
+.highlight .se,
+.highlight .sh,
+.highlight .si,
+.highlight .sr,
+.highlight .sx,
+.highlight .dl {
+  color: #ffcf8a;
+}
+.highlight .m,
+.highlight .mi,
+.highlight .mf,
+.highlight .mh,
+.highlight .mo,
+.highlight .il {
+  color: #8fd8ff;
+}
+.highlight .nf,
+.highlight .fm,
+.highlight .nb,
+.highlight .bp {
+  color: #8ee6c0;
+}
+.highlight .nc,
+.highlight .nn,
+.highlight .no,
+.highlight .nl,
+.highlight .nt,
+.highlight .na,
+.highlight .nv,
+.highlight .vi,
+.highlight .py {
+  color: #ffb547;
+}
+.highlight .gd {
+  color: #ffb3b3;
+}
+.highlight .gi {
+  color: #8ee6c0;
+}
