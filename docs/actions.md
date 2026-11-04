@@ -34,6 +34,8 @@ A decision may include `remember: "run" | "conversation"`. Later actions with th
 
 `createHandler({ rememberApprovals })` restricts the scopes the service accepts. It defaults to `["run", "conversation"]`; `["run"]` keeps only run grants and `[]` turns remembering off. A disallowed `remember` is ignored and the decision still applies. When the option is set, `GET` on an approval reports the allowed scopes as `remember`, and the widget hides its checkbox when `"run"` is not among them. The option governs new grants only: grants stored before it was set keep applying until their run or conversation is erased.
 
+`createWorker({ rememberApprovals })` takes the same list and decides which existing grants still apply, so `[]` also stops grants made before you turned remembering off. Set it on both to turn remembering off completely.
+
 Set the approval lifetime with the `ttlMs` argument of `actionExecutor` or the worker profile `approvalTtlMs`. A run waiting for approval is woken when that lifetime ends.
 
 ## MCP elicitation

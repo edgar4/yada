@@ -11,6 +11,7 @@ import {
   undeliveredOutcome,
   unknownOutcome,
   type ActionStore,
+  type RememberScope,
 } from "../storage/actions.js";
 import { CheckpointError } from "../core/checkpoint.js";
 export function actionExecutor(
@@ -19,6 +20,7 @@ export function actionExecutor(
   runId: string,
   ttlMs = 600_000,
   leaseToken?: string,
+  rememberScopes?: readonly RememberScope[],
 ): ActionExecutor {
   const execute: ActionExecutor = async (tool, call, signal) => {
     const id = operationId(identity, runId, call.id);
@@ -43,6 +45,7 @@ export function actionExecutor(
           tool.spec.name,
           tool.version,
           call.args,
+          rememberScopes,
         ))
           ? "approved"
           : "pending",
@@ -182,6 +185,6 @@ export function actionExecutor(
     };
   };
   execute.withLease = (token) =>
-    actionExecutor(store, identity, runId, ttlMs, token);
+    actionExecutor(store, identity, runId, ttlMs, token, rememberScopes);
   return execute;
 }

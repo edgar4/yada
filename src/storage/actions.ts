@@ -144,6 +144,7 @@ export interface ActionStore {
     tool: string,
     toolVersion: string,
     args: unknown,
+    scopes?: readonly RememberScope[],
   ): Promise<boolean>;
 }
 export function createActionStore(
@@ -241,6 +242,8 @@ export function createActionStore(
     async undelivered(identity, id) {
       await records.mutate(key(identity, id), (value) => {
         const state = actionSchema.parse(value);
+        if (state.status === "undelivered")
+          return { value: state, result: undefined };
         if (state.status !== "executing")
           throw new Error("Action not executing");
         state.status = "undelivered";
@@ -269,8 +272,15 @@ export function createActionStore(
         result: undefined,
       }));
     },
-    async remembered(identity, runId, tool, toolVersion, args) {
-      for (const scope of ["run", "conversation"] as const)
+    async remembered(
+      identity,
+      runId,
+      tool,
+      toolVersion,
+      args,
+      scopes = ["run", "conversation"],
+    ) {
+      for (const scope of scopes)
         if (
           await records.read(
             grantKey(identity, scope, runId, tool, toolVersion, args),

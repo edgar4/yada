@@ -8,7 +8,7 @@ import {
   summaryOf,
   type ConversationSummary,
 } from "../storage/conversations.js";
-import { runTree } from "../storage/actions.js";
+import { runTree, type RememberScope } from "../storage/actions.js";
 import { actionExecutor } from "./actions.js";
 import { setTimeout as delay } from "node:timers/promises";
 import type {
@@ -68,6 +68,7 @@ export function createWorker(options: {
   maxAttempts?: number;
   bus?: EventBus;
   quota?: QuotaOptions;
+  rememberApprovals?: readonly RememberScope[];
   webhooks?: WebhookOptions;
   trace?: (event: Trace) => void | Promise<void>;
 }) {
@@ -345,6 +346,8 @@ export function createWorker(options: {
           identity,
           runId,
           profile.approvalTtlMs,
+          undefined,
+          options.rememberApprovals,
         ),
         history,
         input: job.input,

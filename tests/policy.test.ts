@@ -356,6 +356,37 @@ for (const driver of drivers)
       ).toBe(false);
     });
 
+    it("ignores existing grants for scopes the executor disallows", async () => {
+      const s = await storageFixture(driver);
+      const tool = confirmTool(readFixture("lookup"));
+      const runId = JSON.stringify(["chat", "a"]);
+      const call = { id: "first", name: tool.spec.name, args: { q: "x" } };
+      const signal = AbortSignal.timeout(3000);
+      const first = await actionExecutor(s.storage.actions, s.identity, runId)(
+        tool,
+        call,
+        signal,
+      );
+      if (typeof first === "string" || !("approvalId" in first))
+        throw new Error("approval expected");
+      await s.storage.actions.remember(
+        s.identity,
+        await s.storage.actions.decide(s.identity, first.approvalId, true),
+        "run",
+      );
+      const again = (scopes?: readonly ("run" | "conversation")[]) =>
+        actionExecutor(
+          s.storage.actions,
+          s.identity,
+          runId,
+          undefined,
+          undefined,
+          scopes,
+        )(tool, { ...call, id: scopes ? "off" : "on" }, signal);
+      expect(await again([])).toMatchObject({ status: "awaiting_approval" });
+      expect(await again()).not.toMatchObject({ status: "awaiting_approval" });
+    });
+
     it("does not remember declined decisions", async () => {
       const s = await storageFixture(driver);
       const tool = confirmTool(readFixture("lookup"));
