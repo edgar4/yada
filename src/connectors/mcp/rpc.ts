@@ -58,10 +58,18 @@ export const mcpToolChanged = () =>
   new ToolCallError("MCP tool changed", "request_failed", "not_sent");
 export const mcpAccessDenied = () =>
   new ToolCallError("MCP access denied", "access_denied", "not_sent");
+const maxCompiled = 1024;
+const compiled = new Map<string, ReturnType<typeof compileSchema>>();
 function compile(schema: Record<string, unknown>) {
   if (schema["$async"] === true)
     throw new Error("Unsupported asynchronous MCP schema");
-  return compileSchema(schema);
+  const key = JSON.stringify(schema);
+  const cached = compiled.get(key);
+  if (cached) return cached;
+  const validator = compileSchema(schema);
+  if (compiled.size >= maxCompiled) compiled.clear();
+  compiled.set(key, validator);
+  return validator;
 }
 export function mcpInvoker(
   client: Client,
