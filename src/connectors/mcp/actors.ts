@@ -36,6 +36,7 @@ type Entry = {
   connection: Promise<McpConnection<Tool>>;
   active: number;
   usedAt: number;
+  evicted?: boolean;
   timer?: NodeJS.Timeout;
 };
 
@@ -120,6 +121,7 @@ export async function createMcpActorPool(options: {
   const poolKey = (identity: Identity) =>
     JSON.stringify([identity.tenantId, identity.actorId]);
   const evict = async (key: string, entry: Entry) => {
+    entry.evicted = true;
     if (pool.get(key) === entry) pool.delete(key);
     clearTimeout(entry.timer);
     await entry.connection.then(
@@ -191,7 +193,7 @@ export async function createMcpActorPool(options: {
         error instanceof UnauthorizedError ||
         (error instanceof ToolCallError && error.code === "unauthorized")
       ) {
-        if (pool.get(key) === entry) {
+        if (!entry.evicted) {
           void evict(key, entry);
           await Promise.resolve(
             oauthFor(identity).provider.invalidateCredentials?.("tokens"),

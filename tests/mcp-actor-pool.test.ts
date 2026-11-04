@@ -362,6 +362,7 @@ describe("createMcpActorPool", () => {
     await expect(
       s.read("mine").execute({}, alice, signal()),
     ).rejects.toMatchObject({ code: "not_connected" });
+    expect(await s.pool.isConnected(alice)).toBe(false);
     const record = [...s.records.values()].find((item) => item.client);
     expect(record?.pending).toBeUndefined();
 
