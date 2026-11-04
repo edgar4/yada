@@ -4,11 +4,10 @@ import {
   type Tool,
   type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
-import { Ajv2020 } from "ajv/dist/2020.js";
-import { Ajv } from "ajv";
 import { z } from "zod";
 import { abortable } from "../../core/abort.js";
 import { contentText, imagePartSchema, maxImages } from "../../core/content.js";
+import { compileSchema } from "../../core/json-schema.js";
 import type { Content, ContentPart, Identity } from "../../core/contracts.js";
 
 export type McpInvoke = (
@@ -32,11 +31,7 @@ export function requestFailure(error: unknown): Error {
 function compile(schema: Record<string, unknown>) {
   if (schema["$async"] === true)
     throw new Error("Unsupported asynchronous MCP schema");
-  const validator =
-    schema["$schema"] === "https://json-schema.org/draft/2020-12/schema"
-      ? new Ajv2020({ strict: false })
-      : new Ajv({ strict: false });
-  return validator.compile(schema);
+  return compileSchema(schema);
 }
 export function mcpInvoker(
   client: Client,
