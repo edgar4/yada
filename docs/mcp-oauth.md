@@ -75,6 +75,6 @@ Use `storage.oauth` from [durable storage](storage.md), or implement this interf
 
 `oauth.cancelPending()` clears an abandoned pending login so the user can retry immediately; tokens are kept.
 
-`oauth.disconnect()` deletes local tokens and pending login state. Close active MCP connections as well. This does not revoke the upstream authorization grant; use the provider's account controls when revocation is required.
+`oauth.disconnect()` deletes local tokens and pending login state, then revokes the refresh and access tokens (RFC 7009) at the `revocation_endpoint` in the server's OAuth metadata, using the configured client authentication. Revocation is best effort: failures are ignored and local tokens are gone either way. A server that advertises no endpoint needs its own revocation flow. Close active MCP connections as well.
 
 Use HTTPS endpoints and callbacks; HTTP is accepted only for loopback development. OAuth network redirects are refused. Protocol behavior follows the [MCP SDK OAuth provider contract](https://ts.sdk.modelcontextprotocol.io/client).

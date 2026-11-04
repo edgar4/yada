@@ -38,7 +38,7 @@ export type McpOAuth = Readonly<{
   serverUrl: string;
   identity: Identity;
   complete: (params: URLSearchParams, signal?: AbortSignal) => Promise<void>;
-  disconnect: () => Promise<void>;
+  disconnect: (signal?: AbortSignal) => Promise<void>;
   cancelPending: () => Promise<void>;
   coordinate?: <T>(
     operation: () => Promise<T>,
@@ -47,6 +47,13 @@ export type McpOAuth = Readonly<{
   ) => Promise<T>;
   signal?: () => AbortSignal | undefined;
 }>;
+const allowedEndpoint = (url: URL) =>
+  (url.protocol === "https:" ||
+    (url.protocol === "http:" &&
+      ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) &&
+  !url.username &&
+  !url.password &&
+  !url.hash;
 const localQueues = new WeakMap<McpOAuthStore, Map<string, Promise<void>>>();
 export function createMcpOAuth(options: {
   serverUrl: string;
@@ -69,17 +76,7 @@ export function createMcpOAuth(options: {
   const server = new URL(options.serverUrl);
   const redirect = new URL(options.redirectUrl);
   for (const url of [server, redirect])
-    if (
-      (url.protocol !== "https:" &&
-        !(
-          url.protocol === "http:" &&
-          ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
-        )) ||
-      url.username ||
-      url.password ||
-      url.hash ||
-      url.search
-    )
+    if (!allowedEndpoint(url) || url.search)
       throw new Error("Invalid OAuth URL");
   const identity = Object.freeze({ ...options.identity });
   const key = JSON.stringify([
@@ -278,7 +275,46 @@ export function createMcpOAuth(options: {
         }
       }, signal);
     },
-    disconnect: () => update({ tokens: undefined, pending: undefined }),
+    async disconnect(signal = AbortSignal.timeout(10_000)) {
+      const session = await coordinate(async () => {
+        const current = await load();
+        await update({ tokens: undefined, pending: undefined });
+        return current;
+      }, signal);
+      const { revocation_endpoint: endpoint } = z
+        .object({ revocation_endpoint: z.url().optional() })
+        .catch({})
+        .parse(session.discovery?.authorizationServerMetadata ?? {});
+      if (!endpoint || !allowedEndpoint(new URL(endpoint))) return;
+      const clientId = options.clientId ?? session.client?.client_id;
+      const secret =
+        options.clientSecret ??
+        (session.client as { client_secret?: string } | undefined)
+          ?.client_secret;
+      const post = options.clientAuthMethod === "client_secret_post";
+      for (const [hint, token] of [
+        ["refresh_token", session.tokens?.refresh_token],
+        ["access_token", session.tokens?.access_token],
+      ])
+        if (token)
+          await fetch(endpoint, {
+            method: "POST",
+            redirect: "error",
+            signal,
+            headers:
+              secret && clientId && !post
+                ? {
+                    authorization: `Basic ${Buffer.from(`${encodeURIComponent(clientId)}:${encodeURIComponent(secret)}`).toString("base64")}`,
+                  }
+                : {},
+            body: new URLSearchParams({
+              token,
+              token_type_hint: hint ?? "",
+              ...(clientId && (!secret || post) ? { client_id: clientId } : {}),
+              ...(secret && post ? { client_secret: secret } : {}),
+            }),
+          }).catch(() => undefined);
+    },
     cancelPending: () => update({ pending: undefined }),
   };
 }
