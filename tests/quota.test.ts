@@ -263,6 +263,7 @@ describe.each(drivers)("tenant quotas on %s", (driver) => {
     const inspect = vi
       .spyOn(s.storage.conversations, "inspect")
       .mockResolvedValueOnce({
+        exists: false,
         active: false,
         submitted: false,
         erased: false,
