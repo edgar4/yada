@@ -192,7 +192,7 @@ When the server sends `notifications/tools/list_changed`, Yada rediscovers the c
 
 Leave `YADA_MCP_SERVERS` unset to use no MCP servers, or supply a JSON array:
 
-```dotenv
+```sh
 YADA_MCP_SERVERS=[{"name":"catalog","url":"https://your-server.example/mcp","headers":{"x-api-key":"..."},"timeoutMs":60000}]
 ```
 

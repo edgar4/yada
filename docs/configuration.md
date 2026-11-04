@@ -10,7 +10,7 @@ Choose your model provider, its model ID, and the API key from your account with
 
 For the live example, copy `.env.example` to `.env`:
 
-```dotenv
+```sh
 YADA_LLM_PROVIDER=anthropic
 YADA_LLM_MODEL=claude-opus-5-5
 YADA_LLM_API_KEY=your-anthropic-api-key
@@ -56,7 +56,7 @@ Local and OpenAI-compatible providers do not accept images unless the config set
 
 For OpenAI:
 
-```dotenv
+```sh
 YADA_LLM_PROVIDER=openai
 YADA_LLM_MODEL=gpt-6-luna
 YADA_LLM_API_KEY=your-openai-api-key
@@ -64,7 +64,7 @@ YADA_LLM_API_KEY=your-openai-api-key
 
 For Gemini:
 
-```dotenv
+```sh
 YADA_LLM_PROVIDER=gemini
 YADA_LLM_MODEL=gemini-3.8-flash
 YADA_LLM_API_KEY=your-google-ai-studio-api-key
@@ -78,7 +78,7 @@ Model references: [OpenAI GPT-6 Luna](https://developers.openai.com/api/docs/mod
 
 ## DeepSeek
 
-```dotenv
+```sh
 YADA_LLM_PROVIDER=deepseek
 YADA_LLM_MODEL=deepseek-flash
 YADA_LLM_API_KEY=your-deepseek-api-key
@@ -145,7 +145,7 @@ Provider pricing for server tools is not included in Yada's cost limits. Search 
 
 Use `openai-compatible` for OpenRouter, Groq, Together, vLLM, LM Studio or an Azure-compatible gateway that speaks Chat Completions. `model` and `baseUrl` are required; `apiKey` is optional.
 
-```dotenv
+```sh
 YADA_LLM_PROVIDER=openai-compatible
 YADA_LLM_MODEL=vendor/model-id
 YADA_LLM_BASE_URL=https://openrouter.ai/api/v1
@@ -158,14 +158,14 @@ Start your server and load a model that supports tool calling, then configure Ya
 
 For [Ollama](https://github.com/ollama/ollama/blob/main/docs/api/openai-compatibility.mdx), first install a tool-capable model such as `llama3.1:8b`:
 
-```dotenv
+```sh
 YADA_LLM_PROVIDER=ollama
 YADA_LLM_MODEL=llama3.1:8b
 ```
 
 For [llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md), start `llama-server` with your model, a tool-compatible chat template, `--jinja`, and an alias matching the model setting:
 
-```dotenv
+```sh
 YADA_LLM_PROVIDER=llamacpp
 YADA_LLM_MODEL=local-model
 ```

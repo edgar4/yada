@@ -24,7 +24,7 @@ Database drivers are optional peer dependencies. Install the one you use: `bette
 
 SQLite requires only the key and `better-sqlite3`:
 
-```dotenv
+```sh
 YADA_STORAGE_KEY=your-64-character-hex-key
 ```
 
@@ -32,7 +32,7 @@ It writes `yada.sqlite` in the current directory. Optionally set `YADA_STORAGE_F
 
 For PostgreSQL:
 
-```dotenv
+```sh
 YADA_STORAGE_DRIVER=postgres
 YADA_STORAGE_URL=postgres://user:password@localhost:5432/yada
 YADA_STORAGE_KEY=your-64-character-hex-key
@@ -40,7 +40,7 @@ YADA_STORAGE_KEY=your-64-character-hex-key
 
 For MySQL:
 
-```dotenv
+```sh
 YADA_STORAGE_DRIVER=mysql
 YADA_STORAGE_URL=mysql://user:password@localhost:3306/yada
 YADA_STORAGE_KEY=your-64-character-hex-key
