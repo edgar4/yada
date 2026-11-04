@@ -46,6 +46,7 @@ function fakeServer() {
   const calls: { tool: string; bearer: string | null }[] = [];
   const sessions: string[] = [];
   const valid = new Set<string>();
+  const tokenEndpoint: { refreshToken?: string; refreshError?: Response } = {};
   const json = (id: unknown, result: unknown) =>
     Response.json({ jsonrpc: "2.0", id, result });
   const metadata = {
@@ -78,11 +79,22 @@ function fakeServer() {
       );
     if (url.pathname === "/revoke") return Promise.resolve(new Response(null));
     if (url.pathname === "/token") {
-      const code = new URLSearchParams(init?.body as string).get("code") ?? "x";
-      const token = `token-${code}`;
+      const body = new URLSearchParams(init?.body as string);
+      if (
+        body.get("grant_type") === "refresh_token" &&
+        tokenEndpoint.refreshError
+      )
+        return Promise.resolve(tokenEndpoint.refreshError.clone());
+      const token = `token-${body.get("code") ?? "refreshed"}`;
       valid.add(token);
       return Promise.resolve(
-        Response.json({ access_token: token, token_type: "Bearer" }),
+        Response.json({
+          access_token: token,
+          token_type: "Bearer",
+          ...(tokenEndpoint.refreshToken
+            ? { refresh_token: tokenEndpoint.refreshToken }
+            : {}),
+        }),
       );
     }
     if (init?.method === "GET" || init?.method === "DELETE")
@@ -128,7 +140,7 @@ function fakeServer() {
     );
   });
   vi.stubGlobal("fetch", fetchMock);
-  return { calls, sessions, valid, fetchMock };
+  return { calls, sessions, valid, tokenEndpoint, fetchMock };
 }
 
 async function setup(
@@ -304,6 +316,39 @@ describe("createMcpActorPool", () => {
     await s.connect(alice);
     await s.read("mine").execute({}, alice, signal());
     s.valid.clear();
+    await expect(
+      s.read("mine").execute({}, alice, signal()),
+    ).rejects.toMatchObject({ code: "not_connected" });
+    expect(await s.pool.isConnected(alice)).toBe(false);
+  });
+
+  it("keeps the tokens when a refresh fails because the authorization server is down", async () => {
+    const s = await setup();
+    s.tokenEndpoint.refreshToken = "refresh";
+    await s.connect(alice);
+    await s.read("mine").execute({}, alice, signal());
+    s.valid.clear();
+    s.tokenEndpoint.refreshError = new Response("down", { status: 503 });
+    await expect(
+      s.read("mine").execute({}, alice, signal()),
+    ).rejects.toMatchObject({ code: "oauth_failed", delivery: "not_sent" });
+    expect(await s.pool.isConnected(alice)).toBe(true);
+    delete s.tokenEndpoint.refreshError;
+    await expect(s.read("mine").execute({}, alice, signal())).resolves.toBe(
+      "mine:token-refreshed",
+    );
+  });
+
+  it("reports not connected when the refresh token is rejected", async () => {
+    const s = await setup();
+    s.tokenEndpoint.refreshToken = "refresh";
+    await s.connect(alice);
+    await s.read("mine").execute({}, alice, signal());
+    s.valid.clear();
+    s.tokenEndpoint.refreshError = Response.json(
+      { error: "invalid_grant" },
+      { status: 400 },
+    );
     await expect(
       s.read("mine").execute({}, alice, signal()),
     ).rejects.toMatchObject({ code: "not_connected" });

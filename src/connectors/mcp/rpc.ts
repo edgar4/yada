@@ -30,6 +30,7 @@ export function requestFailure(error: unknown): ToolCallError {
     error instanceof Error && error.message === "MCP OAuth request failed";
   const message = oauth ? "MCP OAuth request failed" : "MCP request failed";
   const root = oauth ? error.cause : error;
+  if (root instanceof ToolCallError) return root;
   const status = root instanceof StreamableHTTPError ? root.code : undefined;
   const socket = root instanceof Error ? root.cause : undefined;
   if (root instanceof UnauthorizedError || status === 401)

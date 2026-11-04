@@ -84,7 +84,15 @@ export async function createMcpActorPool(options: {
     });
   const silentOAuth = (identity: Identity) => {
     const oauth = oauthFor(identity);
-    const refuse = () => Promise.reject(new UnauthorizedError());
+    const refuse = async () => {
+      if ((await oauth.provider.tokens())?.refresh_token)
+        throw new ToolCallError(
+          "MCP authorization is temporarily unavailable",
+          "oauth_failed",
+          "not_sent",
+        );
+      throw new UnauthorizedError();
+    };
     return {
       ...oauth,
       provider: {
