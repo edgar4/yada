@@ -95,6 +95,8 @@ describe.each(drivers)("%s undelivered actions", (driver) => {
     const first = await execute(tool, call, signal);
     const again = await execute(tool, call, signal);
     expect(again).toBe(first);
+    if (failure instanceof ToolCallError && failure.delivery === "not_sent")
+      await s.storage.actions.undelivered(s.identity, id);
     return {
       first,
       status: (await s.storage.actions.load(s.identity, id))?.status,
