@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import type { Identity } from "../core/contracts.js";
 import type { QuotaStore, QuotaWindow } from "../storage/quota.js";
 export type QuotaOptions = Readonly<{
@@ -54,6 +55,16 @@ export async function admitRun(
     await store.settle(globalKey, global.windowMs, holdId(identity, runKey), 0);
   return denied;
 }
+async function retried(operation: () => Promise<void>) {
+  for (let attempt = 1; ; attempt++)
+    try {
+      await operation();
+      return;
+    } catch (error) {
+      if (attempt >= 3) throw error;
+      await delay(200 * attempt);
+    }
+}
 export async function settleRun(
   store: QuotaStore,
   identity: Identity,
@@ -62,13 +73,16 @@ export async function settleRun(
   micros: number,
 ) {
   const id = holdId(identity, runKey);
-  if (quota.globalCostMicros)
-    await store.settle(globalKey, quota.globalCostMicros.windowMs, id, micros);
-  if (quota.costMicros)
-    await store.settle(
-      quotaScopeKey(identity, quota),
-      quota.costMicros.windowMs,
-      id,
-      micros,
-    );
+  const settle = (scopeKey: string, { windowMs }: QuotaWindow) =>
+    retried(() => store.settle(scopeKey, windowMs, id, micros));
+  const results = await Promise.allSettled([
+    ...(quota.globalCostMicros
+      ? [settle(globalKey, quota.globalCostMicros)]
+      : []),
+    ...(quota.costMicros
+      ? [settle(quotaScopeKey(identity, quota), quota.costMicros)]
+      : []),
+  ]);
+  for (const result of results)
+    if (result.status === "rejected") throw result.reason;
 }

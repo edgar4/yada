@@ -3,7 +3,7 @@ import { drivers, storageFixture } from "./helpers/storage.js";
 import { createHandler } from "../src/service/http.js";
 import { createWorker } from "../src/service/worker.js";
 import { createFakeProvider } from "../src/providers/fake.js";
-import type { QuotaOptions } from "../src/service/quota.js";
+import { settleRun, type QuotaOptions } from "../src/service/quota.js";
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(1_000_000);
@@ -284,6 +284,28 @@ describe.each(drivers)("tenant quotas on %s", (driver) => {
     expect((await s.submit("a", "chat")).status).toBe(202);
     expect((await s.submit("a", "chat", "other")).status).toBe(202);
     expect((await s.submit("b", "other")).status).toBe(429);
+  });
+  it("retries a failed settle and settles each record independently", async () => {
+    const quota: QuotaOptions = {
+      scope: "actor",
+      globalCostMicros: { limit: 400, windowMs: 60_000 },
+      costMicros: { limit: 400, windowMs: 60_000 },
+      reserveCostMicros: 400,
+    };
+    const s = await setup(driver, quota);
+    expect((await s.submit("a", "chat")).status).toBe(202);
+    const real = s.storage.quota.settle.bind(s.storage.quota);
+    let failures = 0;
+    const settle = vi
+      .spyOn(s.storage.quota, "settle")
+      .mockImplementation((...args) =>
+        failures++ === 0 ? Promise.reject(new Error("busy")) : real(...args),
+      );
+    const runKey = JSON.stringify(["chat", "a"]);
+    await settleRun(s.storage.quota, s.identity, quota, runKey, 0);
+    settle.mockRestore();
+    expect(failures).toBe(3);
+    expect((await s.submit("b", "b")).status).toBe(202);
   });
   it("is idempotent for a resubmitted run", async () => {
     const s = await setup(driver, {
