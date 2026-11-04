@@ -177,6 +177,25 @@ The adapter's `WriteTool.version` combines the reviewed version with a fingerpri
 
 Read-only literals retain `McpConnection<ReadTool>` through overloads. Configurations that might include `writeTools` return `McpConnection<Tool>`; narrow `tool.effect` before calling phase-specific methods. `McpReadConfig` expresses a configuration that cannot contain writes.
 
+## Hidden arguments
+
+`hiddenArguments` removes named arguments from the model's schema of a write or confirmed tool, and fills them when the tool executes:
+
+```ts
+await connectMcp(
+  {
+    name: "orders",
+    url,
+    confirmTools: ["place_order"],
+    hiddenArguments: { place_order: ["request_id"] },
+  },
+  access,
+  signal,
+);
+```
+
+Each value is a UUID-shaped string derived from the durable operation ID and the argument name, so every retry of one operation sends the same value and different operations send different ones. A value the model supplies for that name is replaced. The arguments must be declared in the tool's input schema and accept such a string. Preparation validates with a placeholder value and does not send the arguments to the helper.
+
 ## Confirmed tools
 
 `confirmTools` exposes the mutating tools of any MCP server, with no server changes, through `confirmTool`: each call needs one approval in the [durable worker flow](actions.md) and runs at most once. There is no receipt helper, so an uncertain outcome (timeout, transport failure) becomes "outcome unknown" and is never retried.

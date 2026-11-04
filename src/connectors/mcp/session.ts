@@ -1,3 +1,4 @@
+import type { ActionContext } from "../../core/action.js";
 import { createRequire } from "node:module";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
@@ -23,7 +24,7 @@ import { clientRequests } from "./client-requests.js";
 import { canonical, discoverMcpTools } from "./discovery.js";
 import { promptApi, resourceTools, type McpPrompt } from "./resources.js";
 import { mcpInvoker, readResult } from "./rpc.js";
-import { mcpWriteTool } from "./write.js";
+import { injectArguments, mcpWriteTool } from "./write.js";
 export type McpAccess = Readonly<{
   identity: Identity;
   authorize: (identity: Identity, tool: string) => Promise<boolean>;
@@ -229,6 +230,46 @@ export async function connectParsed(
         return base.read(...args);
       },
     };
+    const hidden = settings.hiddenArguments ?? {};
+    const hiddenFor = (name: string) =>
+      Object.hasOwn(hidden, name) ? hidden[name] : undefined;
+    for (const [name, args] of Object.entries(hidden)) {
+      if (!confirms.some((tool) => tool.name === name) && !writes.has(name))
+        throw new Error(`MCP hidden arguments need a write tool: ${name}`);
+      const { properties } = required(name).inputSchema;
+      if (args.some((arg) => !properties || !Object.hasOwn(properties, arg)))
+        throw new Error(`Unknown MCP hidden argument on ${name}`);
+    }
+    const visibleSchema = ({ name, inputSchema }: RemoteTool) => {
+      const names = hiddenFor(name);
+      if (!names) return inputSchema;
+      const { properties, required: needed, ...rest } = inputSchema;
+      return {
+        ...rest,
+        properties: Object.fromEntries(
+          Object.entries(properties ?? {}).filter(
+            ([key]) => !names.includes(key),
+          ),
+        ),
+        ...(needed
+          ? { required: needed.filter((key) => !names.includes(key)) }
+          : {}),
+      };
+    };
+    const confirm = (remote: RemoteTool): Tool => {
+      const tool = confirmTool(read(remote));
+      const names = hiddenFor(remote.name);
+      return names
+        ? {
+            ...tool,
+            execute: (args: unknown, context: ActionContext) =>
+              tool.execute(
+                injectArguments(names, args, context.operationId),
+                context,
+              ),
+          }
+        : tool;
+    };
     const exposed = new Map<string, string>();
     const spec = (remote: RemoteTool) => {
       let name = exposed.get(remote.name);
@@ -246,7 +287,7 @@ export async function connectParsed(
       return {
         name,
         description: remote.description ?? "",
-        parameters: remote.inputSchema,
+        parameters: visibleSchema(remote),
       };
     };
     const read = (remote: RemoteTool): ReadTool => ({
@@ -261,12 +302,10 @@ export async function connectParsed(
         );
       },
     });
-    const tools: Tool[] = [
-      ...reads.map(read),
-      ...confirms.map((remote) => confirmTool(read(remote))),
-    ];
+    const tools: Tool[] = [...reads.map(read), ...confirms.map(confirm)];
     const writeTools = [...writes].map(([name, mapping]) => {
       const remote = required(name);
+      const hiddenNames = hiddenFor(name);
       return mcpWriteTool({
         config: settings,
         mapping,
@@ -274,6 +313,7 @@ export async function connectParsed(
         prepare: required(mapping.prepareTool),
         receipt: required(mapping.receiptTool),
         spec: spec(remote),
+        ...(hiddenNames ? { hidden: hiddenNames } : {}),
         owner,
         authorize,
         invoke: rpc.call,

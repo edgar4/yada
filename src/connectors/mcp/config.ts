@@ -13,6 +13,7 @@ const common = {
   timeoutMs: z.number().int().min(1000).max(600_000).default(30_000),
   readTools: toolNames.optional(),
   confirmTools: z.union([z.literal("*"), toolNames]).optional(),
+  hiddenArguments: z.record(z.string().min(1), toolNames).optional(),
   resources: z.boolean().optional(),
   sampling: z.boolean().optional(),
   elicitation: z.boolean().optional(),
