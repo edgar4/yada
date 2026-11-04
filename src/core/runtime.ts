@@ -517,9 +517,11 @@ async function executeCall(loop: Loop, call: ToolCall): Promise<ToolOutcome> {
         ? { error: { code: error.code, delivery: error.delivery } }
         : {}),
       content:
-        error instanceof InvalidArguments
-          ? toolError("invalid_arguments", error.message)
-          : toolError("tool_failed", "The tool failed"),
+        error instanceof ToolCallError && error.code === "not_connected"
+          ? toolError("account_not_connected", error.message)
+          : error instanceof InvalidArguments
+            ? toolError("invalid_arguments", error.message)
+            : toolError("tool_failed", "The tool failed"),
     };
   }
 }

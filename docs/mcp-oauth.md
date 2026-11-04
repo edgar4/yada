@@ -53,6 +53,46 @@ Pass the complete query, including `state`, `code`, and `iss` when returned. Yad
 
 The SDK refreshes stored credentials when the server rejects an expired token. If refresh cannot recover the session, another browser authorization may be required. Close old connections before reconnecting.
 
+## Per-actor connections
+
+`createMcpActorPool` serves one tool catalog to many signed-in actors, each through their own OAuth connection. Pass its `tools` to a worker profile.
+
+```ts
+const pool = await createMcpActorPool({
+  config: {
+    name: "crm",
+    url,
+    readTools: ["search", "get_account"],
+    confirmTools: ["update_account"],
+  },
+  redirectUrl: "https://your-app.example/oauth/mcp/callback",
+  store: storage.oauth,
+  authorize: async (identity, tool) => canUse(identity, tool),
+  publicTools: ["search"],
+  idleMs: 300_000,
+  maxConnections: 100,
+});
+
+const profile = { /* ... */ tools: pool.tools };
+
+// A signed-in route: send the browser to the returned URL.
+const url = await pool.beginConnect(identity);
+
+// The public callback route needs no session: the actor comes from the state.
+const actor = await pool.completeConnect(new URL(request.url).searchParams);
+```
+
+`client` takes the same `clientId`, `clientSecret`, `clientAuthMethod` and `clientMetadataUrl` as `createMcpOAuth`.
+
+- **Catalog.** The pool discovers tools once, on a shared connection made with `config` as given, so the server must list tools anonymously or `config` must carry a service credential in `token` or `headers`. Otherwise creating the pool rejects with `UnauthorizedError`. Actor connections drop that credential and use OAuth.
+- **Public tools.** Remote names in `publicTools` run on the shared connection, for any actor `authorize` allows, connected or not. The server sees no actor credentials on those calls and `_meta` names the actor `anonymous`.
+- **Other tools.** They run on the actor's connection, opened on first use and reconnected as with `reconnectingMcp`. A connection idle for `idleMs` closes, and past `maxConnections` the least recently used idle one closes. A connection in use is never evicted, so connections can exceed `maxConnections` under load.
+- **No connection.** A call from an actor with no tokens, or whose tokens the server rejects, throws `ToolCallError` with `code: "not_connected"`. The model receives `{"error":"account_not_connected","message":...}`. A write stops at preparation, before any approval; if the connection is lost after approval the action ends as `undelivered`.
+- **Connect flow.** `beginConnect(identity)` starts a new login, replacing any pending one, and returns the authorization URL, or `undefined` when stored credentials refresh without one. `completeConnect(params)` looks up the actor from a one-time record keyed by a hash of `state`, finishes the exchange and returns the identity. An unknown `state` is rejected without writing.
+- **Other methods.** `isConnected(identity)` reads the store only. `disconnect(identity)` revokes and clears tokens. `close()` closes everything.
+
+The one-time records expire after ten minutes and are removed on use; `storage.oauth.prune()` removes abandoned ones. `eraseActor` cannot find them, so an erased actor's identifiers can remain encrypted in such a record until it is pruned. A custom store without `remove` keeps used records as empty rows.
+
 ## Store contract
 
 Implement `McpOAuthStore` in your server's storage layer:

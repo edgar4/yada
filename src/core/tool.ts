@@ -4,6 +4,7 @@ export class InvalidArguments extends Error {}
 export type ToolCallErrorCode =
   | "access_denied"
   | "unauthorized"
+  | "not_connected"
   | "oauth_failed"
   | "session_expired"
   | "request_failed"

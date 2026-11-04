@@ -55,6 +55,17 @@ const allowedEndpoint = (url: URL) =>
   !url.username &&
   !url.password &&
   !url.hash;
+export const oauthRecordKey = (
+  identity: Identity,
+  server: string,
+  redirect: string,
+) =>
+  JSON.stringify([
+    identity.tenantId,
+    identity.actorId,
+    new URL(server).href,
+    new URL(redirect).href,
+  ]);
 const localQueues = new WeakMap<McpOAuthStore, Map<string, Promise<void>>>();
 export function createMcpOAuth(options: {
   serverUrl: string;
@@ -66,7 +77,10 @@ export function createMcpOAuth(options: {
   clientSecret?: string;
   clientAuthMethod?: "client_secret_basic" | "client_secret_post";
   clientMetadataUrl?: string;
-}): McpOAuth & { forget: (signal?: AbortSignal) => Promise<void> } {
+}): McpOAuth & {
+  coordinate: NonNullable<McpOAuth["coordinate"]>;
+  forget: (signal?: AbortSignal) => Promise<void>;
+} {
   if (options.clientSecret && !options.clientId)
     throw new Error("OAuth clientSecret requires clientId");
   if (options.clientMetadataUrl) {
@@ -80,12 +94,7 @@ export function createMcpOAuth(options: {
     if (!allowedEndpoint(url) || url.search)
       throw new Error("Invalid OAuth URL");
   const identity = Object.freeze({ ...options.identity });
-  const key = JSON.stringify([
-    identity.tenantId,
-    identity.actorId,
-    server.href,
-    redirect.href,
-  ]);
+  const key = oauthRecordKey(identity, server.href, redirect.href);
   const context = new AsyncLocalStorage<{
     store: McpOAuthStore;
     signal: AbortSignal;

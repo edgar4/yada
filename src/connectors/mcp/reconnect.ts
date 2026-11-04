@@ -165,6 +165,8 @@ export async function reconnectingMcp(
   return {
     tools,
     ...(current.skipped ? { skipped: current.skipped } : {}),
+    ...(current.toolNames ? { toolNames: current.toolNames } : {}),
+    ...(current.timeoutMs ? { timeoutMs: current.timeoutMs } : {}),
     isConnected: () => !closed && (current.isConnected?.() ?? true),
     prompts: async (identity, callSignal) => {
       return withSession(callSignal ?? deadline(), () =>

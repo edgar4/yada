@@ -15,4 +15,6 @@ export type {
   OAuthSession,
   OAuthPending,
 } from "../connectors/mcp/oauth.js";
+export { createMcpActorPool } from "../connectors/mcp/actors.js";
+export type { McpActorPool } from "../connectors/mcp/actors.js";
 export { mcpServersFromEnv } from "../connectors/mcp/config.js";

@@ -33,6 +33,7 @@ export type McpAccess = Readonly<{
 export type McpConnection<T extends Tool = ReadTool> = Readonly<{
   tools: readonly T[];
   skipped?: readonly Readonly<{ tool: string; reason: string }>[];
+  toolNames?: ReadonlyMap<string, string>;
   close: () => Promise<void>;
   isConnected?: () => boolean;
   timeoutMs?: number;
@@ -348,6 +349,7 @@ export async function connectParsed(
     return {
       tools,
       skipped,
+      toolNames: new Map([...exposed].map(([remote, name]) => [name, remote])),
       close,
       isConnected: () => connected && !closed && !stale,
       timeoutMs: settings.timeoutMs,
