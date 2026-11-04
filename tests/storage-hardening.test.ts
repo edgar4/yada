@@ -1,4 +1,5 @@
 import { createCipheriv, randomBytes } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import { describe, expect, it } from "vitest";
 import { drivers, storageFixture } from "./helpers/storage.js";
 import { storageCipher } from "../src/storage/crypto.js";
@@ -269,3 +270,30 @@ for (const driver of drivers)
       }
     });
   });
+
+it.each(drivers)(
+  "applies concurrent first writes exactly once on %s",
+  async (driver) => {
+    const s = await storageFixture(driver);
+    const db = await openDatabase(s.config);
+    try {
+      const records = recordStore(db, s.config.encryptionKey);
+      for (let round = 0; round < 40; round++) {
+        const key = JSON.stringify(["counter", String(round)]);
+        await Promise.all(
+          Array.from({ length: 8 }, async (_, index) => {
+            await delay(index);
+            await records.mutate(key, (value) => ({
+              value: ((value as number | undefined) ?? 0) + 1,
+              result: undefined,
+            }));
+          }),
+        );
+        expect((await records.read(key))?.value).toBe(8);
+      }
+    } finally {
+      await db.destroy();
+    }
+  },
+  60_000,
+);

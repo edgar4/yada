@@ -86,21 +86,23 @@ export function recordStore(
     const kind = z.array(z.string()).parse(JSON.parse(key))[0];
     const scope = scopeFor(key);
     if (revision === 0) {
-      await db("yada_records")
-        .insert({
-          id,
-          value: encrypted,
-          revision: 1,
-          kind,
-          scope,
-          updated_at: Date.now(),
-          active: active ?? false,
-        })
-        .onConflict("id")
-        .ignore();
-      const raw: unknown = await db("yada_records").where({ id }).first();
-      if (rowSchema.safeParse(raw).data?.value !== encrypted)
-        throw new StorageConflict();
+      await db.transaction(async (tx) => {
+        await tx("yada_records")
+          .insert({
+            id,
+            value: encrypted,
+            revision: 1,
+            kind,
+            scope,
+            updated_at: Date.now(),
+            active: active ?? false,
+          })
+          .onConflict("id")
+          .ignore();
+        const raw: unknown = await tx("yada_records").where({ id }).first();
+        if (rowSchema.safeParse(raw).data?.value !== encrypted)
+          throw new StorageConflict();
+      });
     } else {
       const updated = await db("yada_records")
         .where({ id, revision })
