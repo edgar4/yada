@@ -124,6 +124,12 @@ npm run test:package
 
 Automated tests require no provider credentials.
 
+## Upgrading from 0.3
+
+- MCP schemas now enforce standard JSON Schema formats such as `uuid` and `date-time` on inputs, outputs and elicitation answers. A server output that fails its format after a write ran is treated as a possibly applied action and goes to reconciliation.
+- Actions have a new `undelivered` status for writes that were never sent. Handle it wherever you switch on action status.
+- Runs that exhaust their retries now add their cost to quotas.
+
 ## Upgrading from 0.2
 
 - `better-sqlite3`, `pg`, `mysql2`, `@google/genai` (Gemini) and `@langchain/core` (`chatModelAdapter` from `@edgaralochi/yada/langchain`) are optional peer dependencies; install the ones you use.
