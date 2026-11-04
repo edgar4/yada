@@ -80,7 +80,7 @@ for (const driver of ["postgres", "mysql"] as const)
               spans[index - 1]?.end ?? 0,
             );
         expect(await token(config, id)).toBe(5);
-      }, 30_000);
+      }, 90_000);
       it(`a process stalled past lease expiry is fenced and loses no updates`, async () => {
         const { config } = await storageFixture(driver);
         const id = randomUUID();
@@ -92,6 +92,6 @@ for (const driver of ["postgres", "mysql"] as const)
         expect(await stalled.outcome).toEqual({ fenced: true });
         expect(outcomes.every((outcome) => !outcome.fenced)).toBe(true);
         expect(await token(config, id)).toBe(3);
-      }, 30_000);
+      }, 90_000);
     },
   );

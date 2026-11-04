@@ -41,7 +41,7 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps --only-shell chromium
       - run: mkdir -p work/site && cp -R site/. work/site/ && cp docs/*.md work/site/
       - uses: actions/jekyll-build-pages@v1
         with:
