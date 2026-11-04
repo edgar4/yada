@@ -43,6 +43,9 @@ let decision: boolean | undefined;
 let decisionBody = "";
 let failureCode: string | undefined;
 const steered: string[] = [];
+let finished: "completed" | "cancelled" | undefined;
+let steerConflict: "completed" | "cancelled" | undefined;
+let unconsumed: { id: string; input: string; consumed: boolean }[] = [];
 let cancelRequested = false;
 let reconnectOnce = false;
 let deltaMode = false;
@@ -175,6 +178,12 @@ const server = createServer((request, response) => {
       });
       request.on("end", () => {
         steered.push(body);
+        if (steerConflict) {
+          finished = steerConflict;
+          response.writeHead(409);
+          response.end("{}");
+          return;
+        }
         response.writeHead(202);
         response.end("{}");
       });
@@ -234,10 +243,17 @@ const server = createServer((request, response) => {
           input: "Hello",
           createdAt: 1,
           updatedAt: 1,
-          status: "awaiting_approval",
+          status: finished ?? "awaiting_approval",
           cancelRequested: false,
           history: [],
-          events: [queued, waiting],
+          steering: unconsumed,
+          events: finished
+            ? [
+                queued,
+                waiting,
+                { version: 1, sequence: 3, type: finished, at: 1 },
+              ]
+            : [queued, waiting],
         }),
       );
     }
@@ -319,6 +335,8 @@ beforeEach(() => {
   decisionBody = "";
   failureCode = undefined;
   steered.length = 0;
+  steerConflict = finished = undefined;
+  unconsumed = [];
   operationMode = undefined;
   heldOperation = heldRun = undefined;
   holdRun = false;
@@ -519,6 +537,58 @@ describe("browser widget", () => {
       approved: true,
       remember: "run",
     });
+    await page.close();
+  });
+
+  it.each([
+    ["completed", 2, ""],
+    ["cancelled", 1, "One more thing"],
+  ] as const)(
+    "handles a steering conflict on a %s run without losing the message",
+    async (status, runs, prompt) => {
+      const page = await open();
+      const widget = await start(page);
+      await widget.getByRole("button", { name: "Approve action" }).waitFor();
+      steerConflict = status;
+      await widget.getByRole("textbox").fill("One more thing");
+      await widget.getByRole("button", { name: "Send", exact: true }).click();
+      await expect.poll(() => inputs.length).toBe(runs);
+      await expect
+        .poll(() => widget.getByRole("textbox").inputValue())
+        .toBe(prompt);
+      expect(await widget.locator(".error").textContent()).not.toContain(
+        "Could not send",
+      );
+      if (runs === 2)
+        expect(JSON.parse(inputs[1] ?? "{}")).toMatchObject({
+          input: "One more thing",
+        });
+      expect(
+        await widget.locator(".user", { hasText: "One more thing" }).count(),
+      ).toBe(runs - 1);
+      await page.close();
+    },
+  );
+
+  it("resends an accepted message the finished run never consumed", async () => {
+    const page = await open();
+    const widget = await start(page);
+    await widget.getByRole("button", { name: "Approve action" }).waitFor();
+    await widget.getByRole("textbox").fill("Too late");
+    await widget.getByRole("button", { name: "Send", exact: true }).click();
+    await expect.poll(() => steered.length).toBe(1);
+    await expect
+      .poll(() => widget.locator(".user").last().textContent())
+      .toContain("Too late");
+    const { id } = JSON.parse(steered[0] ?? "{}") as { id: string };
+    unconsumed = [{ id, input: "Too late", consumed: false }];
+    finished = "completed";
+    finish("completed");
+    await expect.poll(() => inputs.length).toBe(2);
+    expect(JSON.parse(inputs[1] ?? "{}")).toMatchObject({ input: "Too late" });
+    expect(await widget.locator(".user", { hasText: "Too late" }).count()).toBe(
+      1,
+    );
     await page.close();
   });
 

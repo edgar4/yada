@@ -1,5 +1,6 @@
 import {
   BrowserClient,
+  ClientError,
   type Job,
   type JobInput,
   type RunEvent,
@@ -213,6 +214,9 @@ function markdown(text: string): DocumentFragment {
   return fragment;
 }
 
+const isFinished = (status: string) =>
+  ["completed", "failed", "cancelled"].includes(status);
+
 export function defineYadaWidget(name = "yada-chat"): void {
   if (typeof customElements === "undefined") return;
   if (customElements.get(name)) return;
@@ -239,6 +243,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
     private readonly approve = document.createElement("button");
     private readonly decline = document.createElement("button");
     private approvalId: string | undefined;
+    private readonly steered = new Set<string>();
     private live: HTMLElement | undefined;
     private liveText = "";
     private labels: WidgetLabels = defaultLabels;
@@ -307,24 +312,9 @@ export function defineYadaWidget(name = "yada-chat"): void {
           void this.steerRun();
           return;
         }
-        this.input = this.options.client.createInput(
-          this.options.profileId,
-          this.prompt.value,
-        );
-        this.cursor = 0;
         this.appendMessage(this.prompt.value, "user");
+        this.submit(this.prompt.value);
         this.prompt.value = "";
-        this.dispatchEvent(
-          new CustomEvent<WidgetRunDetail>("yada-run", {
-            detail: {
-              conversationId: this.options.conversationId,
-              runId: this.input.id,
-            },
-            bubbles: true,
-            composed: true,
-          }),
-        );
-        void this.start(true);
       });
       this.prompt.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
@@ -344,6 +334,27 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.decline.addEventListener("click", () => {
         void this.decide(false);
       });
+    }
+
+    private submit(text: string): void {
+      if (!this.options) return;
+      this.input = this.options.client.createInput(
+        this.options.profileId,
+        text,
+      );
+      this.cursor = 0;
+      this.steered.clear();
+      this.dispatchEvent(
+        new CustomEvent<WidgetRunDetail>("yada-run", {
+          detail: {
+            conversationId: this.options.conversationId,
+            runId: this.input.id,
+          },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      void this.start(true);
     }
 
     private applyLabels(
@@ -375,6 +386,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.applyLabels();
       this.input = undefined;
       this.cursor = 0;
+      this.steered.clear();
       this.active = false;
       this.cancel.disabled = false;
       this.log.replaceChildren();
@@ -503,6 +515,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
           this.cursor = event.sequence;
           await this.showEvent(event, controller.signal);
         }
+        if (this.isCurrent(controller)) await this.resendUnconsumed(controller);
       } catch {
         if (!this.isCurrent(controller)) return;
         this.error.textContent = this.labels.connectionFailed;
@@ -575,7 +588,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
         this.update();
         this.approve.focus();
       }
-      if (["completed", "failed", "cancelled"].includes(event.type)) {
+      if (isFinished(event.type)) {
         this.active = false;
         this.update();
         this.prompt.focus();
@@ -609,24 +622,77 @@ export function defineYadaWidget(name = "yada-chat"): void {
       if (!options || !input || !controller || !this.isCurrent(controller))
         return;
       this.send.disabled = true;
+      const id = crypto.randomUUID();
       try {
         await options.client.steer(
           options.conversationId,
           input.id,
           text,
-          undefined,
+          id,
           controller.signal,
         );
         if (!this.isCurrent(controller)) return;
+        this.steered.add(id);
         this.appendMessage(text, "user");
         this.prompt.value = "";
         this.error.textContent = "";
-      } catch {
-        if (this.isCurrent(controller))
+        if (!this.active) await this.resendUnconsumed(controller);
+      } catch (error) {
+        if (!this.isCurrent(controller)) return;
+        if (
+          !(error instanceof ClientError && error.status === 409) ||
+          !(await this.startFollowUp(text, controller))
+        )
           this.error.textContent = this.labels.steerFailed;
       } finally {
-        if (this.isCurrent(controller)) this.update();
+        this.update();
       }
+    }
+
+    private async startFollowUp(
+      text: string,
+      stale: AbortController,
+    ): Promise<boolean> {
+      const { options, input } = this;
+      if (!options || !input) return false;
+      const job = await options.client
+        .getRun(options.conversationId, input.id, stale.signal)
+        .catch(() => undefined);
+      if (!job || !this.isCurrent(stale) || !isFinished(job.status))
+        return false;
+      stale.abort();
+      const controller = new AbortController();
+      this.controller = controller;
+      for (const event of job.events)
+        if (event.sequence > this.cursor) {
+          this.cursor = event.sequence;
+          await this.showEvent(event, controller.signal);
+        }
+      if (job.status === "completed") {
+        this.appendMessage(text, "user");
+        this.prompt.value = "";
+        this.submit(text);
+      }
+      return true;
+    }
+
+    private async resendUnconsumed(controller: AbortController): Promise<void> {
+      const { options, input } = this;
+      if (!options || !input || !this.steered.size) return;
+      const job = await options.client.getRun(
+        options.conversationId,
+        input.id,
+        controller.signal,
+      );
+      if (!this.isCurrent(controller)) return;
+      const text = job.steering
+        .filter((item) => !item.consumed && this.steered.has(item.id))
+        .map((item) => contentText(item.input))
+        .join("\n\n");
+      this.steered.clear();
+      if (!text) return;
+      if (job.status === "completed") this.submit(text);
+      else if (!this.prompt.value) this.prompt.value = text;
     }
 
     private async decide(approved: boolean): Promise<void> {
