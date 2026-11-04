@@ -3,6 +3,7 @@ import type { Identity, Tool } from "../../core/contracts.js";
 import { abortable } from "../../core/abort.js";
 import { canonical } from "./discovery.js";
 import { mcpAccessDenied } from "./rpc.js";
+import { ToolCallError } from "../../core/tool.js";
 
 function contract(connection: McpConnection<Tool>): string {
   return canonical(
@@ -34,21 +35,40 @@ export async function reconnectingMcp(
   const isClosed = () => closed;
   let pending: Promise<void> | undefined;
   let failure: { error: unknown; until: number } | undefined;
+  let expired = false;
+  const inFlight = new Map<McpConnection<Tool>, number>();
+  async function tracked<T>(operation: () => Promise<T>): Promise<T> {
+    const used = current;
+    inFlight.set(used, (inFlight.get(used) ?? 0) + 1);
+    try {
+      return await operation();
+    } finally {
+      const left = (inFlight.get(used) ?? 1) - 1;
+      if (left) inFlight.set(used, left);
+      else {
+        inFlight.delete(used);
+        if (used !== current) await used.close().catch(() => undefined);
+      }
+    }
+  }
   async function ready(callSignal: AbortSignal) {
     callSignal.throwIfAborted();
     if (closed) throw new Error("MCP connection closed");
-    if (current.isConnected?.() === false) {
+    if (expired || current.isConnected?.() === false) {
       if (failure && Date.now() < failure.until) throw failure.error;
       pending ??= (async () => {
         try {
-          await current.close();
+          const previous = current;
           const next = await connect(deadline());
           if (isClosed() || contract(next) !== expected) {
             await next.close();
             throw new Error("MCP discovery changed");
           }
           current = next;
+          expired = false;
           failure = undefined;
+          if (!inFlight.has(previous))
+            await previous.close().catch(() => undefined);
         } catch (error) {
           failure = { error, until: Date.now() + 30_000 };
           throw error;
@@ -59,6 +79,22 @@ export async function reconnectingMcp(
       const connecting = pending;
       await abortable(() => connecting, callSignal);
     }
+  }
+  async function withSession<T>(
+    callSignal: AbortSignal,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    await ready(callSignal);
+    const used = current;
+    try {
+      return await tracked(operation);
+    } catch (error) {
+      if (!(error instanceof ToolCallError) || error.code !== "session_expired")
+        throw error;
+      if (current === used) expired = true;
+    }
+    await ready(callSignal);
+    return tracked(operation);
   }
   const tools: Tool[] = current.tools.map((original) => {
     const find = () => {
@@ -79,10 +115,11 @@ export async function reconnectingMcp(
       callSignal: AbortSignal,
       operation: () => Promise<T>,
     ): Promise<T> {
-      await ready(callSignal);
-      if (!(await abortable(() => find().authorize(identity), callSignal)))
-        throw mcpAccessDenied();
-      return operation();
+      return withSession(callSignal, async () => {
+        if (!(await abortable(() => find().authorize(identity), callSignal)))
+          throw mcpAccessDenied();
+        return operation();
+      });
     }
     if (original.effect === "write") {
       const write = () => {
@@ -130,12 +167,14 @@ export async function reconnectingMcp(
     ...(current.skipped ? { skipped: current.skipped } : {}),
     isConnected: () => !closed && (current.isConnected?.() ?? true),
     prompts: async (identity, callSignal) => {
-      await ready(callSignal ?? deadline());
-      return current.prompts(identity, callSignal);
+      return withSession(callSignal ?? deadline(), () =>
+        current.prompts(identity, callSignal),
+      );
     },
     getPrompt: async (identity, name, args, callSignal) => {
-      await ready(callSignal ?? deadline());
-      return current.getPrompt(identity, name, args, callSignal);
+      return withSession(callSignal ?? deadline(), () =>
+        current.getPrompt(identity, name, args, callSignal),
+      );
     },
     async close() {
       closed = true;

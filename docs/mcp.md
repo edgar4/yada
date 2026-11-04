@@ -221,6 +221,8 @@ With `resources: true`, the model gets `<server>__list_resources` (optional `cur
 
 When the server sends `notifications/tools/list_changed`, Yada rediscovers the catalog and compares the tools it exposes (names, descriptions, schemas, annotations). If unchanged, the connection continues. Otherwise it is stale: `isConnected()` returns `false` and new calls fail with `MCP tool contract changed; reconnect required` until the host reconnects. `reconnectingMcp` does this automatically and accepts the new connection only if its contract matches the original. After a failed reconnect it rethrows the same error without reconnecting for 30 seconds.
 
+A server may also expire an HTTP session on its own, which `isConnected()` cannot see. When a call gets a 404 for its session, `reconnectingMcp` re-initializes and retries that call once, writes included: a 404 means the server rejected the session before running anything. It never retries a call that may have been sent. A bare `connectMcp` connection throws `ToolCallError` with `code: "session_expired"` instead.
+
 ## Optional environment configuration
 
 Leave `YADA_MCP_SERVERS` unset to use no MCP servers, or supply a JSON array:
