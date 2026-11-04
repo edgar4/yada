@@ -41,14 +41,14 @@ jobs:
           POSTGRES_PASSWORD: yada-test
           POSTGRES_DB: yada_test
         ports: ["5432:5432"]
-        options: --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 30
+        options: --tmpfs /var/lib/postgresql/data --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 30
       mysql:
         image: mysql:8.4
         env:
           MYSQL_ROOT_PASSWORD: yada-test
           MYSQL_DATABASE: yada_test
         ports: ["3306:3306"]
-        options: --health-cmd "mysqladmin ping -pyada-test" --health-interval 2s --health-timeout 5s --health-retries 30
+        options: --tmpfs /var/lib/mysql --health-cmd "mysqladmin ping -pyada-test" --health-interval 2s --health-timeout 5s --health-retries 30
     env:
       YADA_TEST_POSTGRES_URL: postgres://postgres:yada-test@127.0.0.1:5432/yada_test
       YADA_TEST_MYSQL_URL: mysql://root:yada-test@127.0.0.1:3306/yada_test

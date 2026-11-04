@@ -124,6 +124,15 @@ npm run test:package
 
 Automated tests require no provider credentials.
 
+Storage tests also run against Postgres and MySQL when these URLs are set. Keep the databases in memory, since tests create and migrate a database each and that is many times slower on disk:
+
+```bash
+docker run -d --rm --name yada-test-pg --tmpfs /var/lib/postgresql/data -e POSTGRES_PASSWORD=yada-test -e POSTGRES_DB=yada_test -p 55432:5432 postgres:17
+docker run -d --rm --name yada-test-my --tmpfs /var/lib/mysql -e MYSQL_ROOT_PASSWORD=yada-test -e MYSQL_DATABASE=yada_test -p 53306:3306 mysql:8.4
+export YADA_TEST_POSTGRES_URL=postgres://postgres:yada-test@127.0.0.1:55432/yada_test
+export YADA_TEST_MYSQL_URL=mysql://root:yada-test@127.0.0.1:53306/yada_test
+```
+
 ## Upgrading from 0.3
 
 - MCP schemas now enforce standard JSON Schema formats such as `uuid` and `date-time` on inputs, outputs and elicitation answers. A server output that fails its format after a write ran is treated as a possibly applied action and goes to reconciliation.
