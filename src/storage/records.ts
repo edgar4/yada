@@ -44,7 +44,7 @@ const oauthOwner = (id: string) => {
 };
 export function scopeFor(key: string) {
   const [kind, ...parts] = z.array(z.string()).parse(JSON.parse(key));
-  const length = { conversation: 2, retired: 3 }[kind ?? ""];
+  const length = { conversation: 2, retired: 3, quarantine: 1 }[kind ?? ""];
   const owner =
     kind === "oauth"
       ? oauthOwner(parts[0] ?? "")
@@ -141,10 +141,10 @@ export function recordStore(
     }
     throw new StorageConflict();
   }
-  async function scan(
+  async function scanRows(
     kind: string,
-    after = "",
-    limit = 100,
+    after: string,
+    limit: number,
     active?: boolean,
     scopeKey?: string,
   ) {
@@ -157,14 +157,53 @@ export function recordStore(
       .andWhere("id", ">", after)
       .orderBy("id")
       .limit(z.number().int().min(1).max(1000).parse(limit));
-    return z
-      .array(rowSchema.extend({ id: z.string() }))
-      .parse(rows)
-      .map((row) => ({
+    return z.array(rowSchema.extend({ id: z.string() })).parse(rows);
+  }
+  async function scan(
+    kind: string,
+    after = "",
+    limit = 100,
+    active?: boolean,
+    scopeKey?: string,
+  ) {
+    return (await scanRows(kind, after, limit, active, scopeKey)).map(
+      (row) => ({
         id: row.id,
         revision: row.revision,
         value: cipher.open(row.id, row.value),
-      }));
+      }),
+    );
+  }
+  async function scanReadable(
+    kind: string,
+    after = "",
+    limit = 100,
+    active?: boolean,
+  ) {
+    return (await scanRows(kind, after, limit, active)).map((row) => {
+      try {
+        return {
+          id: row.id,
+          revision: row.revision,
+          value: cipher.open(row.id, row.value),
+          unreadable: false,
+        };
+      } catch {
+        return {
+          id: row.id,
+          revision: row.revision,
+          value: undefined,
+          unreadable: true,
+        };
+      }
+    });
+  }
+  async function deactivate(id: string, revision: number) {
+    return (
+      (await db("yada_records")
+        .where({ id, revision, active: true })
+        .update({ active: false })) === 1
+    );
   }
   async function recent(
     kind: string,
@@ -194,6 +233,7 @@ export function recordStore(
       .parse(rows)
       .map((row) => ({
         id: row.id,
+        revision: row.revision,
         at: row.updated_at,
         value: cipher.open(row.id, row.value),
       }));
@@ -237,7 +277,10 @@ export function recordStore(
     read,
     write,
     mutate,
+    rowId: idFor,
     scan,
+    scanReadable,
+    deactivate,
     recent,
     remove,
     removeRow,

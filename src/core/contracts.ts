@@ -100,6 +100,7 @@ export const failureCodes = [
   "refused",
   "timeout",
   "retry_exhausted",
+  "corrupt_record",
 ] as const;
 export type RunResult = TerminalResult | Suspension;
 export type TerminalResult =

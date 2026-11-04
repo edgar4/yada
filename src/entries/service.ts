@@ -1,5 +1,6 @@
 export { createWorker } from "../service/worker.js";
 export type { AgentProfile, Trace } from "../service/worker.js";
+export type { ProfileSetting, RunContext } from "../service/settings.js";
 export { createHandler, type RememberScope } from "../service/http.js";
 export type { HandlerLimits } from "../service/http.js";
 export type { QuotaOptions } from "../service/quota.js";

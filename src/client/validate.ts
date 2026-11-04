@@ -138,7 +138,13 @@ export function parseEvent(value: unknown): RunEvent {
   optional(record, "failed", (item) => {
     check(typeof item === "boolean", "run event");
   });
-  for (const key of ["inputTokens", "outputTokens"])
+  for (const key of [
+    "inputTokens",
+    "outputTokens",
+    "cacheReadTokens",
+    "cacheWriteTokens",
+    "serverToolCalls",
+  ])
     optional(record, key, (item) => {
       check(Number.isInteger(item) && (item as number) >= 0, "run event");
     });

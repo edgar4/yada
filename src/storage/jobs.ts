@@ -5,7 +5,10 @@ import {
   isTerminal,
   jobInputSchema,
   jobSchema,
+  eventSchema,
   maxSteering,
+  quotaSnapshotSchema,
+  type QuotaSnapshot,
   type JobInput,
   type SteeringInput,
   type Job,
@@ -26,6 +29,7 @@ import { withRunLease, RunLeaseError, type RunOwnership } from "./runs.js";
 const storedJobSchema = jobSchema.omit({ history: true }).extend({
   history: jobSchema.shape.history.optional(),
   historyLength: z.number().int().nonnegative().optional(),
+  quota: quotaSnapshotSchema.optional(),
 });
 type StoredJob = z.infer<typeof storedJobSchema>;
 const keptTerminalJobs = 20;
@@ -39,6 +43,71 @@ export const conversationStateSchema = z.object({
   jobs: z.array(storedJobSchema),
 });
 type ConversationState = z.infer<typeof conversationStateSchema>;
+const quarantineSchema = z.object({
+  rowId: z.string(),
+  revision: z.number(),
+  at: z.number(),
+  issues: z.array(z.object({ path: z.string(), message: z.string() })),
+  value: z.unknown(),
+});
+export type QuarantinedRecord = z.infer<typeof quarantineSchema>;
+export type QuarantineReport = Readonly<{
+  conversationId?: string;
+  identity?: Identity;
+  failed: readonly Readonly<{
+    runId: string;
+    profileId: string;
+    quota?: QuotaSnapshot | undefined;
+  }>[];
+}>;
+export const quarantineScope = (rowId: string) =>
+  JSON.stringify(["quarantine", rowId]);
+const asArray = (value: unknown): unknown[] =>
+  Array.isArray(value) ? (value as unknown[]) : [];
+const isZodError = (error: unknown) => error instanceof z.ZodError;
+function salvageJob(raw: unknown, now: number): StoredJob | undefined {
+  const parsed = storedJobSchema.safeParse(raw).data;
+  if (parsed) return parsed;
+  const record = z.record(z.string(), z.unknown()).safeParse(raw).data;
+  const base = jobInputSchema.safeParse({
+    id: record?.["id"],
+    profileId: record?.["profileId"],
+    input: record?.["input"],
+  }).data;
+  if (!record || !base) return undefined;
+  const field = <T>(schema: z.ZodType<T>, key: string) =>
+    schema.safeParse(record[key]).data;
+  const history = field(jobSchema.shape.history, "history");
+  const historyLength = field(z.number().int().nonnegative(), "historyLength");
+  const outcome = field(jobSchema.shape.outcome, "outcome");
+  const quota = field(quotaSnapshotSchema, "quota");
+  return {
+    ...base,
+    createdAt: field(z.number(), "createdAt") ?? now,
+    updatedAt: now,
+    availableAt: 0,
+    attempts: field(z.number().int().nonnegative(), "attempts") ?? 0,
+    status: field(jobSchema.shape.status, "status") ?? "running",
+    cancelRequested: false,
+    steering: asArray(record["steering"]).flatMap((item) => {
+      const steering = jobSchema.shape.steering
+        .unwrap()
+        .element.safeParse(item);
+      return steering.success ? [steering.data] : [];
+    }),
+    events: asArray(record["events"]).map((item, index): RunEvent => {
+      const event = eventSchema.safeParse(item).data;
+      return {
+        ...(event ?? { version: 1, type: "progress", at: now }),
+        sequence: index + 1,
+      };
+    }),
+    ...(history ? { history } : {}),
+    ...(historyLength === undefined ? {} : { historyLength }),
+    ...(outcome ? { outcome } : {}),
+    ...(quota ? { quota } : {}),
+  };
+}
 export class JobConflict extends Error {
   constructor() {
     super(
@@ -51,6 +120,7 @@ export interface JobStore {
     identity: Identity,
     conversationId: string,
     input: JobInput,
+    settings?: Readonly<{ quota?: QuotaSnapshot | undefined }>,
   ): Promise<Job>;
   load(
     identity: Identity,
@@ -95,11 +165,26 @@ export interface JobStore {
   cancel(identity: Identity, conversationId: string, id: string): Promise<void>;
   pending(
     after?: string,
-    onCorrupt?: (error: z.ZodError) => void,
+    onCorrupt?: (error: Error, report: QuarantineReport) => void,
   ): Promise<{
     cursor: string;
-    jobs: { identity: Identity; conversationId: string; job: Job }[];
+    jobs: {
+      identity: Identity;
+      conversationId: string;
+      job: Job;
+      quota?: QuotaSnapshot | undefined;
+    }[];
   }>;
+  quarantined(
+    after?: string,
+    limit?: number,
+  ): Promise<{ records: QuarantinedRecord[]; cursor: string }>;
+  discardQuarantined(rowId: string): Promise<void>;
+  repair(
+    identity: Identity,
+    conversationId: string,
+    error: Error,
+  ): Promise<void>;
   prune(
     identity: Identity,
     conversationId: string,
@@ -131,6 +216,7 @@ export function createJobStore(
   };
   const view = (state: ConversationState, job: StoredJob): Job => {
     const { historyLength = 0, ...rest } = job;
+    delete rest.quota;
     return {
       ...rest,
       history: job.history ?? state.messages.slice(0, historyLength),
@@ -185,12 +271,140 @@ export function createJobStore(
       )
     )
       return;
-    job.events.push({
-      ...event,
-      version: 1,
-      sequence: job.events.length + 1,
-      at: job.updatedAt,
+    job.events.push(
+      eventSchema.parse({
+        ...event,
+        version: 1,
+        sequence: job.events.length + 1,
+        at: job.updatedAt,
+      }),
+    );
+  };
+  const unreported: { error: Error; report: QuarantineReport }[] = [];
+  const unreadable = new Set<string>();
+  const keepCopy = async (
+    tx: ReturnType<typeof recordStore>,
+    rowId: string,
+    revision: number,
+    value: unknown,
+    error: Error,
+  ) => {
+    const key = JSON.stringify(["quarantine", rowId, String(revision)]);
+    if (await tx.read(key)) return;
+    await tx.write(
+      key,
+      {
+        rowId,
+        revision,
+        at: Date.now(),
+        issues:
+          error instanceof z.ZodError
+            ? error.issues.slice(0, 20).map((issue) => ({
+                path: issue.path.join("."),
+                message: issue.message,
+              }))
+            : [{ path: "", message: error.message }],
+        value,
+      },
+      0,
+    );
+  };
+  const salvage = (raw: unknown, identity: Identity, id: string) => {
+    const now = Date.now();
+    const record = Array.isArray(raw)
+      ? { messages: raw as unknown }
+      : (z.record(z.string(), z.unknown()).safeParse(raw).data ?? {});
+    const strings = (value: unknown) =>
+      asArray(value).filter((item) => typeof item === "string");
+    const rawJobs = asArray(record["jobs"]);
+    const jobs = rawJobs.map((job) => salvageJob(job, now));
+    const lost = rawJobs.flatMap((job, index) => {
+      const lostId = z.object({ id: z.string() }).safeParse(job).data?.id;
+      return !jobs[index] && lostId ? [lostId] : [];
     });
+    const state: ConversationState = {
+      identity,
+      id,
+      messages: asArray(record["messages"]).flatMap((item) => {
+        const message = messageSchema.safeParse(item);
+        return message.success ? [message.data] : [];
+      }),
+      deleted: record["deleted"] === true,
+      retiredRuns: [...strings(record["retiredRuns"]), ...lost],
+      purgeRuns: strings(record["purgeRuns"]),
+      jobs: jobs.filter((job) => job !== undefined),
+    };
+    const failed: StoredJob[] = [];
+    for (const job of state.jobs) {
+      if (isTerminal(job.status)) continue;
+      job.cancelRequested = true;
+      append(job, { type: "failed", code: "corrupt_record" });
+      job.outcome = { status: "failed", code: "corrupt_record" };
+      state.messages.push(
+        { role: "user", content: job.input },
+        { role: "failure", code: "corrupt_record" },
+      );
+      failed.push(job);
+    }
+    return { state, failed };
+  };
+  const repair = (identity: Identity, id: string, error: Error) => {
+    const key = conversationKey(identity, id);
+    return records.transact(async (tx) => {
+      const record = await tx.read(key);
+      if (!record) return undefined;
+      try {
+        stateFrom(record.value, identity, id);
+        return undefined;
+      } catch (invalid) {
+        if (!isZodError(invalid)) throw invalid;
+      }
+      await keepCopy(tx, tx.rowId(key), record.revision, record.value, error);
+      const { state, failed } = salvage(record.value, identity, id);
+      await tx.write(
+        key,
+        state,
+        record.revision,
+        state.jobs.some((job) => !isTerminal(job.status)),
+      );
+      return {
+        identity,
+        conversationId: id,
+        failed: failed.map((job) => ({
+          runId: job.id,
+          profileId: job.profileId,
+          quota: job.quota,
+        })),
+      } satisfies QuarantineReport;
+    });
+  };
+  const repairAndReport = async (
+    identity: Identity,
+    id: string,
+    error: Error,
+  ) => {
+    const report = await repair(identity, id, error);
+    if (report) unreported.push({ error, report });
+  };
+  const quarantine = async (
+    row: Readonly<{ id: string; revision: number; value: unknown }>,
+    error: Error,
+  ) => {
+    const owner = z
+      .object({ identity: identitySchema, id: z.string().min(1) })
+      .safeParse(row.value).data;
+    if (
+      owner &&
+      records.rowId(conversationKey(owner.identity, owner.id)) === row.id
+    ) {
+      await repairAndReport(owner.identity, owner.id, error);
+      return;
+    }
+    const isolated = await records.transact(async (tx) => {
+      await keepCopy(tx, row.id, row.revision, row.value, error);
+      return tx.deactivate(row.id, row.revision);
+    });
+    if (isolated) unreported.push({ error, report: { failed: [] } });
   };
   const mutateJob = <T>(
     identity: Identity,
@@ -268,58 +482,68 @@ export function createJobStore(
       return finish(state, view(state, job), retired);
     });
   return {
-    submit: async (identity, conversationId, input) => {
+    submit: async (identity, conversationId, input, settings) => {
       const parsed = jobInputSchema.parse(input);
       const key = conversationKey(identity, conversationId);
-      return records.transact(async (tx) => {
-        const record = await tx.read(key);
-        const state = stateFrom(record?.value, identity, conversationId);
-        if (state.deleted) throw new HttpError(410, "Conversation erased");
-        if (
-          state.retiredRuns.includes(parsed.id) ||
-          (await tx.read(retiredKey(identity, conversationId, parsed.id)))
-        )
-          throw new JobConflict();
-        const existing = state.jobs.find((job) => job.id === parsed.id);
-        if (existing) {
+      const attempt = () =>
+        records.transact(async (tx) => {
+          const record = await tx.read(key);
+          const state = stateFrom(record?.value, identity, conversationId);
+          if (state.deleted) throw new HttpError(410, "Conversation erased");
           if (
-            JSON.stringify(existing.input) !== JSON.stringify(parsed.input) ||
-            existing.profileId !== parsed.profileId
+            state.retiredRuns.includes(parsed.id) ||
+            (await tx.read(retiredKey(identity, conversationId, parsed.id)))
           )
             throw new JobConflict();
-          return view(state, existing);
-        }
-        if (state.jobs.some((job) => !isTerminal(job.status)))
-          throw new JobConflict();
-        const job: StoredJob = {
-          ...parsed,
-          availableAt: 0,
-          attempts: 0,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          status: "queued",
-          cancelRequested: false,
-          historyLength: state.messages.length,
-          steering: [],
-          events: [],
-        };
-        append(job, { type: "queued" });
-        state.jobs.push(job);
-        await tx.write(key, state, record?.revision ?? 0, true);
-        return view(state, job);
+          const existing = state.jobs.find((job) => job.id === parsed.id);
+          if (existing) {
+            if (
+              JSON.stringify(existing.input) !== JSON.stringify(parsed.input) ||
+              existing.profileId !== parsed.profileId
+            )
+              throw new JobConflict();
+            return view(state, existing);
+          }
+          if (state.jobs.some((job) => !isTerminal(job.status)))
+            throw new JobConflict();
+          const job: StoredJob = {
+            ...parsed,
+            availableAt: 0,
+            attempts: 0,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            status: "queued",
+            cancelRequested: false,
+            historyLength: state.messages.length,
+            steering: [],
+            events: [],
+            ...(settings?.quota ? { quota: settings.quota } : {}),
+          };
+          append(job, { type: "queued" });
+          state.jobs.push(job);
+          await tx.write(key, state, record?.revision ?? 0, true);
+          return view(state, job);
+        });
+      return attempt().catch(async (error: unknown) => {
+        if (!(error instanceof z.ZodError)) throw error;
+        await repairAndReport(identity, conversationId, error);
+        return attempt();
       });
     },
     async load(identity, conversationId, id) {
-      const record = await records.read(
-        conversationKey(identity, conversationId),
-      );
-      return record
-        ? (() => {
-            const state = stateFrom(record.value, identity, conversationId);
-            const job = state.jobs.find((item) => item.id === id);
-            return job && view(state, job);
-          })()
-        : undefined;
+      const key = conversationKey(identity, conversationId);
+      const read = async () => {
+        const record = await records.read(key);
+        if (!record) return undefined;
+        const state = stateFrom(record.value, identity, conversationId);
+        const job = state.jobs.find((item) => item.id === id);
+        return job && view(state, job);
+      };
+      return read().catch(async (error: unknown) => {
+        if (!(error instanceof z.ZodError)) throw error;
+        await repairAndReport(identity, conversationId, error);
+        return read();
+      });
     },
     update: apply,
     steer: (identity, conversationId, id, message) =>
@@ -378,16 +602,27 @@ export function createJobStore(
       );
     },
     async pending(after = "", onCorrupt) {
-      const rows = await records.scan("conversation", after, 100, true);
+      const rows = await records.scanReadable("conversation", after, 100, true);
       const jobs: {
         identity: Identity;
         conversationId: string;
         job: Job;
+        quota?: QuotaSnapshot | undefined;
       }[] = [];
       for (const row of rows) {
+        if (row.unreadable) {
+          if (!unreadable.has(row.id)) {
+            unreadable.add(row.id);
+            unreported.push({
+              error: new Error("Conversation record cannot be decrypted"),
+              report: { failed: [] },
+            });
+          }
+          continue;
+        }
         const parsed = conversationStateSchema.safeParse(row.value);
         if (!parsed.success) {
-          onCorrupt?.(parsed.error);
+          await quarantine(row, parsed.error).catch(() => undefined);
           continue;
         }
         const state = parsed.data;
@@ -402,13 +637,26 @@ export function createJobStore(
               identity: state.identity,
               conversationId: state.id,
               job: view(state, job),
+              ...(job.quota ? { quota: job.quota } : {}),
             });
       }
+      for (const { error, report } of unreported.splice(0))
+        onCorrupt?.(error, report);
       return {
         cursor: rows.length < 100 ? "" : (rows.at(-1)?.id ?? ""),
         jobs,
       };
     },
+    async quarantined(after = "", limit = 100) {
+      const rows = await records.scan("quarantine", after, limit);
+      return {
+        records: rows.map((row) => quarantineSchema.parse(row.value)),
+        cursor: rows.length < limit ? "" : (rows.at(-1)?.id ?? ""),
+      };
+    },
+    discardQuarantined: (rowId) =>
+      records.removeScope("quarantine", quarantineScope(rowId)),
+    repair: repairAndReport,
     prune: (identity, conversationId, before) =>
       mutateJob(identity, conversationId, "", undefined, (value) => {
         const state = stateFrom(value, identity, conversationId);

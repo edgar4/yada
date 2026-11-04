@@ -2,7 +2,11 @@ import { z } from "zod";
 import type { Identity } from "../core/contracts.js";
 import { HttpError } from "../service/contracts.js";
 import { isTerminal } from "../service/terminal.js";
-import { conversationStateSchema } from "./jobs.js";
+import {
+  conversationStateSchema,
+  createJobStore,
+  quarantineScope,
+} from "./jobs.js";
 import { conversationKey, retiredKey } from "./conversations.js";
 import { actionSchema, eraseGrants, runTree } from "./actions.js";
 import { isRetryable, type recordStore } from "./records.js";
@@ -82,9 +86,13 @@ export function createRetention(records: ReturnType<typeof recordStore>) {
             cursor,
             100,
           );
-          for (const { at, id, value } of rows) {
+          for (const { at, id, revision, value } of rows) {
             cursor = { at, id };
             const state = listedSchema.safeParse(value).data;
+            if (!state && !Array.isArray(value)) {
+              await records.removeScope("quarantine", quarantineScope(id));
+              await records.removeRow(id, revision);
+            }
             if (!state || (state.deleted && !state.purgeRuns?.length)) continue;
             try {
               await retention.eraseConversation(identity, state.id);
@@ -107,8 +115,16 @@ export function createRetention(records: ReturnType<typeof recordStore>) {
     },
     async eraseConversation(identity: Identity, id: string) {
       const key = conversationKey(identity, id);
-      const planned = await records.read(key);
-      const current = stateFrom(planned?.value);
+      let planned = await records.read(key);
+      let current: ReturnType<typeof stateFrom>;
+      try {
+        current = stateFrom(planned?.value);
+      } catch (error) {
+        if (!(error instanceof z.ZodError)) throw error;
+        await createJobStore(records).repair(identity, id, error);
+        planned = await records.read(key);
+        current = stateFrom(planned?.value);
+      }
       if (current.jobs.some((job) => !isTerminal(job.status)))
         throw new HttpError(
           409,
@@ -137,6 +153,10 @@ export function createRetention(records: ReturnType<typeof recordStore>) {
       }
       for (const tombstone of tombstones) await records.remove(tombstone);
       await eraseGrants(records, identity, id);
+      await records.removeScope(
+        "quarantine",
+        quarantineScope(records.rowId(key)),
+      );
       await records.mutate(key, (value) => ({
         value: {
           ...z.record(z.string(), z.unknown()).parse(value),
