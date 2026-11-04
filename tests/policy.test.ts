@@ -265,6 +265,62 @@ for (const driver of drivers)
         ),
       ).toMatchObject({ status: "awaiting_approval" });
     });
+    it("restricts remembered scopes with rememberApprovals", async () => {
+      const s = await storageFixture(driver);
+      const handler = createHandler({
+        storage: s.storage,
+        origins: [],
+        authenticate: () => Promise.resolve(s.identity),
+        authorizeProfile: () => Promise.resolve(true),
+        rememberApprovals: [],
+      });
+      await s.storage.jobs.submit(s.identity, "chat", {
+        id: "a",
+        input: "Hi",
+        profileId: "v1",
+      });
+      const runId = JSON.stringify(["chat", "a"]);
+      const id = operationId(s.identity, runId, "c1");
+      await s.storage.actions.propose(s.identity, {
+        id,
+        runId,
+        callId: "c1",
+        tool: "write",
+        toolVersion: "1",
+        args: { q: "x" },
+        preview: "write",
+        version: "1",
+        expiresAt: Date.now() + 60_000,
+        status: "pending",
+      });
+      await s.storage.jobs.update(s.identity, "chat", "a", {
+        type: "awaiting_approval",
+        approvalId: id,
+      });
+      const url = `http://localhost/v1/conversations/chat/runs/a/approvals/${id}`;
+      expect(
+        await (
+          await handler(new Request(url, { headers: { host: "localhost" } }))
+        ).json(),
+      ).toMatchObject({ remember: [] });
+      const decided = await handler(
+        new Request(`${url}/decision`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ approved: true, remember: "run" }),
+        }),
+      );
+      expect(decided.status).toBe(202);
+      expect((await s.storage.actions.load(s.identity, id))?.status).toBe(
+        "approved",
+      );
+      expect(
+        await s.storage.actions.remembered(s.identity, runId, "write", "1", {
+          q: "x",
+        }),
+      ).toBe(false);
+    });
+
     it("does not remember declined decisions", async () => {
       const s = await storageFixture(driver);
       const tool = confirmTool(readFixture("lookup"));

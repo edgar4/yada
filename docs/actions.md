@@ -30,6 +30,8 @@ Persist operation receipts in the system that owns the mutation. If the backend 
 
 A decision may include `remember: "run" | "conversation"`. Later actions with the same tool name, tool version and identical arguments are approved automatically within that run, or within any run of that same conversation. Grants belong to the authenticated tenant and actor and never apply to another conversation or identity. Auto-approved actions still recheck authorization and prepared state before executing. Declined or expired decisions are never remembered. Conversation grants have no expiry; they last until the conversation is erased, so offer `"conversation"` only for low-risk tools. Upgrading deletes grants stored by earlier versions, which could not be tied to a conversation; users approve those actions again.
 
+`createHandler({ rememberApprovals })` restricts the scopes the service accepts. It defaults to `["run", "conversation"]`; `["run"]` keeps only run grants and `[]` turns remembering off. A disallowed `remember` is ignored and the decision still applies. `GET` on an approval reports the allowed scopes as `remember`, and the widget hides its checkbox when `"run"` is not among them. The option governs new grants only: grants stored before it was set keep applying until their run or conversation is erased.
+
 Set the approval lifetime with the `ttlMs` argument of `actionExecutor` or the worker profile `approvalTtlMs`. A run waiting for approval is woken when that lifetime ends.
 
 ## MCP elicitation

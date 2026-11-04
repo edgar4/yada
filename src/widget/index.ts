@@ -581,6 +581,9 @@ export function defineYadaWidget(name = "yada-chat"): void {
         signal.throwIfAborted();
         this.approvalId = approval.id;
         this.remember.checked = false;
+        this.rememberLabel.hidden = !(approval.remember ?? ["run"]).includes(
+          "run",
+        );
         this.preview.textContent = approval.preview;
         this.approve.disabled = this.decline.disabled =
           approval.status !== "pending" || approval.expiresAt <= Date.now();

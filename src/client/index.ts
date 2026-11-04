@@ -12,6 +12,7 @@ export type { Job, JobInput, RunEvent };
 export type Approval = Readonly<{
   id: string;
   preview: string;
+  remember?: readonly string[];
   status:
     | "pending"
     | "approved"

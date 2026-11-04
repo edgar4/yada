@@ -44,6 +44,7 @@ let decisionBody = "";
 let failureCode: string | undefined;
 const steered: string[] = [];
 let finished: "completed" | "cancelled" | undefined;
+let rememberDisabled = false;
 let steerConflict: "completed" | "cancelled" | undefined;
 let unconsumed: { id: string; input: string; consumed: boolean }[] = [];
 let cancelRequested = false;
@@ -229,6 +230,7 @@ const server = createServer((request, response) => {
           preview: malicious,
           status: "pending",
           expiresAt: Date.now() + 60_000,
+          ...(rememberDisabled ? { remember: [] } : {}),
         }),
       );
     } else {
@@ -336,6 +338,7 @@ beforeEach(() => {
   failureCode = undefined;
   steered.length = 0;
   steerConflict = finished = undefined;
+  rememberDisabled = false;
   unconsumed = [];
   operationMode = undefined;
   heldOperation = heldRun = undefined;
@@ -589,6 +592,17 @@ describe("browser widget", () => {
     expect(await widget.locator(".user", { hasText: "Too late" }).count()).toBe(
       1,
     );
+    await page.close();
+  });
+
+  it("hides the remember checkbox when the service disallows it", async () => {
+    rememberDisabled = true;
+    const page = await open();
+    const widget = await start(page);
+    await widget.getByRole("button", { name: "Approve action" }).waitFor();
+    expect(await widget.getByRole("checkbox").isVisible()).toBe(false);
+    await widget.getByRole("button", { name: "Approve action" }).click();
+    await expect.poll(() => decisionBody).toBe('{"approved":true}');
     await page.close();
   });
 

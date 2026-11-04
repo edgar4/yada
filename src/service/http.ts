@@ -69,6 +69,8 @@ export type HandlerLimits = Readonly<{
   requestsPerMinute?: number;
   streamsPerActor?: number;
 }>;
+export type RememberScope = "run" | "conversation";
+
 export function createHandler(options: {
   storage: YadaStorage;
   origins: readonly string[];
@@ -77,9 +79,14 @@ export function createHandler(options: {
   bus?: EventBus;
   quota?: QuotaOptions;
   limits?: HandlerLimits;
+  rememberApprovals?: readonly RememberScope[];
   onError?: (error: unknown, request: Request) => void;
 }) {
   const pollMs = options.bus ? 500 : 100;
+  const rememberApprovals = options.rememberApprovals ?? [
+    "run",
+    "conversation",
+  ];
   const requestsPerMinute = options.limits?.requestsPerMinute ?? 600;
   const maxStreams = options.limits?.streamsPerActor ?? 8;
   const windows = new Map<string, { start: number; used: number }>();
@@ -265,6 +272,7 @@ export function createHandler(options: {
             preview: action.preview,
             status: action.status,
             expiresAt: action.expiresAt,
+            remember: rememberApprovals,
           });
         if (request.method !== "POST" || !match[3].endsWith("/decision"))
           return json({ error: "Method not allowed" }, 405);
@@ -310,7 +318,11 @@ export function createHandler(options: {
           decision.approved,
           content,
         );
-        if (decision.remember && decided.status === "approved")
+        if (
+          decision.remember &&
+          rememberApprovals.includes(decision.remember) &&
+          decided.status === "approved"
+        )
           await options.storage.actions.remember(
             identity,
             decided,

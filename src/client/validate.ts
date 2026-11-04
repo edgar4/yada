@@ -185,6 +185,7 @@ export function parseApproval(value: unknown): Approval {
     "preview",
     "status",
     "expiresAt",
+    "remember",
   ]);
   str(record["id"], "approval");
   str(record["preview"], "approval");
