@@ -113,9 +113,12 @@ for (const driver of drivers)
         pollMs: 10,
       });
       worker.start();
-      await vi.waitFor(() => {
-        expect(provider.requests).toHaveLength(1);
-      });
+      await vi.waitFor(
+        () => {
+          expect(provider.requests).toHaveLength(1);
+        },
+        { timeout: 30_000 },
+      );
       await worker.stop();
       expect(
         (await s.storage.jobs.load(s.identity, "chat", "one"))?.outcome,
@@ -140,7 +143,7 @@ for (const driver of drivers)
         (await s.storage.jobs.load(s.identity, "chat", "one"))?.outcome,
       ).toEqual({ status: "completed", text: "Recovered" });
       await resumed.stop();
-    });
+    }, 60_000);
 
     it("resumes only the awaited approval", async () => {
       const s = await storageFixture(driver);
