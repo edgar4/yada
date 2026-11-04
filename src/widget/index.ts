@@ -442,7 +442,13 @@ export function defineYadaWidget(name = "yada-chat"): void {
 
     connectedCallback(): void {
       this.update();
-      if (this.input && this.active) void this.start(false);
+      if (!this.input) return;
+      if (this.active) void this.start(false);
+      else if (this.steered.size) {
+        const controller = new AbortController();
+        this.controller = controller;
+        void this.resendUnconsumed(controller);
+      }
     }
 
     disconnectedCallback(): void {
@@ -688,19 +694,15 @@ export function defineYadaWidget(name = "yada-chat"): void {
           this.cursor = event.sequence;
           await this.showEvent(event, controller.signal);
         }
-      if (job.status === "completed") {
-        this.appendMessage(text, "user");
-        this.prompt.value = "";
-        this.submit(text);
-      }
+      this.settling = false;
+      this.restoreUnconsumed(job, text);
+      this.update();
       return true;
     }
 
     private async resendUnconsumed(controller: AbortController): Promise<void> {
       const { options, input } = this;
       if (!options || !input || !this.steered.size) return;
-      const sent = new Map(this.steered);
-      this.steered.clear();
       this.settling = true;
       this.update();
       const job = await options.client
@@ -709,17 +711,27 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.settling = false;
       this.update();
       if (!this.isCurrent(controller)) return;
-      const text = (
-        job
-          ? job.steering
-              .filter((item) => !item.consumed && sent.has(item.id))
-              .map((item) => contentText(item.input))
-          : [...sent.values()]
-      ).join("\n\n");
       if (!job) this.error.textContent = this.labels.steerFailed;
-      if (text && job?.status === "completed") this.submit(text);
-      else if (text)
-        this.prompt.value = [text, this.prompt.value]
+      this.restoreUnconsumed(job);
+    }
+
+    private restoreUnconsumed(job: Job | undefined, followUp = ""): void {
+      const unread = job
+        ? job.steering
+            .filter((item) => !item.consumed && this.steered.has(item.id))
+            .map((item) => contentText(item.input))
+        : [...this.steered.values()];
+      if (job) for (const { id } of job.steering) this.steered.delete(id);
+      else this.steered.clear();
+      if (job?.status === "completed") {
+        if (followUp) {
+          this.appendMessage(followUp, "user");
+          this.prompt.value = "";
+        }
+        const text = [...unread, ...(followUp ? [followUp] : [])].join("\n\n");
+        if (text) this.submit(text);
+      } else if (unread.length)
+        this.prompt.value = [...unread, this.prompt.value]
           .filter(Boolean)
           .join("\n\n");
       this.prompt.focus();

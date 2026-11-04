@@ -602,6 +602,72 @@ describe("browser widget", () => {
     await page.close();
   });
 
+  it.each([
+    ["completed", 2, ""],
+    ["cancelled", 1, "First\n\nSecond"],
+  ] as const)(
+    "keeps an unread message when a later one conflicts on a %s run",
+    async (status, runs, prompt) => {
+      const page = await open();
+      const widget = await start(page);
+      await widget.getByRole("button", { name: "Approve action" }).waitFor();
+      await widget.getByRole("textbox").fill("First");
+      await widget.getByRole("button", { name: "Send", exact: true }).click();
+      await expect.poll(() => steered.length).toBe(1);
+      await expect
+        .poll(() => widget.locator(".user").last().textContent())
+        .toContain("First");
+      const { id } = JSON.parse(steered[0] ?? "{}") as { id: string };
+      unconsumed = [{ id, input: "First", consumed: false }];
+      steerConflict = status;
+      await widget.getByRole("textbox").fill("Second");
+      await widget.getByRole("button", { name: "Send", exact: true }).click();
+      await expect.poll(() => inputs.length).toBe(runs);
+      await expect
+        .poll(() => widget.getByRole("textbox").inputValue())
+        .toBe(prompt);
+      if (runs === 2)
+        expect(JSON.parse(inputs[1] ?? "{}")).toMatchObject({
+          input: "First\n\nSecond",
+        });
+      else expect(await widget.getByRole("textbox").isDisabled()).toBe(false);
+      await page.close();
+    },
+  );
+
+  it("recovers an unread message when the element is moved as the run ends", async () => {
+    const page = await open();
+    const widget = await start(page);
+    await widget.getByRole("button", { name: "Approve action" }).waitFor();
+    await widget.getByRole("textbox").fill("Too late");
+    await widget.getByRole("button", { name: "Send", exact: true }).click();
+    await expect.poll(() => steered.length).toBe(1);
+    await expect
+      .poll(() => widget.locator(".user").last().textContent())
+      .toContain("Too late");
+    const { id } = JSON.parse(steered[0] ?? "{}") as { id: string };
+    unconsumed = [{ id, input: "Too late", consumed: false }];
+    finished = "cancelled";
+    await page.evaluate(() => {
+      const element = document.querySelector("yada-chat");
+      element?.addEventListener(
+        "yada-run-end",
+        () => {
+          const parent = element.parentElement;
+          element.remove();
+          setTimeout(() => parent?.append(element), 50);
+        },
+        { once: true },
+      );
+    });
+    finish("cancelled");
+    await expect
+      .poll(() => widget.getByRole("textbox").inputValue())
+      .toBe("Too late");
+    expect(await widget.getByRole("textbox").isDisabled()).toBe(false);
+    await page.close();
+  });
+
   it("restores an unconsumed message ahead of a draft after a cancelled run", async () => {
     const page = await open();
     const widget = await start(page);
