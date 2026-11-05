@@ -444,7 +444,7 @@ describe("timeouts", () => {
     const client = new BrowserClient({
       ...options,
       fetch: vi.fn(
-        (_: unknown, init?: RequestInit) =>
+        () =>
           new Promise<Response>((resolve) => {
             setTimeout(() => {
               resolve(new Response("{}"));

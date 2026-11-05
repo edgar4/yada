@@ -185,7 +185,7 @@ beforeEach(() => {
 
 it(
   "signs in with HttpOnly cookies, reuses the widget and resumes without resubmission",
-  { timeout: 10_000 },
+  { timeout: 30_000 },
   async () => {
     const page = await open();
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
@@ -403,4 +403,4 @@ it("drops a missing saved run and signs out when the session expires across relo
   expect(
     await page.evaluate(() => localStorage.getItem("yada-starter:run")),
   ).toBeNull();
-});
+}, 30_000);

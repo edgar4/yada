@@ -216,3 +216,33 @@
 .prose table code {
   white-space: nowrap;
 }
+
+.widget-demo {
+  margin: 24px 0;
+}
+.widget-demo-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.widget-demo-tabs button {
+  padding: 6px 14px;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+}
+.widget-demo-tabs button[aria-pressed="true"] {
+  font-weight: 600;
+  text-decoration: underline;
+}
+.widget-demo-frame {
+  height: 560px;
+}
+.widget-demo-note {
+  margin-top: 8px;
+  font-size: 0.875em;
+}

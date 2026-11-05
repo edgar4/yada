@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Moss garden helper</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: #f7f8f0;
+      }
+      main {
+        box-sizing: border-box;
+        height: 100%;
+        max-width: 640px;
+        margin: auto;
+        padding: 24px;
+      }
+      h1 {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+      }
+    </style>
+  </head>
+  <body data-conversation="moss-demo" data-profile="garden">
+    <main>
+      <h1>Moss</h1>
+      <yada-chat fill>
+        <small slot="footer">Moss can make mistakes.</small>
+      </yada-chat>
+    </main>
+    <script type="module" src="./moss.ts"></script>
+  </body>
+</html>

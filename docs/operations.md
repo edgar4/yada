@@ -32,7 +32,7 @@ const quota = {
 
 `scope` is `"tenant"` (default, shared by all actors) or `"actor"`. Counters are fixed windows kept in storage, so they hold across instances; one record per scope holds only the current window. `POST .../runs` consumes one request unit; resubmitting an existing run ID does not. Once a window is exhausted, or the cost window is at or over `limit`, submission returns `429` with `Retry-After` (seconds until the window ends) and `{ "error": "Rate limit exceeded" }`.
 
-The worker adds each finished run's reported usage, priced with the profile `limits.pricing` (including cache pricing), to the cost window. Runs of profiles without `pricing` or without reported usage add nothing. Without `reserveCostMicros`, cost is only checked at submission and nothing is held, so concurrent runs can all pass the check and overshoot `limit` by as many runs as are in flight. Without `quota`, nothing changes. Other endpoints, including steering messages, do not consume quota. Handler and worker must use the same `quota`; a worker without it does not accrue cost.
+The worker adds each finished run's reported usage, priced with the `limits.pricing` the run started with (including cache pricing), to the cost window. Runs of profiles without `pricing` or without reported usage add nothing. Without `reserveCostMicros`, cost is only checked at submission and nothing is held, so concurrent runs can all pass the check and overshoot `limit` by as many runs as are in flight. Without `quota`, nothing changes. Other endpoints, including steering messages, do not consume quota. Handler and worker must use the same `quota`; a worker without it does not accrue cost.
 
 ### Cost reservations and a global budget
 
@@ -80,6 +80,29 @@ The conformance suite verifies encrypted backup/restore and key rotation on SQLi
 `storage.retention.eraseActorMemory(identity)` deletes that actor's long-term memory record. Memory is a normal record, so backups and restores include it.
 
 Backups and external backend operation receipts have independent retention policies. Erasing Yada records does not revoke provider credentials or delete data in connected services.
+
+## Corrupt records
+
+A conversation record that can't be read as valid state no longer blocks the queue or fails on every poll. The first worker or request to reach it does the following once:
+
+1. Stores an exact copy in quarantine, with the validation issues.
+2. Repairs the record, keeping what is valid.
+3. Fails its unfinished run with the code `corrupt_record`, which the widget shows as a readable message. This also releases any held quota and sends the run's `failed` webhook if a worker did the repair.
+4. Traces `record_quarantined` and `run_finished` once.
+
+The run is never retried. Other jobs carry on.
+
+```ts
+const { records, cursor } = await storage.jobs.quarantined();
+// { rowId, revision, at, issues: [{ path, message }], value }
+await storage.jobs.discardQuarantined(records[0].rowId);
+```
+
+Copies are encrypted like other records and removed with their conversation on erasure. Otherwise they stay until you discard them. A record whose owner can't be worked out can't be repaired or failed, so it is copied and taken out of the queue, and its owner gets a clean state the next time they read it.
+
+A record that can't be decrypted is left untouched, because the usual cause is a missing key rather than bad data. It is reported once per process and skipped, and it runs again when the key is back. Reading it directly still returns 503.
+
+If a record is repaired while one of its write actions is executing, that action finishes and is tracked as usual, and the run's result is discarded.
 
 ## Telemetry and recovery
 

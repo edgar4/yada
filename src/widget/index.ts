@@ -16,11 +16,11 @@ export { widgetExportParts, widgetParts, type WidgetPart } from "./parts.js";
 export { cssVariables } from "./styles.js";
 
 const defaultLabels = {
-  title: "Assistant",
+  title: "{name}",
   empty: "Send a message to start the conversation.",
   conversation: "Conversation",
   message: "Message",
-  placeholder: "",
+  placeholder: "Message {name}",
   send: "Send",
   cancel: "Cancel run",
   reconnect: "Reconnect",
@@ -114,7 +114,7 @@ export type WidgetRendered = Node | string | null | undefined;
 export type WidgetSuggestion =
   string | Readonly<{ label: string; text: string }>;
 export type WidgetAvatar =
-  Readonly<{ image: string }> | Readonly<{ text: string }>;
+  Readonly<{ image: string }> | Readonly<{ text: string }> | false;
 export type WidgetComposerOptions = Readonly<{
   autoGrow?: boolean;
   send?: "text" | "icon";
@@ -204,6 +204,12 @@ const slot = (name: string) => {
   element.name = name;
   return element;
 };
+const faceMarkup = `<svg class="face" viewBox="0 0 120 120" aria-hidden="true"><circle class="face-background" cx="60" cy="60" r="60"/><g class="face-features" data-mood="neutral"><path d="M30 32Q45 46 60 60M90 32Q75 46 60 60M60 60V90"/><circle class="face-dot" cx="60" cy="60" r="9"/></g><g class="face-features" data-mood="thinking"><path d="M50 40V42M74 40V42M52 80Q64 76 76 80"/></g><g class="face-features" data-mood="smile"><path d="M44 42V54M76 42V54M40 72Q60 92 80 72"/></g><g class="face-features" data-mood="wink"><path d="M44 42V54M67 52Q76 38 85 52M42 74Q62 90 80 70"/></g></svg>`;
+function createFace() {
+  const template = document.createElement("template");
+  template.innerHTML = faceMarkup;
+  return template.content;
+}
 function sendIconSlot(): HTMLSlotElement {
   const element = slot("send-icon");
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -248,10 +254,16 @@ export function defineYadaWidget(name = "yada-chat"): void {
     private readonly subtitle = part("p", "subtitle", "subtitle");
     private readonly log = part("div", "log", "log");
     private readonly empty = part("div", "empty", "empty");
+    private readonly emptyAvatar = part("span", "empty-avatar", "empty-avatar");
     private readonly emptyText = part("p", "empty-text", "empty-text");
     private readonly suggestions = part("div", "suggestions", "suggestions");
     private readonly activity = part("div", "activity", "activity");
     private readonly typing = part("div", "typing", "typing");
+    private readonly typingAvatar = part(
+      "span",
+      "typing-avatar",
+      "typing-avatar",
+    );
     private readonly status = part("p", "status", "visually-hidden");
     private readonly error = part("p", "error", "error");
     private readonly promptLabel = document.createElement("label");
@@ -300,12 +312,14 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.log.setAttribute("role", "log");
       this.log.setAttribute("aria-live", "polite");
       this.log.setAttribute("aria-relevant", "additions");
-      emptySlot.append(this.emptyText);
+      this.emptyAvatar.setAttribute("aria-hidden", "true");
+      emptySlot.append(this.emptyAvatar, this.emptyText);
       this.empty.append(emptySlot, this.suggestions);
       this.log.append(this.empty);
       this.activity.hidden = true;
       this.typing.setAttribute("aria-hidden", "true");
       this.typing.append(
+        this.typingAvatar,
         part("span", "typing-dot"),
         part("span", "typing-dot"),
         part("span", "typing-dot"),
@@ -428,12 +442,13 @@ export function defineYadaWidget(name = "yada-chat"): void {
 
     private grow(): void {
       const { prompt } = this;
-      if (!this.options?.composer?.autoGrow) {
-        prompt.removeAttribute("data-auto-grow");
+      const autoGrow = this.options?.composer?.autoGrow ?? true;
+      prompt.rows = autoGrow ? 1 : 2;
+      prompt.toggleAttribute("data-auto-grow", autoGrow);
+      if (!autoGrow || CSS.supports("field-sizing", "content")) {
         prompt.style.removeProperty("height");
         return;
       }
-      prompt.setAttribute("data-auto-grow", "");
       prompt.style.height = "auto";
       prompt.style.height = `${String(
         prompt.scrollHeight + prompt.offsetHeight - prompt.clientHeight,
@@ -500,7 +515,10 @@ export function defineYadaWidget(name = "yada-chat"): void {
 
     private revealSlots(): void {
       this.avatar.hidden =
-        !this.options?.avatar && !this.avatarSlot.assignedNodes().length;
+        !this.avatarFallback.childNodes.length &&
+        !this.avatarSlot.assignedNodes().length;
+      this.emptyAvatar.hidden = this.typingAvatar.hidden =
+        !this.avatarFallback.childNodes.length;
       for (const wrapper of [this.aboveComposer, this.footer])
         wrapper.hidden = !wrapper.querySelector("slot")?.assignedNodes().length;
     }
@@ -572,7 +590,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.log.setAttribute("aria-label", text.conversation);
       this.emptyText.textContent = text.empty;
       this.prompt.placeholder = text.placeholder;
-      if (this.options?.composer?.send === "icon") {
+      if (this.options?.composer?.send !== "text") {
         this.send.replaceChildren(this.sendIcon);
         this.send.setAttribute("aria-label", text.send);
       } else {
@@ -594,7 +612,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
     }
 
     private applyIdentity(): void {
-      const { avatar, subtitle, header, fill, colorScheme } =
+      const { avatar, subtitle, header, fill, colorScheme, unstyled } =
         this.options ?? {};
       this.header.hidden = header === false;
       this.subtitle.textContent = subtitle ?? "";
@@ -606,7 +624,14 @@ export function defineYadaWidget(name = "yada-chat"): void {
         image.alt = "";
         image.src = avatar.image;
         this.avatarFallback.append(image);
-      }
+      } else if (avatar === undefined && !unstyled)
+        this.avatarFallback.append(createFace());
+      for (const copy of [this.emptyAvatar, this.typingAvatar])
+        copy.replaceChildren(
+          ...[...this.avatarFallback.childNodes].map((node) =>
+            node.cloneNode(true),
+          ),
+        );
       this.revealSlots();
       if (fill !== undefined) this.toggleAttribute("fill", fill);
       if (colorScheme) this.setAttribute("color-scheme", colorScheme);
@@ -752,6 +777,14 @@ export function defineYadaWidget(name = "yada-chat"): void {
               ? "error"
               : "idle";
       this.dataset["state"] = state;
+      this.dataset["mood"] =
+        state === "running"
+          ? "thinking"
+          : state === "awaiting-approval"
+            ? "wink"
+            : state === "idle" && !this.empty.isConnected
+              ? "smile"
+              : "neutral";
       this.dataset["connection"] = this.disconnected
         ? "disconnected"
         : "connected";

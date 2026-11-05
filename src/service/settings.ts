@@ -19,7 +19,5 @@ export async function resolveSetting<T extends object>(
   setting: ProfileSetting<T> | undefined,
   context: RunContext,
 ) {
-  return typeof setting === "function"
-    ? setting(context)
-    : setting;
+  return typeof setting === "function" ? setting(context) : setting;
 }

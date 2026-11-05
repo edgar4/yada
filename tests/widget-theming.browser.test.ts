@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { chromium, type Browser, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { build } from "esbuild";
+import { readFile } from "node:fs/promises";
 import { widgetParts } from "../src/widget/parts.js";
 import { cssVariables, defaultStyles } from "../src/widget/styles.js";
 import type { BrowserClient, RunEvent } from "../src/client/index.js";
@@ -177,17 +178,49 @@ afterEach(async () => {
 });
 
 describe("name and identity", () => {
-  it("leaves the unnamed widget as it was, with {name} defaulting to Yada", async () => {
+  it("defaults to Yada's name and face, and hides them on request", async () => {
     const page = await open();
     await page.evaluate(() => make({ labels: { send: "Ask {name}" } }));
     const widget = page.locator("yada-chat");
-    expect(await widget.locator("h2").textContent()).toBe("Assistant");
+    expect(await widget.locator("h2").textContent()).toBe("Yada");
     expect(await widget.getByRole("textbox").getAttribute("placeholder")).toBe(
-      "",
+      "Message Yada",
     );
     await widget.getByRole("button", { name: "Ask Yada" }).waitFor();
-    expect(await widget.locator('[part="avatar"]').isHidden()).toBe(true);
+    await widget.locator('[part="avatar"] .face').waitFor();
+    await widget.locator('[part="empty-avatar"] .face').waitFor();
     expect(await widget.locator('[part="subtitle"]').isHidden()).toBe(true);
+    const plain = await open();
+    await plain.evaluate(() => make({ avatar: false }));
+    const hidden = plain.locator("yada-chat");
+    expect(await hidden.locator('[part="avatar"]').isHidden()).toBe(true);
+    expect(await hidden.locator('[part="empty-avatar"]').isHidden()).toBe(true);
+  });
+
+  it("changes her face with the run", async () => {
+    const page = await open();
+    await page.evaluate(() => make());
+    const widget = page.locator("yada-chat");
+    const mood = () => widget.getAttribute("data-mood");
+    expect(await mood()).toBe("neutral");
+    await widget.getByRole("textbox").fill("Hello");
+    await widget.getByRole("button", { name: "Send" }).click();
+    await expect.poll(mood).toBe("wink");
+    const done = await open();
+    await done.evaluate(() =>
+      make(
+        {},
+        {
+          events: [
+            { version: 1, sequence: 1, type: "completed", at: 1, text: "Hi" },
+          ],
+        },
+      ),
+    );
+    const replied = done.locator("yada-chat");
+    await replied.getByRole("textbox").fill("Hello");
+    await replied.getByRole("button", { name: "Send" }).click();
+    await expect.poll(() => replied.getAttribute("data-mood")).toBe("smile");
   });
 
   it("uses the name everywhere she is named, from option or attribute", async () => {
@@ -471,11 +504,11 @@ describe("styling", () => {
     const page = await open();
     await page.evaluate(() => make({ colorScheme: "dark" }));
     expect(await style(page, "section", "background-color")).toBe(
-      "rgb(15, 23, 42)",
+      "rgb(14, 14, 18)",
     );
     await audit(page);
     await page.evaluate(() => {
-      window.widget?.style.setProperty("--yada-background", "rgb(3, 3, 3)");
+      window.widget?.style.setProperty("--yada-log-background", "rgb(3, 3, 3)");
     });
     expect(await style(page, "section", "background-color")).toBe(
       "rgb(3, 3, 3)",
@@ -486,18 +519,18 @@ describe("styling", () => {
     });
     await page.emulateMedia({ colorScheme: "light" });
     expect(await style(page, "section", "background-color")).toBe(
-      "rgb(255, 255, 255)",
+      "rgb(242, 242, 244)",
     );
     await page.emulateMedia({ colorScheme: "dark" });
     expect(await style(page, "section", "background-color")).toBe(
-      "rgb(15, 23, 42)",
+      "rgb(14, 14, 18)",
     );
     await page.evaluate(() => {
       window.widget?.remove();
       make();
     });
     expect(await style(page, "section", "background-color")).toBe(
-      "rgb(255, 255, 255)",
+      "rgb(242, 242, 244)",
     );
   });
 
@@ -510,7 +543,7 @@ describe("styling", () => {
 });
 
 describe("layout and composer", () => {
-  it("keeps the 320px log unless asked to fill", async () => {
+  it("keeps the 360px log unless asked to fill", async () => {
     const page = await open('<div id="box" style="height:600px"></div>');
     await page.evaluate(() => {
       window.container = document.querySelector("#box");
@@ -523,7 +556,7 @@ describe("layout and composer", () => {
             ?.querySelector(".log")
             ?.getBoundingClientRect().height,
       );
-    expect(await height()).toBe(320);
+    expect(await height()).toBe(360);
   });
 
   it("fills its container, scrolls the log and keeps the composer in view", async () => {
@@ -996,5 +1029,40 @@ describe("events and failures", () => {
     expect(
       await page.evaluate(() => window.widget?.dataset["connection"]),
     ).toBe("connected");
+  });
+});
+
+describe("theming guide", () => {
+  it("documents every part, variable, slot, event and label change", async () => {
+    const guide = await readFile("docs/theming.md", "utf8");
+    const browserGuide = await readFile("docs/browser.md", "utf8");
+    for (const name of [
+      ...widgetParts,
+      ...cssVariables,
+      "above-composer",
+      "send-icon",
+      "yada-ready",
+      "yada-run",
+      "yada-run-end",
+      "yada-message",
+      "yada-approval",
+      "yada-approval-decided",
+      "yada-error",
+      "renderMessage",
+      "renderApproval",
+      "renderActivity",
+      "formatApprovalPreview",
+      "suggestions",
+      "unstyled",
+      "colorScheme",
+      "composer.autoGrow",
+      "composer.send",
+      "composer.enter",
+      "data-state",
+      "data-connection",
+    ])
+      expect(guide, name).toContain(`\`${name}\``);
+    const labels = /`errorCorruptRecord`/.test(browserGuide);
+    expect(labels).toBe(true);
   });
 });

@@ -8,6 +8,8 @@
       url: /architecture.html
     - title: Browser SDK & widget
       url: /browser.html
+    - title: Widget theming
+      url: /theming.html
 - title: Connect and act
   pages:
     - title: Skills

@@ -15,6 +15,21 @@ export default ts.config(
   },
   { files: ["**/*.{js,mjs}"], extends: [ts.configs.disableTypeChecked] },
   {
+    files: ["site/assets/widget-demo.js"],
+    languageOptions: {
+      globals: {
+        document: "readonly",
+        location: "readonly",
+        globalThis: "readonly",
+        Response: "readonly",
+        URL: "readonly",
+        ReadableStream: "readonly",
+        TextEncoder: "readonly",
+        setTimeout: "readonly",
+      },
+    },
+  },
+  {
     files: ["scripts/*.mjs", "deploy/*.mjs"],
     languageOptions: {
       globals: {

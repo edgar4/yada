@@ -92,6 +92,7 @@ Using a feature without its package fails with an error naming what to install. 
 | Approved write tools                          | [Actions](docs/actions.md)                                            |
 | Conversations and recovery                    | [Storage](docs/storage.md), [Durable runs](docs/recovery.md)          |
 | Service API, streaming and chat UI            | [Service](docs/service.md), [Browser SDK and widget](docs/browser.md) |
+| Your own name and look for the chat           | [Widget theming](docs/theming.md)                                     |
 | Context, cost, backups and retention          | [Operations](docs/operations.md)                                      |
 | Packaging and Docker                          | [Deployment](docs/deployment.md)                                      |
 | Agent scenarios in CI and against live models | [Evals](docs/evals.md)                                                |
@@ -132,6 +133,14 @@ docker run -d --rm --name yada-test-my --tmpfs /var/lib/mysql -e MYSQL_ROOT_PASS
 export YADA_TEST_POSTGRES_URL=postgres://postgres:yada-test@127.0.0.1:55432/yada_test
 export YADA_TEST_MYSQL_URL=mysql://root:yada-test@127.0.0.1:53306/yada_test
 ```
+
+## Upgrading from 0.4
+
+- The widget has a new default look: monochrome, with Yada's changing face in the header and on the empty screen, a single-line input and an icon send button. The title now defaults to "Yada". Set `avatar: false`, `composer`, `labels.title` and the `--yada-*` variables to change these, or `unstyled` to drop the styles.
+- The approve button is now green and decline red. Set `--yada-approve` and `--yada-decline` to keep your own.
+- Runs have a new failure code, `corrupt_record`. Handle it wherever you switch on failure codes. `Trace` has a new `record_quarantined` event.
+- `BrowserClient` requests now time out after 15 seconds. Set `timeoutMs` to change it, or `0` for the old behavior.
+- Run settings changed through getters now apply from the next run. Before, changing `limits` or the provider's name mid-run failed that run when it resumed.
 
 ## Upgrading from 0.3
 
