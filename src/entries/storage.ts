@@ -14,7 +14,11 @@ export { runConversation } from "../storage/conversation.js";
 export { runDurable } from "../storage/durable-run.js";
 export { RunLeaseError } from "../storage/runs.js";
 export type { RunStore, DurableRun, DurableRequest } from "../storage/runs.js";
-export type { JobStore } from "../storage/jobs.js";
+export type {
+  JobStore,
+  QuarantinedRecord,
+  QuarantineReport,
+} from "../storage/jobs.js";
 export { JobConflict } from "../storage/jobs.js";
 export type { Action, ActionStore } from "../storage/actions.js";
 export { migrateDatabase } from "../storage/database.js";

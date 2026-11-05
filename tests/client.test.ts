@@ -395,3 +395,140 @@ describe("browser client", () => {
     await expect(promise).rejects.toThrow("Aborted");
   });
 });
+
+describe("timeouts", () => {
+  const hang = (_: unknown, init?: RequestInit) =>
+    new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => {
+        reject(new DOMException("Aborted", "AbortError"));
+      });
+    });
+  const options = { baseUrl: "http://x", reconnectDelayMs: 0, maxRetries: 1 };
+
+  it("rejects a hanging request with a typed 408 and does not retry it", async () => {
+    const fetch = vi.fn(hang);
+    const client = new BrowserClient({ ...options, fetch, timeoutMs: 20 });
+    const error = await client
+      .createRun("c", client.createInput("p", "hi"))
+      .catch((failure: unknown) => failure);
+    expect(error).toBeInstanceOf(ClientError);
+    expect((error as ClientError).status).toBe(408);
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it("times out a hanging headers callback", async () => {
+    const client = new BrowserClient({
+      ...options,
+      fetch: vi.fn(hang),
+      headers: () => new Promise<HeadersInit>(() => undefined),
+      timeoutMs: 20,
+    });
+    await expect(client.getRun("c", "r")).rejects.toMatchObject({
+      status: 408,
+    });
+  });
+
+  it("keeps a caller abort distinct from a timeout", async () => {
+    const client = new BrowserClient({
+      ...options,
+      fetch: hang,
+      timeoutMs: 10_000,
+    });
+    const controller = new AbortController();
+    const pending = client.getRun("c", "r", controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("allows a timeout of zero to disable the deadline", async () => {
+    const client = new BrowserClient({
+      ...options,
+      fetch: vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            setTimeout(() => {
+              resolve(new Response("{}"));
+            }, 30);
+          }),
+      ),
+      timeoutMs: 0,
+    });
+    await expect(client.cancel("c", "r")).resolves.toBeUndefined();
+    expect(() => new BrowserClient({ ...options, timeoutMs: -1 })).toThrow(
+      "timeoutMs",
+    );
+  });
+
+  it("probes a silent stream and surfaces a dead connection", async () => {
+    const fetch = vi.fn((input: unknown, init?: RequestInit) =>
+      String(input).includes("/events?")
+        ? Promise.resolve(
+            new Response(
+              new ReadableStream({
+                start(controller) {
+                  init?.signal?.addEventListener("abort", () => {
+                    controller.error(new Error("aborted"));
+                  });
+                },
+              }),
+              { headers: { "content-type": "application/x-ndjson" } },
+            ),
+          )
+        : hang(input, init),
+    );
+    const client = new BrowserClient({
+      ...options,
+      fetch: fetch,
+      timeoutMs: 20,
+    });
+    const stream = client.events("c", "r");
+    await expect(stream.next()).rejects.toMatchObject({ status: 408 });
+  });
+
+  it("keeps a silent stream open while the agent still answers", async () => {
+    let probes = 0;
+    const event = { version: 1, sequence: 1, type: "completed", at: 1 };
+    const fetch = vi.fn((input: unknown) => {
+      if (!String(input).includes("/events?")) {
+        probes++;
+        return Promise.resolve(
+          Response.json({
+            id: "r",
+            profileId: "p",
+            input: "hi",
+            createdAt: 1,
+            updatedAt: 1,
+            status: "running",
+            cancelRequested: false,
+            history: [],
+            events: [],
+          }),
+        );
+      }
+      return Promise.resolve(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              setTimeout(() => {
+                controller.enqueue(
+                  new TextEncoder().encode(`${JSON.stringify(event)}\n`),
+                );
+                controller.close();
+              }, 90);
+            },
+          }),
+          { headers: { "content-type": "application/x-ndjson" } },
+        ),
+      );
+    });
+    const client = new BrowserClient({
+      ...options,
+      fetch: fetch,
+      timeoutMs: 20,
+    });
+    const seen: string[] = [];
+    for await (const item of client.events("c", "r")) seen.push(item.type);
+    expect(seen).toEqual(["completed"]);
+    expect(probes).toBeGreaterThan(0);
+  });
+});

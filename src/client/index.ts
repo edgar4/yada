@@ -31,6 +31,7 @@ export type ClientOptions = Readonly<{
   headers?: () => HeadersInit | Promise<HeadersInit>;
   reconnectDelayMs?: number;
   maxRetries?: number;
+  timeoutMs?: number;
 }>;
 export type StreamOptions = Readonly<{
   after?: number;
@@ -54,6 +55,25 @@ const retryable = (error: unknown) =>
   !(error instanceof ValidationError) &&
   (!(error instanceof ClientError) ||
     (error.status !== undefined && error.status >= 500));
+const timedOut = () => new ClientError("Request timed out", 408);
+const abortable = <T>(work: T | Promise<T>, signal?: AbortSignal) =>
+  signal
+    ? new Promise<T>((resolve, reject) => {
+        const abort = () => {
+          reject(signal.reason as Error);
+        };
+        if (signal.aborted) {
+          abort();
+          return;
+        }
+        signal.addEventListener("abort", abort, { once: true });
+        void Promise.resolve(work)
+          .then(resolve, reject)
+          .finally(() => {
+            signal.removeEventListener("abort", abort);
+          });
+      })
+    : Promise.resolve(work);
 const wait = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
     signal?.throwIfAborted();
@@ -147,6 +167,13 @@ export class BrowserClient {
         options.reconnectDelayMs > 30_000)
     )
       throw new ClientError("reconnectDelayMs must be between 0 and 30000");
+    if (
+      options.timeoutMs !== undefined &&
+      (!Number.isFinite(options.timeoutMs) ||
+        options.timeoutMs < 0 ||
+        options.timeoutMs > 300_000)
+    )
+      throw new ClientError("timeoutMs must be between 0 and 300000");
     this.options = options;
     this.transport = options.fetch ?? globalThis.fetch.bind(globalThis);
   }
@@ -281,13 +308,37 @@ export class BrowserClient {
       throw new ClientError("Invalid event cursor");
     let attempt = 0;
     for (;;) {
+      options.signal?.throwIfAborted();
+      const link = new AbortController();
+      const stop = () => {
+        link.abort();
+      };
+      options.signal?.addEventListener("abort", stop, { once: true });
+      let stalled: unknown;
+      let probing: ReturnType<typeof setTimeout> | undefined;
+      const watch = () => {
+        clearTimeout(probing);
+        const ms = this.timeoutMs;
+        if (!ms || link.signal.aborted) return;
+        probing = setTimeout(() => {
+          void this.getRun(conversationId, runId, link.signal).then(
+            watch,
+            (error: unknown) => {
+              stalled = error;
+              link.abort();
+            },
+          );
+        }, ms);
+      };
       try {
         const response = await this.request(
           `${this.path(conversationId, runId)}/events?after=${String(cursor)}`,
           "GET",
           undefined,
-          options.signal,
+          link.signal,
+          true,
         );
+        watch();
         if (
           !response.headers
             .get("content-type")
@@ -301,6 +352,7 @@ export class BrowserClient {
           } catch {
             throw new ClientError("Invalid run event");
           }
+          watch();
           if (event.type !== "text_delta") {
             if (event.sequence <= cursor) continue;
             if (event.sequence !== cursor + 1)
@@ -312,7 +364,12 @@ export class BrowserClient {
           if (terminal(event)) return;
         }
       } catch (error) {
-        if (options.signal?.aborted || !retryable(error)) throw error;
+        const failure = stalled ?? error;
+        if (options.signal?.aborted || !retryable(failure)) throw failure;
+      } finally {
+        clearTimeout(probing);
+        options.signal?.removeEventListener("abort", stop);
+        link.abort();
       }
       if (attempt >= (this.options.maxRetries ?? 3))
         throw new ClientError("Event stream disconnected; reconnect to resume");
@@ -320,6 +377,10 @@ export class BrowserClient {
       await wait(this.delay(attempt), options.signal);
       attempt++;
     }
+  }
+
+  private get timeoutMs() {
+    return this.options.timeoutMs ?? 15_000;
   }
 
   private delay(attempt: number) {
@@ -339,30 +400,61 @@ export class BrowserClient {
     method: string,
     body?: string,
     signal?: AbortSignal,
+    stream = false,
   ) {
     signal?.throwIfAborted();
-    const headers = new Headers(await this.options.headers?.());
-    headers.set(
-      "accept",
-      url.includes("/events?") ? "application/x-ndjson" : "application/json",
-    );
-    if (body !== undefined) headers.set("content-type", "application/json");
-    const response = await this.transport(url, {
-      method,
-      redirect: "error",
-      headers,
-      credentials: this.options.credentials ?? "same-origin",
-      ...(body === undefined ? {} : { body }),
-      ...(signal ? { signal } : {}),
-    });
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new ClientError(
-        `Request failed (${String(response.status)})`,
-        response.status,
+    const deadline = stream ? this.deadline(signal) : undefined;
+    const active = deadline?.signal ?? signal;
+    try {
+      const headers = new Headers(
+        await abortable(this.options.headers?.(), active),
       );
+      headers.set(
+        "accept",
+        url.includes("/events?") ? "application/x-ndjson" : "application/json",
+      );
+      if (body !== undefined) headers.set("content-type", "application/json");
+      const response = await this.transport(url, {
+        method,
+        redirect: "error",
+        headers,
+        credentials: this.options.credentials ?? "same-origin",
+        ...(body === undefined ? {} : { body }),
+        ...(active ? { signal: active } : {}),
+      });
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new ClientError(
+          `Request failed (${String(response.status)})`,
+          response.status,
+        );
+      }
+      return response;
+    } catch (error) {
+      throw deadline?.expired() ? timedOut() : error;
+    } finally {
+      deadline?.clear();
     }
-    return response;
+  }
+
+  private deadline(signal?: AbortSignal) {
+    const controller = new AbortController();
+    let expired = false;
+    const timer = this.timeoutMs
+      ? setTimeout(() => {
+          expired = true;
+          controller.abort();
+        }, this.timeoutMs)
+      : undefined;
+    return {
+      signal: signal
+        ? AbortSignal.any([signal, controller.signal])
+        : controller.signal,
+      expired: () => expired,
+      clear: () => {
+        clearTimeout(timer);
+      },
+    };
   }
 
   private async json(
@@ -371,17 +463,24 @@ export class BrowserClient {
     body?: string,
     signal?: AbortSignal,
   ): Promise<unknown> {
-    const response = await this.request(url, method, body, signal);
-    if (response.status === 204) return undefined;
-    let text = "";
-    for await (const line of lines(response, 2_097_152, 2_097_152)) {
-      text += line;
-    }
-    if (!text) return undefined;
+    const deadline = this.deadline(signal);
     try {
-      return JSON.parse(text) as unknown;
-    } catch {
-      throw new ClientError("Invalid JSON response");
+      const response = await this.request(url, method, body, deadline.signal);
+      if (response.status === 204) return undefined;
+      let text = "";
+      for await (const line of lines(response, 2_097_152, 2_097_152)) {
+        text += line;
+      }
+      if (!text) return undefined;
+      try {
+        return JSON.parse(text) as unknown;
+      } catch {
+        throw new ClientError("Invalid JSON response");
+      }
+    } catch (error) {
+      throw deadline.expired() ? timedOut() : error;
+    } finally {
+      deadline.clear();
     }
   }
 }

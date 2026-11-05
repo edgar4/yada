@@ -33,6 +33,43 @@ Import the functions from Yada's public entry point. Authentication must return 
 
 Optional `quota` limits run submissions and spend per tenant or actor; see [Operations](operations.md#tenant-quotas). Pass the same `quota` to `createHandler` and `createWorker`.
 
+## Changing settings at runtime
+
+A profile's `provider`, `limits` and `quota` can each be a value or a function, sync or async. That lets you change model, effort, pricing, quota and limits without a restart:
+
+```ts
+const profiles = {
+  support: {
+    system: "Help the customer.",
+    tools,
+    provider: async () => createProvider(await loadModelSettings()),
+    limits: async ({ identity }) => ({
+      pricing: await loadPricing(),
+      maxCostMicros: await loadBudget(identity.tenantId),
+    }),
+    quota: async () => ({
+      requests: { limit: await loadRequestLimit(), windowMs: 60_000 },
+    }),
+  },
+};
+const worker = createWorker({ storage, profiles });
+const handler = createHandler({ storage, profiles /* , ... */ });
+```
+
+Functions receive `{ identity, conversationId, runId, profileId, startedProvider? }` and are resolved once per run. **A run keeps the values it started with.** New settings apply to the next run, never to one in flight, including one waiting days for an approval.
+
+| Setting    | Resolved                    | Kept in                           | Across a restart or another worker |
+| ---------- | --------------------------- | --------------------------------- | ---------------------------------- |
+| `limits`   | When a worker first runs it | The durable run, pricing included | Kept                               |
+| `quota`    | When the handler admits it  | The stored job                    | Kept                               |
+| `provider` | When a worker first runs it | Memory on that worker             | Resolved again                     |
+
+An adapter can't be stored, so if a run moves to another process the `provider` function runs again with `startedProvider`, the name of the adapter the run started with. Return the same kind of adapter: a run resumed under a different adapter name fails with `retry_exhausted`. A changed model within the same adapter applies from that point on.
+
+If a function throws, the attempt is retried like any other failure, and the run fails once its retries are used up.
+
+A profile's `quota` replaces the shared `quota` option for that profile. To use it, pass `profiles` to `createHandler`, which does the admission. A handler without `profiles` ignores it. Values on the profile and getters keep working, and follow the same rules.
+
 On shutdown, stop accepting new requests, await `worker.stop()`, then close storage. Shutdown leaves active runs recoverable; user cancellation is a separate operation. Start one migration opener before scaling workers. SQLite uses one persistent local volume; PostgreSQL and MySQL support workers on multiple hosts with synchronized clocks.
 
 ## HTTP API
@@ -112,7 +149,7 @@ Errors are `{ "error": string }` with these statuses:
 | 415    | JSON endpoints require `Content-Type: application/json`                                                                                                                                        |
 | 503    | Temporary or unexpected failure; retry with backoff                                                                                                                                            |
 
-Event lines are JSON objects `{ version: 1, sequence, type, at }` plus optional `text`, `code`, `approvalId`, `expiresAt`, `tool`, `failed`, `inputTokens`, `outputTokens`. Types: `queued`, `running`, `progress`, `awaiting_approval`, `reconciling`, `completed`, `failed`, `cancelled`, `tool_started`, `tool_finished`, `usage`, `steering_received` and, only on a shared event bus, `text_delta`. Terminal types are `completed` (`text`), `failed` (`code`) and `cancelled`. `tests/fixtures/service-events.ndjson` holds a sample stream that the test suite validates against the event schema.
+Event lines are JSON objects `{ version: 1, sequence, type, at }` plus optional `text`, `code`, `approvalId`, `expiresAt`, `tool`, `failed`, `inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`, `serverToolCalls`. Types: `queued`, `running`, `progress`, `awaiting_approval`, `reconciling`, `completed`, `failed`, `cancelled`, `tool_started`, `tool_finished`, `usage`, `steering_received` and, only on a shared event bus, `text_delta`. Terminal types are `completed` (`text`), `failed` (`code`) and `cancelled`. `tests/fixtures/service-events.ndjson` holds a sample stream that the test suite validates against the event schema.
 
 Submit and follow a run:
 

@@ -138,10 +138,15 @@ for (const driver of drivers)
           },
         },
       });
-      await resumed.tick();
-      expect(
-        (await s.storage.jobs.load(s.identity, "chat", "one"))?.outcome,
-      ).toEqual({ status: "completed", text: "Recovered" });
+      await vi.waitFor(
+        async () => {
+          await resumed.tick();
+          expect(
+            (await s.storage.jobs.load(s.identity, "chat", "one"))?.outcome,
+          ).toEqual({ status: "completed", text: "Recovered" });
+        },
+        { timeout: 30_000, interval: 50 },
+      );
       await resumed.stop();
     }, 60_000);
 

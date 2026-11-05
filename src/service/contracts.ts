@@ -40,6 +40,14 @@ export const activityTypes = [
   "usage",
   "steering_received",
 ] as const;
+const tokenCount = z.number().int().nonnegative().optional();
+export const usageFieldsSchema = z.object({
+  inputTokens: tokenCount,
+  outputTokens: tokenCount,
+  cacheReadTokens: tokenCount,
+  cacheWriteTokens: tokenCount,
+  serverToolCalls: tokenCount,
+});
 export const eventSchema = z.strictObject({
   version: z.literal(1),
   sequence: z.number().int().positive(),
@@ -51,9 +59,21 @@ export const eventSchema = z.strictObject({
   expiresAt: z.number().optional(),
   tool: z.string().optional(),
   failed: z.boolean().optional(),
-  inputTokens: z.number().int().nonnegative().optional(),
-  outputTokens: z.number().int().nonnegative().optional(),
+  ...usageFieldsSchema.shape,
 });
+const quotaWindowSchema = z.object({
+  limit: z.number(),
+  windowMs: z.number(),
+});
+export const quotaSnapshotSchema = z.object({
+  requests: quotaWindowSchema.optional(),
+  costMicros: quotaWindowSchema.optional(),
+  scope: z.enum(["tenant", "actor"]).optional(),
+  globalCostMicros: quotaWindowSchema.optional(),
+  reserveCostMicros: z.number().optional(),
+  reservationTtlMs: z.number().optional(),
+});
+export type QuotaSnapshot = z.infer<typeof quotaSnapshotSchema>;
 export const jobSchema = jobInputSchema.extend({
   createdAt: z.number(),
   updatedAt: z.number(),

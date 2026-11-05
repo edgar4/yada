@@ -9,6 +9,9 @@ on:
         "scripts/check-pages.mjs",
         "scripts/check-seo.mjs",
         "scripts/render-social-card.mjs",
+        "scripts/build-bundle.mjs",
+        "src/client/**",
+        "src/widget/**",
         ".github/workflows/pages.yml",
         "package.json",
         "package-lock.json",
@@ -21,6 +24,9 @@ on:
         "scripts/check-pages.mjs",
         "scripts/check-seo.mjs",
         "scripts/render-social-card.mjs",
+        "scripts/build-bundle.mjs",
+        "src/client/**",
+        "src/widget/**",
         ".github/workflows/pages.yml",
         "package.json",
         "package-lock.json",
@@ -43,6 +49,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npx playwright install --only-shell chromium
       - run: mkdir -p work/site && cp -R site/. work/site/ && cp docs/*.md work/site/
+      - run: node scripts/build-bundle.mjs && cp dist/yada-widget.js work/site/assets/
       - uses: actions/jekyll-build-pages@v1
         with:
           source: work/site

@@ -12,6 +12,7 @@ import { runTree, type RememberScope } from "../storage/actions.js";
 import { actionExecutor } from "./actions.js";
 import { setTimeout as delay } from "node:timers/promises";
 import type {
+  Identity,
   ProviderAdapter,
   TerminalResult,
   Tool,
@@ -23,17 +24,23 @@ import { runTurns, type SummarizeOptions } from "../core/runtime.js";
 import { RunLeaseError, type RunOwnership } from "../storage/runs.js";
 import type { YadaStorage } from "../storage/index.js";
 import type { JobStore } from "../storage/jobs.js";
-import { isTerminal, type RunEvent } from "./contracts.js";
+import { isTerminal, usageFieldsSchema, type RunEvent } from "./contracts.js";
+import {
+  resolveSetting,
+  type ProfileSetting,
+  type RunContext,
+} from "./settings.js";
 import { resumeDecided } from "./recovery.js";
 import { settleRun, type QuotaOptions } from "./quota.js";
 import { eventKey, type EventBus } from "./events.js";
 import { webhookSender, type WebhookOptions } from "./webhooks.js";
 import { composeHooks, type AgentEvent, type RunHooks } from "../core/hooks.js";
 export type AgentProfile = Readonly<{
-  provider: ProviderAdapter;
+  provider: ProfileSetting<ProviderAdapter>;
   tools: readonly Tool[];
   system: string;
-  limits?: RunLimits;
+  limits?: ProfileSetting<RunLimits>;
+  quota?: ProfileSetting<QuotaOptions>;
   hooks?: RunHooks;
   historyChars?: number;
   historyToolChars?: number;
@@ -43,13 +50,18 @@ export type AgentProfile = Readonly<{
   timeoutMs?: number;
   summarize?: SummarizeOptions;
 }>;
+const maxAdapters = 4096;
+const usageEvent = (usage: unknown) => {
+  const fields = usageFieldsSchema.safeParse(usage).data;
+  return fields && { type: "usage" as const, ...fields };
+};
 const completeOnly = (provider: ProviderAdapter): ProviderAdapter => ({
   name: provider.name,
   capabilities: provider.capabilities,
   complete: (request) => provider.complete(request),
 });
 export type Trace = Readonly<{
-  event: "run_finished" | "run_retry";
+  event: "run_finished" | "run_retry" | "record_quarantined";
   status: string;
   elapsedMs: number;
   attempt?: number;
@@ -78,18 +90,64 @@ export function createWorker(options: {
   let scanning: Promise<{ done: Promise<unknown> }> | undefined;
   let loop: Promise<void> | undefined;
   const running = new Map<string, Promise<void>>();
+  const adapters = new Map<string, ProviderAdapter>();
   const concurrency = Math.max(1, options.concurrency ?? 4);
   const trace = (event: Trace) => {
     void Promise.resolve()
       .then(() => options.trace?.(event))
       .catch(() => undefined);
   };
+  const accrueCost = async (
+    identity: Identity,
+    runId: string,
+    quota: QuotaOptions | undefined,
+  ) => {
+    if (!quota) return;
+    const run = await options.storage.runs.load(identity, runId);
+    const pricing = run?.request.limits.pricing;
+    const usage = run?.checkpoint?.usage;
+    if ((!pricing || !usage) && quota.reserveCostMicros === undefined) return;
+    await settleRun(
+      options.storage.quota,
+      identity,
+      quota,
+      runId,
+      pricing && usage ? Math.ceil(usageCostMicros(pricing, usage)) : 0,
+    );
+  };
   async function schedule() {
     if (running.size >= concurrency) return { done: Promise.resolve() };
-    const page = await options.storage.jobs.pending(cursor, () => {
-      trace({ event: "run_retry", status: "corrupt_record", elapsedMs: 0 });
+    const started: Promise<unknown>[] = [];
+    const page = await options.storage.jobs.pending(cursor, (_, report) => {
+      trace({
+        event: "record_quarantined",
+        status: "corrupt_record",
+        elapsedMs: 0,
+      });
+      const { identity, conversationId } = report;
+      if (!identity || !conversationId) return;
+      for (const { runId, quota } of report.failed) {
+        notify?.({
+          type: "failed",
+          conversationId,
+          runId,
+          status: "failed",
+        });
+        trace({
+          event: "run_finished",
+          status: "failed",
+          code: "corrupt_record",
+          elapsedMs: 0,
+        });
+        started.push(
+          accrueCost(
+            identity,
+            JSON.stringify([conversationId, runId]),
+            (quota ?? options.quota) as QuotaOptions | undefined,
+          ).catch(() => undefined),
+        );
+      }
     });
-    const started: Promise<void>[] = [];
     let consumed = true;
     for (const entry of page.jobs) {
       if (shutdown.signal.aborted) break;
@@ -129,9 +187,11 @@ export function createWorker(options: {
     identity,
     conversationId,
     job,
+    quota: snapshot,
   }: Awaited<ReturnType<YadaStorage["jobs"]["pending"]>>["jobs"][number]) {
     const profile = options.profiles[job.profileId];
     if (!profile) return;
+    const quota = (snapshot ?? options.quota) as QuotaOptions | undefined;
     const started = Date.now();
     const cancellation = new AbortController();
     const runId = JSON.stringify([conversationId, job.id]);
@@ -193,7 +253,7 @@ export function createWorker(options: {
                 failed: event.failed,
               }
             : event.type === "model_finished" && event.usage
-              ? { type: "usage", ...event.usage }
+              ? usageEvent(event.usage)
               : undefined;
       if (!mapped) return;
       const updated = await updateJob(mapped, undefined, { runId, token });
@@ -239,20 +299,11 @@ export function createWorker(options: {
         ...(await counters()),
       });
     };
-    const accrueCost = async () => {
-      const { quota } = options;
-      if (!quota) return;
-      const pricing = profile.limits?.pricing;
-      const usage = (await runs.load(identity, runId))?.checkpoint?.usage;
-      if ((!pricing || !usage) && quota.reserveCostMicros === undefined) return;
-      await settleRun(
-        options.storage.quota,
-        identity,
-        quota,
-        runId,
-        pricing && usage ? Math.ceil(usageCostMicros(pricing, usage)) : 0,
-      );
-    };
+    const adapterKey = JSON.stringify([
+      identity.tenantId,
+      identity.actorId,
+      runId,
+    ]);
     const finalize = async (result: TerminalResult) => {
       const latest = await loadJob();
       const final: TerminalResult =
@@ -283,7 +334,8 @@ export function createWorker(options: {
         turns,
         summary,
       );
-      await accrueCost().catch(() => undefined);
+      adapters.delete(adapterKey);
+      await accrueCost(identity, runId, quota).catch(() => undefined);
       await traceFinished(
         final.status,
         final.status === "failed" ? final.code : undefined,
@@ -307,7 +359,8 @@ export function createWorker(options: {
           { status: "failed", code: "retry_exhausted" },
           lease ? owned() : undefined,
         );
-        await accrueCost().catch(() => undefined);
+        adapters.delete(adapterKey);
+        await accrueCost(identity, runId, quota).catch(() => undefined);
       } else
         await options.storage.jobs.retry(
           identity,
@@ -325,6 +378,27 @@ export function createWorker(options: {
     };
     try {
       await checkCancellation();
+      const stored = await runs.load(identity, runId);
+      const context: RunContext = {
+        identity,
+        conversationId,
+        runId: job.id,
+        profileId: job.profileId,
+        ...(stored ? { startedProvider: stored.request.provider } : {}),
+      };
+      const limits = stored
+        ? stored.request.limits
+        : await resolveSetting(profile.limits, context);
+      let adapter = adapters.get(adapterKey);
+      if (!adapter) {
+        adapter = await resolveSetting(profile.provider, context);
+        if (adapters.size >= maxAdapters)
+          for (const oldest of adapters.keys()) {
+            adapters.delete(oldest);
+            break;
+          }
+        adapters.set(adapterKey, adapter);
+      }
       const history = profile.summarize
         ? modelHistory(job.history)
         : contextWindow(
@@ -334,7 +408,8 @@ export function createWorker(options: {
           );
       const result = await runDurable({
         ...profile,
-        provider: bus ? profile.provider : completeOnly(profile.provider),
+        provider: bus ? adapter : completeOnly(adapter),
+        limits: limits ?? {},
         hooks: composeHooks(...(profile.hooks ? [profile.hooks] : []), {
           onEvent: (event) => {
             recording = recording.then(() => record(event)).catch(() => {});

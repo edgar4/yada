@@ -16,9 +16,16 @@ import {
   type Job,
   type RunEvent,
 } from "./contracts.js";
-import { admitRun, settleRun, type QuotaOptions } from "./quota.js";
+import {
+  admitRun,
+  quotaSnapshot,
+  settleRun,
+  type QuotaOptions,
+} from "./quota.js";
 import { eventKey, type EventBus } from "./events.js";
 import { resumeDecided } from "./recovery.js";
+import { resolveSetting } from "./settings.js";
+import type { AgentProfile } from "./worker.js";
 export async function readJson(
   request: Request,
   maximum = 65_536,
@@ -78,6 +85,7 @@ export function createHandler(options: {
   authorizeProfile: (identity: Identity, profileId: string) => Promise<boolean>;
   bus?: EventBus;
   quota?: QuotaOptions;
+  profiles?: Readonly<Record<string, Pick<AgentProfile, "quota">>>;
   limits?: HandlerLimits;
   rememberApprovals?: readonly RememberScope[];
   onError?: (error: unknown, request: Request) => void;
@@ -235,7 +243,6 @@ export function createHandler(options: {
         );
         if (!(await options.authorizeProfile(identity, input.profileId)))
           return json({ error: "Profile denied" }, 403);
-        const { quota } = options;
         const state = await options.storage.conversations.inspect(
           identity,
           conversationId,
@@ -243,7 +250,21 @@ export function createHandler(options: {
         );
         if (state.erased) throw new HttpError(410, "Conversation erased");
         const runKey = JSON.stringify([conversationId, input.id]);
-        const admitted = quota && !state.active && !state.submitted;
+        const fresh = !state.active && !state.submitted;
+        const resolved =
+          fresh &&
+          options.profiles &&
+          Object.hasOwn(options.profiles, input.profileId)
+            ? await resolveSetting(options.profiles[input.profileId]?.quota, {
+                identity,
+                conversationId,
+                runId: input.id,
+                profileId: input.profileId,
+              })
+            : undefined;
+        const snapshot = resolved && quotaSnapshot(resolved, input.profileId);
+        const quota = snapshot ?? options.quota;
+        const admitted = quota && fresh;
         if (admitted) {
           const denied = await admitRun(
             options.storage.quota,
@@ -256,7 +277,12 @@ export function createHandler(options: {
         }
         try {
           return json(
-            await options.storage.jobs.submit(identity, conversationId, input),
+            await options.storage.jobs.submit(
+              identity,
+              conversationId,
+              input,
+              snapshot && { quota: snapshot },
+            ),
             202,
           );
         } catch (error) {

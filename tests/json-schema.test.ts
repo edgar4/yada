@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/ajv-provider.js";
 import { mcpInvoker } from "../src/connectors/mcp/rpc.js";
 
 afterEach(() => vi.restoreAllMocks());
@@ -30,6 +31,23 @@ describe("MCP schema formats", () => {
       "Invalid MCP arguments",
     );
     expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("compiles uuid, date and email in Yada and the MCP SDK without noise", () => {
+    const spies = [
+      vi.spyOn(console, "warn"),
+      vi.spyOn(console, "error"),
+      vi.spyOn(console, "log"),
+    ];
+    const formats = ["uuid", "date", "email"];
+    for (const format of formats) invoker(format);
+    new AjvJsonSchemaValidator().getValidator({
+      type: "object",
+      properties: Object.fromEntries(
+        formats.map((format) => [format, { type: "string", format }]),
+      ),
+    });
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
   });
 
   it("ignores unknown custom formats quietly", () => {

@@ -9,6 +9,16 @@ export type QuotaOptions = Readonly<{
   reserveCostMicros?: number | ((profileId: string) => number);
   reservationTtlMs?: number;
 }>;
+export const quotaSnapshot = (quota: QuotaOptions, profileId: string) => {
+  const reserve =
+    typeof quota.reserveCostMicros === "function"
+      ? quota.reserveCostMicros(profileId)
+      : quota.reserveCostMicros;
+  return {
+    ...quota,
+    ...(reserve === undefined ? {} : { reserveCostMicros: reserve }),
+  } as QuotaOptions & { reserveCostMicros?: number };
+};
 const globalKey = JSON.stringify(["quota-global"]);
 export const quotaScopeKey = (identity: Identity, quota: QuotaOptions) =>
   JSON.stringify(
