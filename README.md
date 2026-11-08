@@ -1,6 +1,6 @@
 # Yada
 
-A plug-and-play AI agent harness for TypeScript backends. Bring any model, any MCP server and Agent Skills from Claude, Codex or Cursor; Yada runs the tool loop, asks before it acts, and picks up where it left off after a restart.
+An AI agent harness for TypeScript backends. Bring any model, any MCP server and Agent Skills from Claude, Codex or Cursor; Yada runs the tool loop, asks before it acts, and picks up where it left off after a restart.
 
 - **Any model:** Anthropic and OpenAI on their official SDKs, Gemini, DeepSeek, Ollama, llama.cpp or any OpenAI-compatible endpoint.
 - **Any tools:** typed tools, MCP servers (stdio or HTTP, OAuth), HTTP APIs, business databases and reusable `SKILL.md` skills.
@@ -10,7 +10,12 @@ A plug-and-play AI agent harness for TypeScript backends. Bring any model, any M
 
 ## Used by
 
-[Talon](https://talonhr.eu) uses Yada. Talon is hiring software that gives employers and recruitment agencies one shared workspace for roles, candidates, interviews and offers. Using Yada in production? Open a pull request to add your project here.
+- [Talon](https://talonhr.eu): hiring software that gives employers and recruitment agencies one shared workspace for roles, candidates, interviews and offers.
+- [Tinker Payments](https://www.tinkerpayments.com/): one dashboard for a business's payment providers, to track payments, investigate failed ones and match them to settlements.
+- [Nairobi Fashion Hub](https://app.nairobifashionhub.co.ke/): book models, designers, stylists and photographers in Kenya, and buy tickets to fashion events.
+- [Tinker Digital](https://withtinkerdigital.com/): integrations and software that connect legacy systems, payments and operations.
+
+Using Yada in production? Open a pull request to add your project here.
 
 ## Get started
 
