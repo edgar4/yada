@@ -3,7 +3,11 @@ import { z } from "zod";
 import { drivers, storageFixture } from "./helpers/storage.js";
 import { writeTool } from "../src/core/action.js";
 import { actionExecutor } from "../src/service/actions.js";
-import { operationId } from "../src/storage/actions.js";
+import {
+  actionSchema,
+  actionTransitions,
+  operationId,
+} from "../src/storage/actions.js";
 import { runDurable } from "../src/storage/durable-run.js";
 import { createFakeProvider } from "../src/providers/fake.js";
 import { createWorker } from "../src/service/worker.js";
@@ -27,6 +31,22 @@ function toolFixture() {
   return { execute, prepare, reconcile, authorize, tool };
 }
 const call = { id: "call", name: "rename", args: { name: "Ada" } };
+it("reaches every action status from pending and only ends in sinks", () => {
+  const reached = new Set(["pending"]);
+  for (const status of reached)
+    for (const next of actionTransitions[
+      status as keyof typeof actionTransitions
+    ])
+      reached.add(next);
+  expect([...reached].sort()).toEqual(
+    [...actionSchema.shape.status.options].sort(),
+  );
+  expect(
+    Object.entries(actionTransitions).every(
+      ([from, to]) => !to.includes(from as never),
+    ),
+  ).toBe(true);
+});
 for (const driver of drivers)
   describe(`${driver} durable actions`, () => {
     it("binds exact arguments and executes only once after explicit approval", async () => {

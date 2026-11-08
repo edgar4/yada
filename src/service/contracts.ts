@@ -34,7 +34,7 @@ const statusSchema = z.enum([
   "failed",
   "cancelled",
 ]);
-export const activityTypes = [
+const activityTypes = [
   "tool_started",
   "tool_finished",
   "usage",
@@ -93,8 +93,13 @@ export type JobInput = z.infer<typeof jobInputSchema>;
 export type Job = z.infer<typeof jobSchema>;
 export type RunEvent = z.infer<typeof eventSchema>;
 export { isTerminal } from "./terminal.js";
-export const isActivity = (type: string) =>
-  (activityTypes as readonly string[]).includes(type);
+export const isJobStatus = (type: string): type is Job["status"] =>
+  (statusSchema.options as readonly string[]).includes(type);
+export const awaitedApprovalId = (job: Pick<Job, "status" | "events">) =>
+  job.status === "awaiting_approval"
+    ? job.events.filter((event) => event.type === "awaiting_approval").at(-1)
+        ?.approvalId
+    : undefined;
 export class HttpError extends Error {
   constructor(
     readonly status: 400 | 404 | 409 | 410 | 415,

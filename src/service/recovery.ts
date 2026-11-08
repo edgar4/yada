@@ -1,6 +1,6 @@
 import type { Identity } from "../core/contracts.js";
 import type { YadaStorage } from "../storage/index.js";
-import type { Job } from "./contracts.js";
+import { awaitedApprovalId, type Job } from "./contracts.js";
 
 export async function resumeDecided(
   storage: YadaStorage,
@@ -8,11 +8,7 @@ export async function resumeDecided(
   conversationId: string,
   job: Job,
 ) {
-  const approvalId =
-    job.status === "awaiting_approval"
-      ? job.events.filter((item) => item.type === "awaiting_approval").at(-1)
-          ?.approvalId
-      : undefined;
+  const approvalId = awaitedApprovalId(job);
   if (
     !approvalId ||
     (await storage.actions.load(identity, approvalId))?.status === "pending"

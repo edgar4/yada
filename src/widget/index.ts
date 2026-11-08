@@ -155,6 +155,7 @@ export type WidgetOptions = Readonly<{
   ) => WidgetRendered;
 }>;
 export type WidgetState = "idle" | "running" | "awaiting-approval" | "error";
+type RunPhase = "idle" | "running" | "awaiting-approval" | "settling";
 export type WidgetRunDetail = Readonly<{
   conversationId: string;
   runId: string;
@@ -243,7 +244,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
     private controller: AbortController | undefined;
     private input: JobInput | undefined;
     private cursor = 0;
-    private active = false;
+    private phase: RunPhase = "idle";
     private readonly root = this.attachShadow({ mode: "open" });
     private readonly section = part("section", "root");
     private readonly header = part("header", "header");
@@ -284,7 +285,6 @@ export function defineYadaWidget(name = "yada-chat"): void {
     private readonly styleElements: HTMLStyleElement[] = [];
     private approvalId: string | undefined;
     private readonly steered = new Map<string, string>();
-    private settling = false;
     private unconfirmedSteer: { id: string; text: string } | undefined;
     private live: HTMLElement | undefined;
     private liveText = "";
@@ -337,7 +337,6 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.cancel.hidden = true;
       this.retry.type = "button";
       this.retry.hidden = true;
-      this.approval.hidden = true;
       this.approval.setAttribute("role", "group");
       this.remember.type = "checkbox";
       this.rememberLabel.append(this.remember, document.createTextNode(""));
@@ -534,7 +533,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
     }
 
     private sendText(text: string): void {
-      if (!this.options || this.settling || !text.trim()) return;
+      if (!this.options || this.phase === "settling" || !text.trim()) return;
       if (this.active) {
         this.setPrompt(text);
         void this.steerRun();
@@ -674,8 +673,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.cursor = 0;
       this.steered.clear();
       this.unconfirmedSteer = undefined;
-      this.settling = false;
-      this.active = false;
+      this.phase = "idle";
       this.disconnected = false;
       this.cancel.disabled = false;
       this.log.replaceChildren(this.empty);
@@ -684,7 +682,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.clearActivity();
       this.error.textContent = "";
       this.status.textContent = this.labels.ready;
-      this.approval.hidden = this.cancel.hidden = this.retry.hidden = true;
+      this.cancel.hidden = this.retry.hidden = true;
       this.update();
     }
 
@@ -707,7 +705,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       const controller = new AbortController();
       this.controller = controller;
       this.status.textContent = this.labels.loading;
-      this.active = true;
+      this.phase = "running";
       this.update();
       try {
         const job = await options.client.getRun(
@@ -723,7 +721,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
         this.appendMessage(contentText(job.input), "user");
         for (const message of job.steering)
           this.appendMessage(contentText(message.input), "user");
-        this.active = true;
+        this.phase = "running";
         this.update();
         void this.start(false, job);
       } catch (error) {
@@ -731,7 +729,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
           if (error instanceof ClientError && error.status === 404)
             this.reset();
           else {
-            this.active = false;
+            this.phase = "idle";
             this.status.textContent = this.labels.ready;
             this.setError(this.labels.loadFailed, "load");
           }
@@ -758,18 +756,22 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.controller?.abort();
     }
 
+    private get active(): boolean {
+      return this.phase === "running" || this.phase === "awaiting-approval";
+    }
+
     private update(): void {
       this.send.disabled = this.prompt.disabled =
-        !this.options || this.settling || (this.active && !this.input);
+        !this.options ||
+        this.phase === "settling" ||
+        (this.active && !this.input);
       this.cancel.hidden = !this.active || !this.input;
+      this.approval.hidden = this.phase !== "awaiting-approval";
       this.typing.hidden =
-        !this.active ||
-        this.disconnected ||
-        !this.approval.hidden ||
-        !!this.live;
+        this.phase !== "running" || this.disconnected || !!this.live;
       const state: WidgetState = this.disconnected
         ? "error"
-        : !this.approval.hidden
+        : this.phase === "awaiting-approval"
           ? "awaiting-approval"
           : this.active
             ? "running"
@@ -837,7 +839,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       this.controller = controller;
       const { client, conversationId } = this.options;
       const input = this.input;
-      this.active = true;
+      this.phase = "running";
       this.disconnected = false;
       this.cancel.disabled = false;
       this.error.textContent = "";
@@ -952,7 +954,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
           event.code,
         );
       if (event.text && !restore) this.appendMessage(event.text, "assistant");
-      this.approval.hidden = true;
+      if (this.phase === "awaiting-approval") this.phase = "running";
       this.update();
       if (
         event.type === "awaiting_approval" &&
@@ -970,8 +972,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
         this.showApproval(approval);
       }
       if (isFinished(event.type)) {
-        this.active = false;
-        this.settling = this.steered.size > 0;
+        this.phase = this.steered.size > 0 ? "settling" : "idle";
         this.update();
         this.prompt.focus();
         if (this.options && this.input)
@@ -1023,7 +1024,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
             approval.preview,
         );
       }
-      this.approval.hidden = false;
+      this.phase = "awaiting-approval";
       this.update();
       if (card) {
         const focusable = this.approval.querySelector<HTMLElement>(
@@ -1128,7 +1129,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
           this.cursor = event.sequence;
           await this.showEvent(event, controller.signal);
         }
-      this.settling = false;
+      if (this.phase === "settling") this.phase = "idle";
       this.restoreUnconsumed(job, text);
       this.update();
       return true;
@@ -1137,12 +1138,12 @@ export function defineYadaWidget(name = "yada-chat"): void {
     private async resendUnconsumed(controller: AbortController): Promise<void> {
       const { options, input } = this;
       if (!options || !input || !this.steered.size) return;
-      this.settling = true;
+      if (!this.active) this.phase = "settling";
       this.update();
       const job = await options.client
         .getRun(options.conversationId, input.id, controller.signal)
         .catch(() => undefined);
-      this.settling = false;
+      if (this.phase === "settling") this.phase = "idle";
       this.update();
       if (!this.isCurrent(controller)) return;
       if (!job) this.setError(this.labels.steerFailed, "steer");
@@ -1206,7 +1207,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
           this.approvalId !== approvalId
         )
           return;
-        this.approval.hidden = true;
+        this.phase = "running";
         this.update();
         this.status.textContent = approved
           ? this.labels.approved

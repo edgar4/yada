@@ -7,6 +7,7 @@ import {
 import type { Identity } from "../core/contracts.js";
 import { ToolCallError } from "../core/tool.js";
 import {
+  executedStatuses,
   operationId,
   undeliveredOutcome,
   unknownOutcome,
@@ -57,8 +58,7 @@ export function actionExecutor(
       JSON.stringify(state.args) !== JSON.stringify(call.args)
     )
       throw new Error("Action mismatch");
-    if (["completed", "unknown", "undelivered"].includes(state.status))
-      return state.receipt ?? "";
+    if (executedStatuses.includes(state.status)) return state.receipt ?? "";
     const unresolved = async (): Promise<string | Suspension> => {
       if (tool.reconcile) return { status: "reconciling", approvalId: id };
       await store.unknown(identity, id);

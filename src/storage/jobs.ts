@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { Identity, TerminalResult, Turn } from "../core/contracts.js";
 import {
-  isActivity,
+  awaitedApprovalId,
+  isJobStatus,
   isTerminal,
   jobInputSchema,
   jobSchema,
@@ -244,17 +245,17 @@ export function createJobStore(
     event: Omit<RunEvent, "version" | "sequence" | "at">,
   ) => {
     const previous = job.events.at(-1);
-    const activity = isActivity(event.type);
+    const status = isJobStatus(event.type) ? event.type : undefined;
     job.updatedAt = Date.now();
-    if (!activity) {
-      job.status = event.type as Job["status"];
+    if (status) {
+      job.status = status;
       job.availableAt =
         event.type === "awaiting_approval"
           ? (event.expiresAt ?? Date.now() + 600_000)
           : Date.now() + (event.type === "reconciling" ? 5000 : 0);
     }
     if (
-      !activity &&
+      status &&
       previous?.type === event.type &&
       previous.approvalId === event.approvalId &&
       previous.text === event.text &&
@@ -583,11 +584,7 @@ export function createJobStore(
     resume: (identity, conversationId, id, approvalId) =>
       records.mutate(conversationKey(identity, conversationId), (value) => {
         const { state, job } = jobIn(value, identity, conversationId, id);
-        const waiting =
-          job.status === "awaiting_approval" &&
-          job.events
-            .filter((event) => event.type === "awaiting_approval")
-            .at(-1)?.approvalId === approvalId;
+        const waiting = awaitedApprovalId(job) === approvalId;
         if (waiting) append(job, { type: "queued" });
         return finish(state, waiting);
       }),
