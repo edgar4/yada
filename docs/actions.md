@@ -18,6 +18,18 @@ Before execution, Yada rechecks authorization and prepared state. Duplicate deci
 
 Persist operation receipts in the system that owns the mutation. If the backend cannot resolve an ambiguous result, the run remains reconciling for operator investigation; do not retry it under a new operation ID. A new tool version or changed arguments require a new proposal. Do not implement writes through `readTool` or read-only MCP annotations.
 
+## Action lifecycle
+
+`actionTransitions` in `src/storage/actions.ts` is the only source of these moves; the store throws on any other.
+
+```
+pending ─┬─► approved ─┬─► executing ─┬─► completed
+         ├─► declined  └─► expired    ├─► unknown
+         └─► expired                  └─► undelivered
+```
+
+An action covered by a remembered approval starts at `approved`. `declined`, `expired`, `completed`, `unknown` and `undelivered` are final.
+
 ## Tool policy and confirmation
 
 `confirmTool(tool, { preview? })` wraps any `readTool`-shaped tool as a write tool, so it needs approval before each call. The preview defaults to the tool name and JSON arguments; pass `preview(args)` to customize it. Its version is the tool name plus a hash of its input schema.

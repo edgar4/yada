@@ -3,11 +3,12 @@ import { z } from "zod";
 import type { Identity } from "../core/contracts.js";
 import type { YadaStorage } from "../storage/index.js";
 import { elicitationTool, validElicitation } from "../core/action.js";
-import { ActionConflict } from "../storage/actions.js";
+import { ActionConflict, executedStatuses } from "../storage/actions.js";
 import { JobConflict } from "../storage/jobs.js";
 import { contentText } from "../core/content.js";
 import type { ConversationMessage } from "../storage/conversations.js";
 import {
+  awaitedApprovalId,
   HttpError,
   isTerminal,
   jobInputSchema,
@@ -329,21 +330,13 @@ export function createHandler(options: {
           }),
           await readJson(request),
         );
-        if (
-          job.status !== "awaiting_approval" ||
-          job.events.filter((item) => item.type === "awaiting_approval").at(-1)
-            ?.approvalId !== approvalId
-        ) {
+        if (awaitedApprovalId(job) !== approvalId) {
           const applied =
             action.status === "declined"
               ? !decision.approved
-              : [
-                  "approved",
-                  "executing",
-                  "completed",
-                  "unknown",
-                  "undelivered",
-                ].includes(action.status) && decision.approved;
+              : ["approved", "executing", ...executedStatuses].includes(
+                  action.status,
+                ) && decision.approved;
           if (applied) return json({ accepted: true }, 202);
           return json({ error: "Run is not awaiting this approval" }, 409);
         }

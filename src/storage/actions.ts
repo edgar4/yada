@@ -34,6 +34,24 @@ export const actionSchema = z.object({
   content: z.record(z.string(), z.unknown()).optional(),
 });
 export type Action = z.infer<typeof actionSchema>;
+export const actionTransitions: Readonly<
+  Record<Action["status"], readonly Action["status"][]>
+> = {
+  pending: ["approved", "declined", "expired"],
+  approved: ["executing", "expired"],
+  executing: ["completed", "unknown", "undelivered"],
+  declined: [],
+  expired: [],
+  completed: [],
+  unknown: [],
+  undelivered: [],
+};
+export const executedStatuses = actionTransitions.executing;
+function advance(state: Action, to: Action["status"]) {
+  if (!actionTransitions[state.status].includes(to))
+    throw new Error(`Invalid action transition ${state.status} -> ${to}`);
+  state.status = to;
+}
 export const operationId = (
   identity: Identity,
   runId: string,
@@ -177,13 +195,14 @@ export function createActionStore(
       records.mutate(key(identity, id), (value) => {
         const state = actionSchema.parse(value);
         if (state.status === "pending") {
-          state.status =
+          const next =
             state.expiresAt <= Date.now()
               ? "expired"
               : approved
                 ? "approved"
                 : "declined";
-          if (state.status === "approved" && content) state.content = content;
+          advance(state, next);
+          if (next === "approved" && content) state.content = content;
         } else if (state.status !== (approved ? "approved" : "declined"))
           throw new ActionConflict();
         return { value: state, result: state };
@@ -195,10 +214,10 @@ export function createActionStore(
           throw new RunLeaseError();
         if (state.status !== "approved") return { value: state, result: false };
         if (state.expiresAt <= Date.now()) {
-          state.status = "expired";
+          advance(state, "expired");
           return { value: state, result: false };
         }
-        state.status = "executing";
+        advance(state, "executing");
         return { value: state, result: true };
       };
       if (!ownership) return records.mutate(key(identity, id), change);
@@ -224,7 +243,7 @@ export function createActionStore(
         if (state.receipt !== undefined && state.receipt !== receipt)
           throw new Error("Receipt conflict");
         state.receipt = z.string().max(32_000).parse(receipt);
-        state.status = "completed";
+        if (state.status === "executing") advance(state, "completed");
         return { value: state, result: undefined };
       });
     },
@@ -232,7 +251,7 @@ export function createActionStore(
       await records.mutate(key(identity, id), (value) => {
         const state = actionSchema.parse(value);
         if (state.status === "executing") {
-          state.status = "unknown";
+          advance(state, "unknown");
           state.receipt = unknownOutcome;
         } else if (state.status !== "unknown")
           throw new Error("Action not executing");
@@ -246,7 +265,7 @@ export function createActionStore(
           return { value: state, result: undefined };
         if (state.status !== "executing")
           throw new Error("Action not executing");
-        state.status = "undelivered";
+        advance(state, "undelivered");
         state.receipt = undeliveredOutcome;
         return { value: state, result: undefined };
       });
