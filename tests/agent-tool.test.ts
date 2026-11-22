@@ -3,6 +3,8 @@ import { z } from "zod";
 import {
   agentTool,
   createFakeProvider,
+  researchSystem,
+  researchTool,
   readTool,
   run,
   writeTool,
@@ -168,5 +170,15 @@ describe("agentTool", () => {
         tools: [plain],
       }),
     ).toBeDefined();
+  });
+  it("builds a research sub-agent with a sourced-report prompt", async () => {
+    const sub = createFakeProvider(() => say("report"));
+    const tool = researchTool({ provider: sub });
+    expect(tool.spec.name).toBe("research");
+    const { provider, result } = parent(tool);
+    expect((await result).status).toBe("completed");
+    expect(sub.requests[0]?.system).toBe(researchSystem);
+    expect(sub.requests[0]?.tools).toEqual([]);
+    expect(toolContent(provider)).toContain("report");
   });
 });

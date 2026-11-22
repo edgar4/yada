@@ -75,6 +75,15 @@ export const contentText = (content: JobInput["input"]) =>
         )
         .join("\n");
 
+const sources = (value: unknown, what: string) => {
+  check(Array.isArray(value) && value.length <= 50, what);
+  for (const item of value as unknown[]) {
+    const { url, title } = obj(item, what, ["url", "title"]);
+    str(title, what, 512);
+    str(url, what, 2_048);
+    check(/^https?:$/.test(URL.parse(url as string)?.protocol ?? ""), what);
+  }
+};
 function content(value: unknown, what: string, limit: number) {
   if (typeof value === "string") {
     str(value, what, limit);
@@ -138,6 +147,9 @@ export function parseEvent(value: unknown): RunEvent {
   optional(record, "failed", (item) => {
     check(typeof item === "boolean", "run event");
   });
+  optional(record, "sources", (item) => {
+    sources(item, "run event");
+  });
   for (const key of [
     "inputTokens",
     "outputTokens",
@@ -168,6 +180,9 @@ export function parseJob(value: unknown): Job {
     str(item["role"], "job");
     if (item["role"] === "user" || item["role"] === "assistant")
       content(item["content"], "job", Infinity);
+    optional(item, "sources", (value) => {
+      sources(value, "job");
+    });
   }
   const steering = record["steering"] ?? [];
   check(Array.isArray(steering), "job");

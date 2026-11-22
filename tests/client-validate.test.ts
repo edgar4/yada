@@ -34,6 +34,26 @@ describe("client validation", () => {
     ).toBe("Look\n[image: image/png]");
   });
 
+  it("accepts http(s) sources and rejects other links", () => {
+    const source = { url: "https://a.example/", title: "A" };
+    const completed = { ...event, type: "completed", sources: [source] };
+    expect(parseEvent(completed).sources).toEqual([source]);
+    expect(
+      parseJob({
+        ...job,
+        history: [{ role: "assistant", content: "Hi", sources: [source] }],
+      }).history,
+    ).toHaveLength(1);
+    for (const sources of [
+      [{ url: "javascript:alert(1)", title: "x" }],
+      [{ ...source, extra: 1 }],
+      "x",
+    ])
+      expect(() => parseEvent({ ...completed, sources })).toThrow(
+        ValidationError,
+      );
+  });
+
   it("accepts content parts and rejects bad images and empty input", () => {
     const parse = (value: unknown) =>
       parseJobInput({ id: "a", profileId: "b", input: value });

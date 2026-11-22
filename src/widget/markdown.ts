@@ -1,6 +1,6 @@
 function inline(text: string): Node[] {
   const pattern =
-    /(`[^`\n]+`|\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\s][^*\n]*\*|_[^_\s][^_\n]*_)/;
+    /(`[^`\n]+`|\[[^\]\n]+\]\(https?:\/\/[^\s)]+\)|\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\s][^*\n]*\*|_[^_\s][^_\n]*_)/;
   return text.split(pattern).map((part, index) => {
     if (index % 2 === 0) return document.createTextNode(part);
     if (part.startsWith("`")) {
@@ -8,6 +8,15 @@ function inline(text: string): Node[] {
       code.setAttribute("part", "code");
       code.textContent = part.slice(1, -1);
       return code;
+    }
+    if (part.startsWith("[")) {
+      const split = part.lastIndexOf("](");
+      const link = document.createElement("a");
+      link.href = part.slice(split + 2, -1);
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.append(...inline(part.slice(1, split)));
+      return link;
     }
     const strong = part.startsWith("**") || part.startsWith("__");
     const node = document.createElement(strong ? "strong" : "em");

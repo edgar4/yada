@@ -66,10 +66,10 @@ const operationResponse = () => heldOperation;
 const cursors: string[] = [];
 const inputs: string[] = [];
 const streams = new Set<ServerResponse>();
-const finish = (type: string) => {
+const finish = (type: string, extra: object = {}) => {
   for (const response of streams)
     response.end(
-      `${JSON.stringify({ version: 1, sequence: 3, type, at: 1, text: reply })}\n`,
+      `${JSON.stringify({ version: 1, sequence: 3, type, at: 1, text: reply, ...extra })}\n`,
     );
   streams.clear();
 };
@@ -390,6 +390,42 @@ describe("browser widget", () => {
     expect(await assistant.locator("strong").first().textContent()).toBe(
       "Done",
     );
+  });
+  it("links cited sources and only http(s) Markdown links", async () => {
+    const page = await open();
+    const widget = await start(page);
+    await expect.poll(() => streams.size).toBeGreaterThan(0);
+    finish("completed", {
+      text: "See [A](https://a.example/) and [x](javascript:alert(1))",
+      sources: [
+        { url: "https://a.example/", title: "A" },
+        { url: "https://b.example/path", title: "" },
+      ],
+    });
+    const sources = widget.getByRole("list", { name: "Sources" });
+    await expect.poll(() => sources.count()).toBe(1);
+    const assistant = widget.locator(".assistant").last();
+    expect(
+      await assistant
+        .locator("p a")
+        .evaluateAll((links) =>
+          links.map((link) => [link.getAttribute("href"), link.textContent]),
+        ),
+    ).toEqual([["https://a.example/", "A"]]);
+    expect(
+      await sources
+        .getByRole("link")
+        .evaluateAll((links) =>
+          links.map((link) => [
+            link.getAttribute("href"),
+            link.textContent,
+            link.getAttribute("rel"),
+          ]),
+        ),
+    ).toEqual([
+      ["https://a.example/", "A", "noopener noreferrer"],
+      ["https://b.example/path", "b.example", "noopener noreferrer"],
+    ]);
   });
   it("isolates two host themes and passes accessibility checks before and during approval", async () => {
     const page = await open();

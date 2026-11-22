@@ -10,6 +10,7 @@ import { markdown } from "./markdown.js";
 import { safeUrl, sanitize } from "./sanitize.js";
 import { baseStyles, defaultStyles } from "./styles.js";
 import type { Approval } from "../client/index.js";
+import type { Source } from "../core/content.js";
 
 export { ClientError } from "../client/index.js";
 export { widgetExportParts, widgetParts, type WidgetPart } from "./parts.js";
@@ -53,6 +54,7 @@ const defaultLabels = {
   decisionFailed:
     "Approval decision failed. Reconnect to review its current status.",
   steerFailed: "Could not send your message. Try again.",
+  sources: "Sources",
   errorFailed: "The run failed.",
   errorCancelled: "The run was cancelled.",
   errorLimit: "The run stopped after reaching its usage limit.",
@@ -717,7 +719,11 @@ export function defineYadaWidget(name = "yada-chat"): void {
         this.input = { id: job.id, profileId: job.profileId, input: job.input };
         for (const turn of job.history)
           if (turn.role === "user" || turn.role === "assistant")
-            this.appendMessage(contentText(turn.content), turn.role);
+            this.appendMessage(
+              contentText(turn.content),
+              turn.role,
+              "sources" in turn ? (turn.sources as Source[]) : undefined,
+            );
         this.appendMessage(contentText(job.input), "user");
         for (const message of job.steering)
           this.appendMessage(contentText(message.input), "user");
@@ -814,7 +820,11 @@ export function defineYadaWidget(name = "yada-chat"): void {
       return this.controller === controller && !controller.signal.aborted;
     }
 
-    private appendMessage(text: string, role: "user" | "assistant"): void {
+    private appendMessage(
+      text: string,
+      role: "user" | "assistant",
+      sources?: readonly Source[],
+    ): void {
       this.empty.remove();
       const custom = this.messageContent(text, role, false);
       const bubble = part(
@@ -828,6 +838,24 @@ export function defineYadaWidget(name = "yada-chat"): void {
         speaker.textContent = this.labels.you;
         bubble.append(speaker, custom ?? text);
       } else bubble.append(custom ?? markdown(text));
+      const links = (sources ?? []).filter((source) =>
+        /^https?:$/.test(URL.parse(source.url)?.protocol ?? ""),
+      );
+      if (links.length) {
+        const list = part("ol", "sources", "sources");
+        list.setAttribute("aria-label", this.labels.sources);
+        for (const source of links) {
+          const link = part("a", "source");
+          link.href = source.url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = source.title || new URL(source.url).hostname;
+          const item = document.createElement("li");
+          item.append(link);
+          list.append(item);
+        }
+        bubble.append(list);
+      }
       this.log.append(bubble);
       this.log.scrollTop = this.log.scrollHeight;
     }
@@ -953,7 +981,8 @@ export function defineYadaWidget(name = "yada-chat"): void {
           event.type === "failed" ? "run" : undefined,
           event.code,
         );
-      if (event.text && !restore) this.appendMessage(event.text, "assistant");
+      if (event.text && !restore)
+        this.appendMessage(event.text, "assistant", event.sources);
       if (this.phase === "awaiting-approval") this.phase = "running";
       this.update();
       if (

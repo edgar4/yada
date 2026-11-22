@@ -7,6 +7,7 @@ export type { Span, Tracer } from "./core/telemetry.js";
 export { readTool, ToolCallError } from "./core/tool.js";
 export type { ToolCallDelivery, ToolCallErrorCode } from "./core/tool.js";
 export { agentTool } from "./core/agent-tool.js";
+export { researchTool, researchSystem } from "./core/research.js";
 export { httpReadTool, reviewedOpenApiGet } from "./connectors/http.js";
 export { createReadDatabase } from "./connectors/database.js";
 export type { ReadDatabaseConfig } from "./connectors/database.js";
@@ -24,7 +25,7 @@ export type {
 } from "./core/action.js";
 export { confirmTool, applyToolPolicy } from "./core/policy.js";
 export type { ToolPolicy } from "./core/policy.js";
-export { contentText } from "./core/content.js";
+export { contentText, sourcesOf, type Source } from "./core/content.js";
 export { contextWindow } from "./core/limits.js";
 export type { RunLimits } from "./core/limits.js";
 

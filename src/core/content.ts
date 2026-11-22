@@ -76,3 +76,26 @@ export async function mapText(
     );
   return parts;
 }
+export type Source = Readonly<{ url: string; title: string }>;
+export const sourceSchema = z.strictObject({
+  url: z.url({ protocol: /^https?$/ }).max(2_048),
+  title: z.string().max(512),
+});
+export const uniqueSources = (sources: readonly Source[]) =>
+  sources.filter(
+    (source, index) =>
+      sources.findIndex((other) => other.url === source.url) === index,
+  );
+export const sourcesOf = (turns: readonly Turn[]): Source[] =>
+  uniqueSources(
+    turns.flatMap((turn) => {
+      if (turn.role !== "assistant") return [];
+      const sources = turn.providerMetadata?.data["sources"];
+      return Array.isArray(sources)
+        ? sources.flatMap((source) => {
+            const parsed = sourceSchema.safeParse(source);
+            return parsed.success ? [parsed.data] : [];
+          })
+        : [];
+    }),
+  ).slice(0, 50);

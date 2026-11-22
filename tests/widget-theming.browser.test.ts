@@ -346,6 +346,7 @@ describe("parts and state", () => {
               type: "completed",
               at: 1,
               text: "**a** `code`\n```\nblock\n```",
+              sources: [{ url: "https://a.example/", title: "A" }],
             },
           ],
         },

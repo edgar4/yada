@@ -125,6 +125,7 @@ Part names are public API under semver: removing or renaming one is a breaking c
 | `message`                               | Every message. Each also has `user` or `assistant` |
 | `user`, `assistant`                     | Messages by sender                                 |
 | `code`, `code-block`                    | Code in assistant replies                          |
+| `sources`, `source`                     | Cited sources under a reply and each link          |
 | `activity`                              | Tool activity from `renderActivity`                |
 | `typing`, `typing-avatar`, `typing-dot` | The typing indicator                               |
 | `status`                                | The visually hidden status line                    |

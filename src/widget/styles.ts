@@ -87,6 +87,8 @@ h2 { font:var(--yada-title-font,inherit); font-size:var(--yada-title-size,1.0667
 .assistant p { white-space:pre-wrap; }
 .assistant ul, .assistant ol { padding-left:1.25em; }
 .assistant li + li { margin-top:.25em; }
+.assistant .sources { margin-top:.6em; padding-top:.5em; padding-left:1.4em; border-top:1px solid color-mix(in srgb,currentColor 15%,transparent); font-size:.875em; }
+.assistant .sources a { color:inherit; overflow-wrap:anywhere; }
 .assistant code { font-family:var(--_code-font); font-size:.9em; padding:1px 5px; border-radius:var(--_code-radius); background:var(--_code-background); }
 .assistant pre.code { font-family:var(--_code-font); font-size:.875em; padding:10px 12px; border-radius:var(--_code-block-radius); background:var(--_code-background); overflow:auto; white-space:pre; }
 .log .user { align-self:flex-end; color:var(--yada-user-bubble-color,var(--_button-color)); background:var(--yada-user-bubble-background,var(--_accent)); border-bottom-right-radius:var(--_bubble-tail-radius); }

@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vitest";
+import { z } from "zod";
 import { once } from "node:events";
 import { createHmac } from "node:crypto";
 import { createServer } from "node:http";
@@ -7,6 +8,7 @@ import { createHandler } from "../src/service/http.js";
 import { closeNodeServer, createNodeServer } from "../src/service/node.js";
 import { createWorker } from "../src/service/worker.js";
 import { createFakeProvider } from "../src/providers/fake.js";
+import { readTool } from "../src/core/tool.js";
 import { operationId } from "../src/storage/actions.js";
 import { openDatabase } from "../src/storage/database.js";
 import { recordStore } from "../src/storage/records.js";
@@ -434,4 +436,64 @@ it("reports not ready when the schema is behind", async () => {
   });
   await db.destroy();
   expect((await s.call("/readyz")).status).toBe(503);
+});
+
+it("returns cited sources with the answer and conversation history", async () => {
+  const s = await setup();
+  const meta = (sources: unknown) => ({
+    provider: "fake",
+    data: { sources },
+  });
+  const a = { url: "https://a.example/", title: "A" };
+  const b = { url: "https://b.example/", title: "B" };
+  const worker = createWorker({
+    storage: s.storage,
+    profiles: {
+      v1: {
+        provider: createFakeProvider((_request, round) =>
+          round === 1
+            ? {
+                content: "",
+                toolCalls: [{ id: "c1", name: "lookup", args: {} }],
+                finishReason: "tool_calls",
+                providerMetadata: meta([a]),
+              }
+            : {
+                content: "Answer",
+                toolCalls: [],
+                finishReason: "stop",
+                providerMetadata: meta([
+                  a,
+                  b,
+                  { url: "javascript:alert(1)", title: "x" },
+                ]),
+              },
+        ),
+        tools: [
+          readTool({
+            name: "lookup",
+            description: "d",
+            input: z.strictObject({}),
+            authorize: () => Promise.resolve(true),
+            execute: () => Promise.resolve("ok"),
+          }),
+        ],
+        system: "Help",
+      },
+    },
+  });
+  await s.submit("a");
+  await worker.tick();
+  const job = await s.storage.jobs.load(s.identity, "chat", "a");
+  expect(job?.events.at(-1)).toMatchObject({
+    type: "completed",
+    sources: [a, b],
+  });
+  const conversation = (await (
+    await s.call("/v1/conversations/chat")
+  ).json()) as { messages: unknown[] };
+  expect(conversation.messages).toEqual([
+    { role: "user", content: "Hi" },
+    { role: "assistant", content: "Answer", sources: [a, b] },
+  ]);
 });
