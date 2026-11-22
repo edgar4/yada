@@ -181,4 +181,24 @@ describe("agentTool", () => {
     expect(sub.requests[0]?.tools).toEqual([]);
     expect(toolContent(provider)).toContain("report");
   });
+  it("appends the sub-agent's cited sources to its report", async () => {
+    const sub = createFakeProvider(() => ({
+      ...say("report"),
+      providerMetadata: {
+        provider: "fake",
+        data: {
+          sources: [
+            { url: "https://a.example/", title: "A [x]" },
+            { url: "https://user:pw@evil.example/", title: "bad" },
+          ],
+        },
+      },
+    }));
+    const { provider, result } = parent(researchTool({ provider: sub }));
+    expect((await result).status).toBe("completed");
+    expect(JSON.parse(toolContent(provider))).toMatchObject({
+      content: "report\n\nSources:\n- [A x](https://a.example/)",
+      sources: [{ url: "https://a.example/", title: "A [x]" }],
+    });
+  });
 });

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { Content, ContentPart, Turn } from "./contracts.js";
+import type { Content, ContentPart, Source, Turn } from "./contracts.js";
+export type { Source };
 export const imageTypes = [
   "image/png",
   "image/jpeg",
@@ -76,9 +77,11 @@ export async function mapText(
     );
   return parts;
 }
-export type Source = Readonly<{ url: string; title: string }>;
 export const sourceSchema = z.strictObject({
-  url: z.url({ protocol: /^https?$/ }).max(2_048),
+  url: z
+    .url({ protocol: /^https?$/ })
+    .max(2_048)
+    .refine((url) => !new URL(url).username && !new URL(url).password),
   title: z.string().max(512),
 });
 export const uniqueSources = (sources: readonly Source[]) =>
@@ -89,8 +92,12 @@ export const uniqueSources = (sources: readonly Source[]) =>
 export const sourcesOf = (turns: readonly Turn[]): Source[] =>
   uniqueSources(
     turns.flatMap((turn) => {
-      if (turn.role !== "assistant") return [];
-      const sources = turn.providerMetadata?.data["sources"];
+      const sources =
+        turn.role === "assistant"
+          ? turn.providerMetadata?.data["sources"]
+          : turn.role === "tool"
+            ? turn.sources
+            : undefined;
       return Array.isArray(sources)
         ? sources.flatMap((source) => {
             const parsed = sourceSchema.safeParse(source);

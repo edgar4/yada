@@ -63,10 +63,12 @@ type VisibleMessage = {
 const visibleMessages = (messages: readonly ConversationMessage[]) => {
   let turns: Turn[] = [];
   return messages.flatMap((message): VisibleMessage[] => {
-    if (message.role === "failure") return [message];
+    if (message.role === "failure") {
+      turns = [];
+      return [message];
+    }
     if (message.role === "summary") return [];
-    if (message.role === "user") turns = [];
-    else turns.push(message);
+    if (message.role !== "user") turns.push(message);
     if (
       message.role === "tool" ||
       (message.role === "assistant" && message.toolCalls.length) ||
@@ -74,6 +76,7 @@ const visibleMessages = (messages: readonly ConversationMessage[]) => {
     )
       return [];
     const sources = message.role === "assistant" ? sourcesOf(turns) : [];
+    if (message.role === "assistant") turns = [];
     return [
       {
         role: message.role,

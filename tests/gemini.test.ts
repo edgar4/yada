@@ -100,6 +100,7 @@ describe("request mapping", () => {
         },
         { googleSearch: {} },
       ],
+      toolConfig: { includeServerSideToolInvocations: true },
       contents: [
         {
           role: "user",
@@ -474,6 +475,9 @@ describe("errors", () => {
         { codeExecution: {} },
       ]);
       expect(calls[0]?.body["tools"]).toHaveLength(3);
+      expect(calls[0]?.body["toolConfig"]).toEqual({
+        includeServerSideToolInvocations: true,
+      });
       expect(result).toMatchObject({
         content: "Answer",
         toolCalls: [],

@@ -396,7 +396,7 @@ describe("browser widget", () => {
     const widget = await start(page);
     await expect.poll(() => streams.size).toBeGreaterThan(0);
     finish("completed", {
-      text: "See [A](https://a.example/) and [x](javascript:alert(1))",
+      text: "See snake_case [A](https://a.example/a_b) and [[2]](https://w.example/Foo_(bar)) and [x](javascript:alert(1))",
       sources: [
         { url: "https://a.example/", title: "A" },
         { url: "https://b.example/path", title: "" },
@@ -411,7 +411,10 @@ describe("browser widget", () => {
         .evaluateAll((links) =>
           links.map((link) => [link.getAttribute("href"), link.textContent]),
         ),
-    ).toEqual([["https://a.example/", "A"]]);
+    ).toEqual([
+      ["https://a.example/a_b", "A"],
+      ["https://w.example/Foo_(bar)", "[2]"],
+    ]);
     expect(
       await sources
         .getByRole("link")

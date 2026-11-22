@@ -6,7 +6,7 @@ import {
   type RunEvent,
 } from "../client/index.js";
 import { contentText } from "../client/validate.js";
-import { markdown } from "./markdown.js";
+import { externalLink, markdown } from "./markdown.js";
 import { safeUrl, sanitize } from "./sanitize.js";
 import { baseStyles, defaultStyles } from "./styles.js";
 import type { Approval } from "../client/index.js";
@@ -839,17 +839,15 @@ export function defineYadaWidget(name = "yada-chat"): void {
         bubble.append(speaker, custom ?? text);
       } else bubble.append(custom ?? markdown(text));
       const links = (sources ?? []).filter((source) =>
-        /^https?:$/.test(URL.parse(source.url)?.protocol ?? ""),
+        /^https?:\/\//i.test(source.url),
       );
       if (links.length) {
         const list = part("ol", "sources", "sources");
         list.setAttribute("aria-label", this.labels.sources);
         for (const source of links) {
-          const link = part("a", "source");
-          link.href = source.url;
-          link.target = "_blank";
-          link.rel = "noopener noreferrer";
-          link.textContent = source.title || new URL(source.url).hostname;
+          const link = externalLink(source.url);
+          link.setAttribute("part", "source");
+          link.textContent = source.title || link.hostname;
           const item = document.createElement("li");
           item.append(link);
           list.append(item);

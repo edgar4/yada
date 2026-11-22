@@ -290,6 +290,10 @@ export function nativeGeminiAdapter(settings: GeminiSettings): ProviderAdapter {
         temperature: settings.temperature,
       }),
       ...(tools.length && { tools }),
+      ...(request.tools.length &&
+        settings.serverTools?.length && {
+          toolConfig: { includeServerSideToolInvocations: true },
+        }),
       ...(settings.effort && {
         thinkingConfig: {
           thinkingLevel: (settings.effort === "low" ||

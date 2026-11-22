@@ -1,5 +1,12 @@
 import { z } from "zod";
-import type { Identity, ProviderAdapter, ReadTool, Tool } from "./contracts.js";
+import type {
+  Identity,
+  ProviderAdapter,
+  ReadTool,
+  Tool,
+  Turn,
+} from "./contracts.js";
+import { sourcesOf } from "./content.js";
 import { composeHooks, type RunHooks } from "./hooks.js";
 import type { RunLimits } from "./limits.js";
 import { Suspended } from "./action.js";
@@ -59,7 +66,8 @@ export function agentTool(options: {
         ...(options.hooks ? { hooks: options.hooks } : {}),
       };
       const nested = toolRun?.runChild;
-      const { result, usage } = nested
+      let messages: readonly Turn[] = [];
+      const { result, usage, sources } = nested
         ? await nested(child)
         : {
             result: await run({
@@ -71,8 +79,13 @@ export function agentTool(options: {
                   return undefined;
                 },
               }),
+              persist: (checkpoint) => {
+                messages = checkpoint.messages;
+                return Promise.resolve();
+              },
             }),
             usage: undefined,
+            sources: undefined,
           };
       signal.throwIfAborted();
       const suspended =
@@ -80,7 +93,13 @@ export function agentTool(options: {
         result.status === "reconciling";
       if (!suspended) toolRun?.addUsage(usage);
       if (suspended) throw new Suspended(result);
-      if (result.status === "completed") return result.text;
+      const cited = sources ?? sourcesOf(messages);
+      if (result.status === "completed" && cited.length)
+        toolRun?.addSources?.(cited);
+      if (result.status === "completed")
+        return cited.length
+          ? `${result.text}\n\nSources:\n${cited.map((source) => `- [${source.title.replace(/[[\]]/g, "") || new URL(source.url).hostname}](${source.url})`).join("\n")}`
+          : result.text;
       return JSON.stringify({
         error: "agent_failed",
         message:

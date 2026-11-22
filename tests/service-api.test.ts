@@ -497,3 +497,47 @@ it("returns cited sources with the answer and conversation history", async () =>
     { role: "assistant", content: "Answer", sources: [a, b] },
   ]);
 });
+
+it("keeps sources cited before a steering message with the final answer", async () => {
+  const s = await setup();
+  const a = { url: "https://a.example/", title: "A" };
+  const b = { url: "https://b.example/", title: "B" };
+  const meta = (source: typeof a) => ({
+    provider: "fake",
+    data: { sources: [source] },
+  });
+  await s.storage.conversations.save(
+    s.identity,
+    "chat",
+    [
+      { role: "user", content: "Hi" },
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [{ id: "c1", name: "lookup", args: {} }],
+        providerMetadata: meta(a),
+      },
+      { role: "tool", toolCallId: "c1", name: "lookup", content: "ok" },
+      { role: "user", content: "Also check B" },
+      {
+        role: "assistant",
+        content: "Answer",
+        toolCalls: [],
+        providerMetadata: meta(b),
+      },
+      { role: "user", content: "Thanks" },
+      { role: "assistant", content: "Welcome", toolCalls: [] },
+    ],
+    0,
+  );
+  const conversation = (await (
+    await s.call("/v1/conversations/chat")
+  ).json()) as { messages: unknown[] };
+  expect(conversation.messages).toEqual([
+    { role: "user", content: "Hi" },
+    { role: "user", content: "Also check B" },
+    { role: "assistant", content: "Answer", sources: [a, b] },
+    { role: "user", content: "Thanks" },
+    { role: "assistant", content: "Welcome" },
+  ]);
+});

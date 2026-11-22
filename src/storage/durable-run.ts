@@ -5,6 +5,7 @@ import { RunLeaseError, subRunId, type RunStore } from "./runs.js";
 import { scopedExecutor, type Suspension } from "../core/action.js";
 import type { ChildRun, RunResult } from "../core/contracts.js";
 import { CheckpointError } from "../core/checkpoint.js";
+import { sourcesOf } from "../core/content.js";
 export async function runDurable(
   options: Omit<Parameters<typeof run>[0], "checkpoint" | "persist"> & {
     runId: string;
@@ -88,9 +89,13 @@ export async function runDurable(
               ? { executeWrite: scopedExecutor(executeWrite, call.id) }
               : {}),
           });
-          const usage = (await store.load(options.identity, childId))
-            ?.checkpoint?.usage;
-          return { result, usage: usage as ChildRun["usage"] };
+          const checkpoint = (await store.load(options.identity, childId))
+            ?.checkpoint;
+          return {
+            result,
+            usage: checkpoint?.usage as ChildRun["usage"],
+            sources: sourcesOf(checkpoint?.messages ?? []),
+          };
         } catch (error) {
           if (error instanceof RunLeaseError) throw new CheckpointError();
           throw error;

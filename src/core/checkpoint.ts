@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { failureCodes } from "./contracts.js";
-import { contentSchema } from "./content.js";
+import { contentSchema, sourceSchema } from "./content.js";
 export const summaryPrefix = "[summary of earlier conversation]\n";
 export const feedbackPrefix = "[output validation failed]\n";
 const call = z.object({
@@ -25,12 +25,18 @@ export const turnSchema = z.discriminatedUnion("role", [
       ...rest,
       ...(providerMetadata ? { providerMetadata } : {}),
     })),
-  z.object({
-    role: z.literal("tool"),
-    toolCallId: z.string(),
-    name: z.string(),
-    content: contentSchema,
-  }),
+  z
+    .object({
+      role: z.literal("tool"),
+      toolCallId: z.string(),
+      name: z.string(),
+      content: contentSchema,
+      sources: z.array(sourceSchema).optional(),
+    })
+    .transform(({ sources, ...rest }) => ({
+      ...rest,
+      ...(sources ? { sources } : {}),
+    })),
 ]);
 export const runResultSchema = z.discriminatedUnion("status", [
   z.object({

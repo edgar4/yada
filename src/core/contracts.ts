@@ -1,6 +1,7 @@
 import type { WriteTool, Suspension, Ask } from "./action.js";
 import type { RunLimits } from "./limits.js";
 import type { RunOptions } from "./runtime.js";
+export type Source = Readonly<{ url: string; title: string }>;
 export type ProviderMetadata = Readonly<{
   provider: string;
   data: Record<string, unknown>;
@@ -27,6 +28,7 @@ export type Turn =
       toolCallId: string;
       name: string;
       content: Content;
+      sources?: readonly Source[];
     }>;
 export type ToolSpec = Readonly<{
   name: string;
@@ -81,6 +83,7 @@ export interface ReadTool {
 export type ToolRun = Readonly<{
   ask?: Ask;
   addUsage: (usage: ProviderResult["usage"]) => void;
+  addSources?: (sources: readonly Source[]) => void;
   maxOutput: number;
   limits?: RunLimits;
   remainingCostMicros?: number | undefined;
@@ -89,6 +92,7 @@ export type ToolRun = Readonly<{
 export type ChildRun = Readonly<{
   result: RunResult;
   usage: ProviderResult["usage"];
+  sources?: readonly Source[];
 }>;
 export type Tool = ReadTool | WriteTool;
 export const failureCodes = [

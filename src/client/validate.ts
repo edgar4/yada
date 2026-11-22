@@ -81,7 +81,7 @@ const sources = (value: unknown, what: string) => {
     const { url, title } = obj(item, what, ["url", "title"]);
     str(title, what, 512);
     str(url, what, 2_048);
-    check(/^https?:$/.test(URL.parse(url as string)?.protocol ?? ""), what);
+    check(/^https?:\/\/[^\s]+$/i.test(url as string), what);
   }
 };
 function content(value: unknown, what: string, limit: number) {
