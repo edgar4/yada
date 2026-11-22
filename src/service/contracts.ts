@@ -3,6 +3,7 @@ import {
   contentSchema,
   maxImageChars,
   maxImages,
+  maxSources,
   sourceSchema,
 } from "../core/content.js";
 import { runResultSchema } from "../core/checkpoint.js";
@@ -64,7 +65,7 @@ export const eventSchema = z.strictObject({
   expiresAt: z.number().optional(),
   tool: z.string().optional(),
   failed: z.boolean().optional(),
-  sources: z.array(sourceSchema).max(50).optional(),
+  sources: z.array(sourceSchema).max(maxSources).optional(),
   ...usageFieldsSchema.shape,
 });
 const quotaWindowSchema = z.object({

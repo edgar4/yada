@@ -96,10 +96,12 @@ export type WidgetMessage = Readonly<{
   role: "user" | "assistant";
   text: string;
   streaming: boolean;
+  sources: readonly Source[];
 }>;
 export type WidgetRenderHelpers = Readonly<{
   markdown: (text: string) => DocumentFragment;
   text: (text: string) => Text;
+  sources: (sources: readonly Source[]) => Node;
 }>;
 export type WidgetApprovalActions = Readonly<{
   approve: (options?: Readonly<{ remember?: boolean }>) => void;
@@ -482,7 +484,26 @@ export function defineYadaWidget(name = "yada-chat"): void {
     private helpers: WidgetRenderHelpers = {
       markdown,
       text: (text) => document.createTextNode(text),
+      sources: (sources) => this.sourceList(sources),
     };
+
+    private sourceList(sources: readonly Source[]): Node {
+      const links = sources.filter((source) =>
+        /^https?:\/\//i.test(source.url),
+      );
+      if (!links.length) return document.createDocumentFragment();
+      const list = part("ol", "sources", "sources");
+      list.setAttribute("aria-label", this.labels.sources);
+      for (const source of links) {
+        const link = externalLink(source.url);
+        link.setAttribute("part", "source");
+        link.textContent = source.title || link.hostname;
+        const item = document.createElement("li");
+        item.append(link);
+        list.append(item);
+      }
+      return list;
+    }
 
     private rendered(build: () => WidgetRendered): Node | undefined {
       try {
@@ -506,11 +527,14 @@ export function defineYadaWidget(name = "yada-chat"): void {
       text: string,
       role: "user" | "assistant",
       streaming: boolean,
+      sources: readonly Source[] = [],
     ): Node | undefined {
       const render = this.options?.renderMessage;
       return (
         render &&
-        this.rendered(() => render({ role, text, streaming }, this.helpers))
+        this.rendered(() =>
+          render({ role, text, streaming, sources }, this.helpers),
+        )
       );
     }
 
@@ -826,7 +850,7 @@ export function defineYadaWidget(name = "yada-chat"): void {
       sources?: readonly Source[],
     ): void {
       this.empty.remove();
-      const custom = this.messageContent(text, role, false);
+      const custom = this.messageContent(text, role, false, sources);
       const bubble = part(
         role === "user" && !custom ? "p" : "div",
         `message ${role}`,
@@ -837,23 +861,11 @@ export function defineYadaWidget(name = "yada-chat"): void {
         speaker.className = "speaker visually-hidden";
         speaker.textContent = this.labels.you;
         bubble.append(speaker, custom ?? text);
-      } else bubble.append(custom ?? markdown(text));
-      const links = (sources ?? []).filter((source) =>
-        /^https?:\/\//i.test(source.url),
-      );
-      if (links.length) {
-        const list = part("ol", "sources", "sources");
-        list.setAttribute("aria-label", this.labels.sources);
-        for (const source of links) {
-          const link = externalLink(source.url);
-          link.setAttribute("part", "source");
-          link.textContent = source.title || link.hostname;
-          const item = document.createElement("li");
-          item.append(link);
-          list.append(item);
-        }
-        bubble.append(list);
-      }
+      } else
+        bubble.append(
+          custom ?? markdown(text),
+          ...(custom ? [] : [this.sourceList(sources ?? [])]),
+        );
       this.log.append(bubble);
       this.log.scrollTop = this.log.scrollHeight;
     }

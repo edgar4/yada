@@ -9,6 +9,26 @@ const env = {
   YADA_LLM_API_KEY: "provider-secret",
 };
 
+it("moves hosted web search to the research sub-agent", () => {
+  expect(starterConfigFromEnv(env)).toMatchObject({
+    provider: { provider: "anthropic", serverTools: [] },
+    researchProvider: { provider: "anthropic" },
+  });
+  expect(
+    starterConfigFromEnv({
+      ...env,
+      YADA_LLM_SERVER_TOOLS: "web_search,code_execution",
+    }).provider,
+  ).toMatchObject({ serverTools: ["code_execution"] });
+  for (const extra of [
+    { YADA_LLM_SERVER_TOOLS: "none" },
+    { YADA_LLM_PROVIDER: "ollama", YADA_LLM_MODEL: "m", YADA_LLM_API_KEY: "" },
+  ])
+    expect(
+      starterConfigFromEnv({ ...env, ...extra }).researchProvider,
+    ).toBeUndefined();
+});
+
 it("accepts an omitted or empty password without a separate auth setting", () => {
   expect(
     starterConfigFromEnv({ ...env, YADA_STARTER_PASSWORD: undefined }).password,

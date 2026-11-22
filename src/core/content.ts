@@ -81,14 +81,26 @@ export const sourceSchema = z.strictObject({
   url: z
     .url({ protocol: /^https?$/ })
     .max(2_048)
-    .refine((url) => !new URL(url).username && !new URL(url).password),
+    .refine((url) => {
+      const parsed = URL.parse(url);
+      return !!parsed && !parsed.username && !parsed.password;
+    }),
   title: z.string().max(512),
 });
-export const uniqueSources = (sources: readonly Source[]) =>
-  sources.filter(
-    (source, index) =>
-      sources.findIndex((other) => other.url === source.url) === index,
-  );
+export const maxSources = 20;
+const sourceKeys = ({ url, title }: Source) => [
+  url,
+  `${URL.parse(url)?.host ?? ""} ${title}`,
+];
+export const uniqueSources = (sources: readonly Source[]) => {
+  const seen = new Set<string>();
+  return sources.filter((source) => {
+    const keys = sourceKeys(source).slice(0, source.title ? 2 : 1);
+    if (keys.some((key) => seen.has(key))) return false;
+    for (const key of keys) seen.add(key);
+    return true;
+  });
+};
 export const sourcesOf = (turns: readonly Turn[]): Source[] =>
   uniqueSources(
     turns.flatMap((turn) => {
@@ -105,4 +117,4 @@ export const sourcesOf = (turns: readonly Turn[]): Source[] =>
           })
         : [];
     }),
-  ).slice(0, 50);
+  ).slice(0, maxSources);

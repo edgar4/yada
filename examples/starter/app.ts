@@ -4,6 +4,7 @@ import {
   createProvider,
   createWorker,
   loadSkills,
+  researchTool,
   reconnectingMcp,
   type McpConnection,
   type ProviderAdapter,
@@ -23,6 +24,7 @@ export async function createStarterApp(options: {
   storage: YadaStorage;
   assets: StarterAssets;
   provider?: ProviderAdapter;
+  researchProvider?: ProviderAdapter;
 }) {
   const { config, storage } = options;
   const auth = createStarterAuth({
@@ -38,6 +40,9 @@ export async function createStarterApp(options: {
     );
   try {
     const provider = options.provider ?? createProvider(config.provider);
+    const researchProvider =
+      options.researchProvider ??
+      (config.researchProvider && createProvider(config.researchProvider));
     for (const server of config.servers)
       connections.push(
         await reconnectingMcp((signal) =>
@@ -59,13 +64,15 @@ export async function createStarterApp(options: {
           provider,
           tools: [
             ...starterTools(starterIdentity),
+            ...(researchProvider
+              ? [researchTool({ provider: researchProvider, authorize: owns })]
+              : []),
             ...skills.tools,
             ...connections.flatMap((connection) => connection.tools),
           ],
           system:
-            "You are Yada, a helpful assistant for the signed-in user. Use the available tools when needed. Explain approval requests clearly. Never claim an action succeeded without its tool result." +
+            "You are Yada, a helpful assistant for the signed-in user. Use the available tools when needed, and the research tool for questions that need current or external information; keep its source links in your answer. Explain approval requests clearly. Never claim an action succeeded without its tool result." +
             (skills.system ? "\n" + skills.system : ""),
-          timeoutMs: 60_000,
         },
       },
     });

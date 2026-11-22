@@ -76,7 +76,7 @@ export const contentText = (content: JobInput["input"]) =>
         .join("\n");
 
 const sources = (value: unknown, what: string) => {
-  check(Array.isArray(value) && value.length <= 50, what);
+  check(Array.isArray(value) && value.length <= 20, what);
   for (const item of value as unknown[]) {
     const { url, title } = obj(item, what, ["url", "title"]);
     str(title, what, 512);
