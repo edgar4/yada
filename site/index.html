@@ -202,6 +202,36 @@ description: "Yada is a free, open-source AI agent harness for Node.js. Connect 
     </div>
   </section>
 
+  <section
+    class="terminal-demo section wrap"
+    id="terminal"
+    aria-labelledby="terminal-title"
+  >
+    <div class="section-heading centered">
+      <h2 id="terminal-title">Code in your terminal</h2>
+      <p>
+        <code>yada</code> is also a coding agent. It reads, searches and edits
+        code and runs commands, asking before each change. This recording
+        installs it and adds a function; the model's replies are scripted.
+      </p>
+    </div>
+    <figure class="demo">
+      <img
+        src="{{ '/assets/demo/yada-terminal.gif' | relative_url }}"
+        width="1200"
+        height="780"
+        alt="A terminal installs yada with curl, then yada lists and reads src/math.ts, shows a diff adding a multiply function, asks to allow the edit and a check command, and reports the change."
+      />
+      <figcaption>
+        <code>curl -fsSL https://yada.edgar.co.ke/install.sh | sh</code>, or
+        Homebrew, WinGet and npm.
+        <a href="{{ '/terminal.html' | relative_url }}"
+          >Terminal guide <span aria-hidden="true">→</span></a
+        >
+      </figcaption>
+    </figure>
+  </section>
+
   <section class="section wrap" id="used-by" aria-labelledby="used-by-title">
     <div class="docs-heading">
       <h2 id="used-by-title">Also running on Yada</h2>

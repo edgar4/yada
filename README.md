@@ -29,6 +29,8 @@ curl -fsSL https://yada.edgar.co.ke/install.sh | sh
 
 On Windows, `irm https://yada.edgar.co.ke/install.ps1 | iex`. Homebrew, WinGet and npm work too. A coding agent that reads, searches and edits code and runs commands, asking first. See the [terminal guide](docs/terminal.md).
 
+![yada installs with curl, then edits a file after showing the diff and asking for approval](site/assets/demo/yada-terminal.gif)
+
 ### Start a new agent app
 
 Generate a complete app with storage, skills, typed tools and the chat widget:
