@@ -27,9 +27,13 @@ All on Node 24 or newer.
 curl -fsSL https://yada.edgar.co.ke/install.sh | sh
 ```
 
-On Windows, `irm https://yada.edgar.co.ke/install.ps1 | iex`. Homebrew, WinGet and npm work too. A coding agent that reads, searches and edits code and runs commands, asking first. See the [terminal guide](docs/terminal.md).
+On Windows, `irm https://yada.edgar.co.ke/install.ps1 | iex`. Homebrew, WinGet and npm work too.
+
+Tell yada what you want changed. It finds the code, writes the diff and checks its own work, then waits for your yes. Open source, and it runs on any model you bring. See the [terminal guide](docs/terminal.md).
 
 ![yada installs with curl, then edits a file after showing the diff and asking for approval](site/assets/demo/yada-terminal.gif)
+
+_The model's replies in this demo are scripted._
 
 ### Start a new agent app
 
