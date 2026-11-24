@@ -32,6 +32,16 @@ jobs:
       - uses: ./.github/actions/setup
       - run: npm run demo
       - run: npm run test:package
+  binary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - uses: oven-sh/setup-bun@v2
+      - run: shellcheck site/install.sh
+      - run: bun scripts/build-binaries.mjs linux-x64
+      - run: dist-bin/yada-linux-x64/yada --version
+      - run: dist-bin/yada-linux-x64/yada --help | grep -q 'Usage. yada'
   storage:
     runs-on: ubuntu-latest
     services:

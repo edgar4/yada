@@ -24,11 +24,10 @@ All on Node 24 or newer.
 ### Code in your terminal
 
 ```sh
-npm install -g @edgaralochi/yada ink react
-yada
+curl -fsSL https://yada.edgar.co.ke/install.sh | sh
 ```
 
-A coding agent that reads, searches and edits code and runs commands, asking first. See the [terminal guide](docs/terminal.md).
+On Windows, `irm https://yada.edgar.co.ke/install.ps1 | iex`. Homebrew, WinGet and npm work too. A coding agent that reads, searches and edits code and runs commands, asking first. See the [terminal guide](docs/terminal.md).
 
 ### Start a new agent app
 
