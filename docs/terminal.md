@@ -1,3 +1,9 @@
+---
+layout: doc
+title: "Terminal coding agent"
+description: "Install yada with curl, PowerShell, Homebrew, WinGet or npm and use it to read, edit and run code in your terminal, with approvals, sessions and undo."
+---
+
 # Terminal coding agent
 
 `yada` is also a coding agent for your terminal. It reads, searches and edits code and runs commands in the current directory, and it asks before it changes anything.

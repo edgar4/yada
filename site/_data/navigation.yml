@@ -2,6 +2,8 @@
   pages:
     - title: Starter app
       url: /starter.html
+    - title: Terminal coding agent
+      url: /terminal.html
     - title: Provider configuration
       url: /configuration.html
     - title: Runtime architecture
