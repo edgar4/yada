@@ -1,24 +1,24 @@
 #!/usr/bin/env node
 import { createStarter, runCommand } from "./init.js";
 import { qualifyMcp, qualifyUsage } from "./qualify-mcp.js";
+import { codingUsage, startCoding } from "./coding.js";
 
 const usage =
-  "Usage: yada init [directory] [--no-install]\nCreates a new standalone agent (default directory: yada-agent).\n" +
+  codingUsage +
+  "\n\nUsage: yada init [directory] [--no-install]\nCreates a new standalone agent (default directory: yada-agent).\n" +
   qualifyUsage;
 try {
   const args = process.argv.slice(2);
-  if (
-    args.length === 0 ||
-    (args.length === 1 && ["--help", "-h"].includes(args[0] ?? ""))
-  ) {
+  if (args.length === 1 && ["--help", "-h"].includes(args[0] ?? "")) {
     console.log(usage);
+  } else if (args[0] !== "init" && args[0] !== "qualify-mcp") {
+    process.exitCode = await startCoding(args);
   } else if (args[0] === "qualify-mcp") {
     process.exitCode = await qualifyMcp(args.slice(1));
   } else {
-    const [command, ...rest] = args;
+    const rest = args.slice(1);
     const positional = rest.filter((arg) => !arg.startsWith("-"));
     if (
-      command !== "init" ||
       positional.length > 1 ||
       rest.some((arg) => arg.startsWith("-") && arg !== "--no-install") ||
       rest.filter((arg) => arg === "--no-install").length > 1

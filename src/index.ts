@@ -40,3 +40,4 @@ export * from "./entries/storage.js";
 export * from "./entries/service.js";
 export { memoryTools, retrievalTool } from "./core/memory.js";
 export type { Retriever } from "./core/memory.js";
+export * from "./entries/coding.js";

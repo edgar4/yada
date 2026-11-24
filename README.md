@@ -19,7 +19,16 @@ Using Yada in production? Open a pull request to add your project here.
 
 ## Get started
 
-Two ways in, both on Node 24 or newer.
+All on Node 24 or newer.
+
+### Code in your terminal
+
+```sh
+npm install -g @edgaralochi/yada ink react
+yada
+```
+
+A coding agent that reads, searches and edits code and runs commands, asking first. See the [terminal guide](docs/terminal.md).
 
 ### Start a new agent app
 
@@ -38,7 +47,7 @@ Set your provider credentials in `.env`, then run `npm start`. See the [starter 
 npm install @edgaralochi/yada
 ```
 
-Import the runtime from `@edgaralochi/yada`, the browser client from `@edgaralochi/yada/client` and the widget from `@edgaralochi/yada/widget` (or the prebuilt `@edgaralochi/yada/widget.js` script). Narrower entry points are `/providers`, `/storage`, `/mcp`, `/skills`, `/service`, `/langchain`, `/otel` and `/evals`; the root exports all of them.
+Import the runtime from `@edgaralochi/yada`, the browser client from `@edgaralochi/yada/client` and the widget from `@edgaralochi/yada/widget` (or the prebuilt `@edgaralochi/yada/widget.js` script). Narrower entry points are `/providers`, `/storage`, `/mcp`, `/skills`, `/coding`, `/service`, `/langchain`, `/otel` and `/evals`; the root exports all of them.
 
 The core and the Anthropic and OpenAI-compatible providers need nothing else. Install only what you use:
 
@@ -91,6 +100,7 @@ Using a feature without its package fails with an error naming what to install. 
 | Topic                                         | Guide                                                                 |
 | --------------------------------------------- | --------------------------------------------------------------------- |
 | Runtime, limits and termination               | [Architecture](docs/architecture.md)                                  |
+| Coding agent in the terminal                  | [Terminal](docs/terminal.md)                                          |
 | External tool servers                         | [MCP](docs/mcp.md), [MCP OAuth](docs/mcp-oauth.md)                    |
 | Reusable skills                               | [Skills](docs/skills.md)                                              |
 | HTTP APIs and databases                       | [Connectors](docs/connectors.md)                                      |
