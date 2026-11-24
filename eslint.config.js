@@ -37,6 +37,7 @@ export default ts.config(
         console: "readonly",
         Buffer: "readonly",
         AbortSignal: "readonly",
+        Bun: "readonly",
       },
     },
   },

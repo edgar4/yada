@@ -1,14 +1,26 @@
+---
+layout: doc
+title: "Terminal coding agent"
+description: "Install yada with curl, PowerShell, Homebrew, WinGet or npm and use it to read, edit and run code in your terminal, with approvals, sessions and undo."
+---
+
 # Terminal coding agent
 
 `yada` is also a coding agent for your terminal. It reads, searches and edits code and runs commands in the current directory, and it asks before it changes anything.
 
 ## Install and configure
 
-```sh
-npm install -g @edgaralochi/yada ink react
-```
+| System         | Command                                                |
+| -------------- | ------------------------------------------------------ |
+| macOS, Linux   | `curl -fsSL https://yada.edgar.co.ke/install.sh \| sh` |
+| Windows        | `irm https://yada.edgar.co.ke/install.ps1 \| iex`      |
+| Homebrew       | `brew tap edgar4/yada && brew install yada`            |
+| WinGet         | `winget install EdgarAlochi.Yada`                      |
+| npm (Node 24+) | `npm install -g @edgaralochi/yada ink react`           |
 
-`ink` and `react` are optional. Without them, `yada` uses the line interface.
+The installers download a single native binary from the GitHub release and check it against the release's `SHA256SUMS`. The curl script installs to `~/.local/bin` and the PowerShell script to `%LOCALAPPDATA%\Programs\yada`, adding it to your PATH. Set `YADA_INSTALL_DIR` to change the directory, and pin a version with `sh -s -- 0.6.0` or `$env:YADA_VERSION = "0.6.0"`. Homebrew and WinGet upgrade it for you; with the scripts, run them again.
+
+With npm, `ink` and `react` are optional. Without them, `yada` uses the line interface. The native binaries include them.
 
 Set the model with the usual settings, in the environment or in `~/.yada/.env`:
 
@@ -98,3 +110,12 @@ await agent.send("Add a test for parseConfig", AbortSignal.timeout(600_000));
 ```
 
 `edit_file`, `write_file` and `bash` are write tools, so in `run()` they go through `executeWrite` like any other approved action.
+
+## Publishing the binaries
+
+Pushing a `v*` tag builds the binaries with Bun for macOS, Linux and Windows on x64 and arm64 (Windows x64 only), runs each one on its own system, and attaches them with `SHA256SUMS` to the release, creating a draft if needed. Publishing the release then updates Homebrew and WinGet:
+
+- **Homebrew:** set the repository variable `HOMEBREW_TAP` (for example `edgar4/homebrew-yada`) and the secret `HOMEBREW_TAP_KEY`, the private half of a deploy key with write access to that repository.
+- **WinGet:** submit the first version by hand with `wingetcreate new`, then set the variable `WINGET_IDENTIFIER` (for example `EdgarAlochi.Yada`) and the secret `WINGET_TOKEN`, a classic token with `public_repo` scope from an account with a fork of `microsoft/winget-pkgs`.
+
+Each step is skipped until its variable is set. Build locally with `bun scripts/build-binaries.mjs [targets]`.

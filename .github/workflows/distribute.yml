@@ -1,0 +1,47 @@
+name: Distribute
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, e.g. v0.6.0
+        required: true
+permissions:
+  contents: read
+env:
+  TAG: ${{ inputs.tag || github.event.release.tag_name }}
+jobs:
+  homebrew:
+    if: vars.HOMEBREW_TAP != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.HOMEBREW_TAP }}
+          ssh-key: ${{ secrets.HOMEBREW_TAP_KEY }}
+          path: tap
+      - name: Update the formula
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS
+          mkdir -p tap/Formula
+          node scripts/homebrew-formula.mjs "${TAG#v}" SHA256SUMS > tap/Formula/yada.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/yada.rb
+          git diff --cached --quiet || git commit -m "yada ${TAG#v}"
+          git push
+  winget:
+    if: vars.WINGET_IDENTIFIER != ''
+    runs-on: windows-latest
+    steps:
+      - uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: ${{ vars.WINGET_IDENTIFIER }}
+          release-tag: ${{ env.TAG }}
+          installers-regex: 'windows-x64\.zip$'
+          token: ${{ secrets.WINGET_TOKEN }}

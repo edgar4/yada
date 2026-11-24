@@ -121,6 +121,12 @@ it.each([["--help"], ["-h"]])(
   },
 );
 
+it("prints the version", async () => {
+  const root = await fixture();
+  const { stdout } = await cli(root, ["--version"]);
+  expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
+});
+
 it.each([
   ["--unknown"],
   ["init", "--force"],

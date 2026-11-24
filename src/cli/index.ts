@@ -2,6 +2,7 @@
 import { createStarter, runCommand } from "./init.js";
 import { qualifyMcp, qualifyUsage } from "./qualify-mcp.js";
 import { codingUsage, startCoding } from "./coding.js";
+import { readFile } from "node:fs/promises";
 
 const usage =
   codingUsage +
@@ -11,6 +12,20 @@ try {
   const args = process.argv.slice(2);
   if (args.length === 1 && ["--help", "-h"].includes(args[0] ?? "")) {
     console.log(usage);
+  } else if (args.length === 1 && ["--version", "-v"].includes(args[0] ?? "")) {
+    console.log(
+      process.env.YADA_BUILD_VERSION ??
+        (
+          JSON.parse(
+            await readFile(
+              new URL("../../package.json", import.meta.url),
+              "utf8",
+            ),
+          ) as { version: string }
+        ).version,
+    );
+  } else if (args[0] === "init" && process.env.YADA_BUILD_VERSION) {
+    throw new Error("Create a new agent app with: npx @edgaralochi/yada init");
   } else if (args[0] !== "init" && args[0] !== "qualify-mcp") {
     process.exitCode = await startCoding(args);
   } else if (args[0] === "qualify-mcp") {
