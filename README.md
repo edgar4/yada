@@ -148,6 +148,12 @@ export YADA_TEST_POSTGRES_URL=postgres://postgres:yada-test@127.0.0.1:55432/yada
 export YADA_TEST_MYSQL_URL=mysql://root:yada-test@127.0.0.1:53306/yada_test
 ```
 
+## Upgrading from 0.5
+
+- Running `yada` with no arguments now starts the [terminal coding agent](docs/terminal.md) instead of printing help. Use `yada --help` for help; `yada init` and `yada qualify-mcp` are unchanged.
+- Completed service events and assistant conversation messages can carry `sources` (`{ url, title }[]`). Validate or ignore the new field if you parse them strictly.
+- The action store throws on status changes outside the [action lifecycle](docs/actions.md#action-lifecycle).
+
 ## Upgrading from 0.4
 
 - The widget has a new default look: monochrome, with Yada's changing face in the header and on the empty screen, a single-line input and an icon send button. The title now defaults to "Yada". Set `avatar: false`, `composer`, `labels.title` and the `--yada-*` variables to change these, or `unstyled` to drop the styles.
