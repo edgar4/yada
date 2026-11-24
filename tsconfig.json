@@ -12,6 +12,7 @@
     "noUnusedParameters": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
+    "jsx": "react-jsx",
     "paths": {
       "@edgaralochi/yada": ["./src/index.ts"],
       "@edgaralochi/yada/client": ["./src/client/index.ts"],

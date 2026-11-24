@@ -41,13 +41,16 @@
     "@playwright/test": "1.64.1",
     "@types/better-sqlite3": "9.6.0",
     "@types/node": "26.6.6",
+    "@types/react": "19.3.1",
     "@vitest/coverage-v8": "5.0.5",
     "better-sqlite3": "13.0.3",
     "esbuild": "0.28.2",
     "eslint": "10.14.0",
+    "ink": "8.0.0",
     "mysql2": "3.24.6",
     "pg": "8.23.1",
     "prettier": "3.9.10",
+    "react": "19.3.1",
     "tsx": "4.23.15",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.1",
@@ -103,6 +106,10 @@
     "./otel": {
       "types": "./dist/entries/otel.d.ts",
       "import": "./dist/entries/otel.js"
+    },
+    "./coding": {
+      "types": "./dist/entries/coding.d.ts",
+      "import": "./dist/entries/coding.js"
     }
   },
   "files": [
@@ -150,8 +157,10 @@
     "@langchain/core": "^1.3.2",
     "@opentelemetry/api": "^1.9.1",
     "better-sqlite3": "^13.0.3",
+    "ink": "^8.0.0",
     "mysql2": "^3.24.6",
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "react": "^19.3.1"
   },
   "peerDependenciesMeta": {
     "@google/genai": {
@@ -166,10 +175,16 @@
     "better-sqlite3": {
       "optional": true
     },
+    "ink": {
+      "optional": true
+    },
     "mysql2": {
       "optional": true
     },
     "pg": {
+      "optional": true
+    },
+    "react": {
       "optional": true
     }
   }

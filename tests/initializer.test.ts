@@ -111,7 +111,7 @@ it("removes only the newly created directory if scaffolding fails", async () => 
   expect(await readdir(root)).toEqual(["keep.txt"]);
 });
 
-it.each([[], ["--help"], ["-h"]])(
+it.each([["--help"], ["-h"]])(
   "prints help without creating files: %j",
   async (...args) => {
     const root = await fixture();
@@ -122,13 +122,13 @@ it.each([[], ["--help"], ["-h"]])(
 );
 
 it.each([
-  ["unknown"],
+  ["--unknown"],
   ["init", "--force"],
   ["init", "a", "b"],
   ["init", "--no-install", "--no-install"],
 ])("rejects invalid arguments without changing files: %j", async (...args) => {
   const root = await fixture();
-  await expect(cli(root, args)).rejects.toThrow("Usage: yada init");
+  await expect(cli(root, args)).rejects.toThrow("Usage: yada");
   expect(await readdir(root)).toEqual([]);
 });
 

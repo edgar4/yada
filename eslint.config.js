@@ -5,7 +5,7 @@ export default ts.config(
   js.configs.recommended,
   ...ts.configs.strictTypeChecked,
   {
-    files: ["**/*.ts"],
+    files: ["**/*.{ts,tsx}"],
     languageOptions: {
       parserOptions: {
         projectService: true,
