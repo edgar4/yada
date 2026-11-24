@@ -398,6 +398,16 @@
   --wrap: 1320px;
   padding-top: 0;
 }
+.terminal-demo {
+  --wrap: 1000px;
+  padding-top: 0;
+}
+.demo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--ink-deep);
+}
 .demo-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
