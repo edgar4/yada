@@ -15,6 +15,8 @@ export const widgetParts = [
   "assistant",
   "code",
   "code-block",
+  "sources",
+  "source",
   "activity",
   "typing",
   "typing-avatar",

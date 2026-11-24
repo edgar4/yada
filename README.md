@@ -159,7 +159,7 @@ export YADA_TEST_MYSQL_URL=mysql://root:yada-test@127.0.0.1:53306/yada_test
 - `@langchain/google-genai`, `@langchain/anthropic` and `@langchain/openai` are no longer used; Anthropic and OpenAI-compatible providers run on the official SDKs.
 - `ReadTool.execute` returns `Content` (a string or an array of text and image parts) instead of `string`.
 - Hosted `openai` always uses the Responses API; the `api` option and `YADA_LLM_OPENAI_API` are removed.
-- Provider-hosted web search is on by default for `anthropic`, `openai` and `gemini` and is billed by the provider; set `YADA_LLM_SERVER_TOOLS=none` to turn it off.
+- Provider-hosted web search is on by default for `anthropic`, `openai` and `gemini` and is billed by the provider; set `YADA_LLM_SERVER_TOOLS=none` to turn it off. Cited sources are listed under each answer, and `researchTool` adds a research sub-agent that searches several sources and returns a cited report; see [sub-agents](docs/architecture.md#sub-agents).
 - Every provider accepts every model setting and ignores ones it has no equivalent for (Anthropic ignores `temperature`; use `effort`).
 - `chatModelAdapter` moved to `@edgaralochi/yada/langchain`, and `otelTracer` is only exported from `@edgaralochi/yada/otel`.
 - Storage writes use a new encryption envelope with key ids (`v1` records stay readable) and an indexed `active` column; stop older Yada versions before upgrading, since they cannot read new records. Set `YADA_STORAGE_PREVIOUS_KEYS` to rotate keys without downtime.

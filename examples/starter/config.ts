@@ -48,9 +48,21 @@ export function starterConfigFromEnv(
       });
     throw error;
   }
+  const serverTools = ("serverTools" in provider && provider.serverTools) || [
+    "web_search",
+  ];
+  const research =
+    ["anthropic", "openai", "gemini"].includes(provider.provider) &&
+    serverTools.includes("web_search");
   return {
     ...result.data,
-    provider,
+    provider: research
+      ? {
+          ...provider,
+          serverTools: serverTools.filter((tool) => tool !== "web_search"),
+        }
+      : provider,
+    researchProvider: research ? provider : undefined,
     storage: storageConfigFromEnv({
       ...env,
       YADA_STORAGE_FILE: env["YADA_STORAGE_FILE"] ?? "work/starter/yada.sqlite",

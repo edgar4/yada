@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { Content, ContentPart, Turn } from "./contracts.js";
+import type { Content, ContentPart, Source, Turn } from "./contracts.js";
+export type { Source };
 export const imageTypes = [
   "image/png",
   "image/jpeg",
@@ -76,3 +77,44 @@ export async function mapText(
     );
   return parts;
 }
+export const sourceSchema = z.strictObject({
+  url: z
+    .url({ protocol: /^https?$/ })
+    .max(2_048)
+    .refine((url) => {
+      const parsed = URL.parse(url);
+      return !!parsed && !parsed.username && !parsed.password;
+    }),
+  title: z.string().max(512),
+});
+export const maxSources = 20;
+const sourceKeys = ({ url, title }: Source) => [
+  url,
+  `${URL.parse(url)?.host ?? ""} ${title}`,
+];
+export const uniqueSources = (sources: readonly Source[]) => {
+  const seen = new Set<string>();
+  return sources.filter((source) => {
+    const keys = sourceKeys(source).slice(0, source.title ? 2 : 1);
+    if (keys.some((key) => seen.has(key))) return false;
+    for (const key of keys) seen.add(key);
+    return true;
+  });
+};
+export const sourcesOf = (turns: readonly Turn[]): Source[] =>
+  uniqueSources(
+    turns.flatMap((turn) => {
+      const sources =
+        turn.role === "assistant"
+          ? turn.providerMetadata?.data["sources"]
+          : turn.role === "tool"
+            ? turn.sources
+            : undefined;
+      return Array.isArray(sources)
+        ? sources.flatMap((source) => {
+            const parsed = sourceSchema.safeParse(source);
+            return parsed.success ? [parsed.data] : [];
+          })
+        : [];
+    }),
+  ).slice(0, maxSources);

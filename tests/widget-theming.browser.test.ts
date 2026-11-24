@@ -346,6 +346,7 @@ describe("parts and state", () => {
               type: "completed",
               at: 1,
               text: "**a** `code`\n```\nblock\n```",
+              sources: [{ url: "https://a.example/", title: "A" }],
             },
           ],
         },
@@ -711,6 +712,46 @@ describe("hooks", () => {
     expect(await link.getAttribute("onclick")).toBeNull();
     await link.click();
     expect(await page.evaluate(() => window.compromised)).toBeUndefined();
+  });
+
+  it("hands cited sources to a message hook", async () => {
+    const page = await open();
+    await page.evaluate(() =>
+      make(
+        {
+          renderMessage: (message, helpers) => {
+            const box = document.createElement("div");
+            box.className = "custom";
+            box.append(
+              helpers.sources(message.sources),
+              helpers.markdown(message.text),
+            );
+            return box;
+          },
+        },
+        {
+          events: [
+            {
+              version: 1,
+              sequence: 1,
+              type: "completed",
+              at: 1,
+              text: "Answer",
+              sources: [{ url: "https://a.example/", title: "A" }],
+            },
+          ],
+        },
+      ),
+    );
+    await send(page);
+    const widget = page.locator("yada-chat");
+    await widget.locator(".assistant .custom").waitFor();
+    expect(await widget.locator(".assistant .sources").count()).toBe(1);
+    expect(
+      await widget
+        .locator(".assistant .custom > :first-child")
+        .getAttribute("part"),
+    ).toBe("sources");
   });
 
   it("falls back to the default and reports when a hook throws", async () => {

@@ -19,6 +19,7 @@ import type {
   Turn,
 } from "../core/contracts.js";
 import { CheckpointError } from "../core/checkpoint.js";
+import { sourcesOf } from "../core/content.js";
 import { runDurable } from "../storage/durable-run.js";
 import { runTurns, type SummarizeOptions } from "../core/runtime.js";
 import { RunLeaseError, type RunOwnership } from "../storage/runs.js";
@@ -324,7 +325,12 @@ export function createWorker(options: {
         {
           type: final.status,
           ...(final.status === "completed"
-            ? { text: final.text }
+            ? {
+                text: final.text,
+                ...(turns && sourcesOf(turns).length
+                  ? { sources: sourcesOf(turns) }
+                  : {}),
+              }
             : final.status === "failed"
               ? { code: final.code }
               : {}),

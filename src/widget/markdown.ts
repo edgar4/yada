@@ -1,4 +1,7 @@
-function inline(text: string): Node[] {
+const linkPattern =
+  /\[((?:[^[\]\n]|\[[^[\]\n]*\])+)\]\((https?:\/\/(?:[^\s()]|\([^\s()]*\))+)\)/;
+
+function emphasis(text: string): Node[] {
   const pattern =
     /(`[^`\n]+`|\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\s][^*\n]*\*|_[^_\s][^_\n]*_)/;
   return text.split(pattern).map((part, index) => {
@@ -11,9 +14,33 @@ function inline(text: string): Node[] {
     }
     const strong = part.startsWith("**") || part.startsWith("__");
     const node = document.createElement(strong ? "strong" : "em");
-    node.append(...inline(part.slice(strong ? 2 : 1, strong ? -2 : -1)));
+    node.append(...emphasis(part.slice(strong ? 2 : 1, strong ? -2 : -1)));
     return node;
   });
+}
+
+export function externalLink(url: string): HTMLAnchorElement {
+  const link = document.createElement("a");
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.title = link.host;
+  return link;
+}
+
+function inline(text: string): Node[] {
+  const parts = text.split(linkPattern);
+  const nodes: Node[] = [];
+  for (let index = 0; index < parts.length; index += 3) {
+    nodes.push(...emphasis(parts[index] ?? ""));
+    const url = parts[index + 2];
+    if (url) {
+      const link = externalLink(url);
+      link.append(...emphasis(parts[index + 1] ?? ""));
+      nodes.push(link);
+    }
+  }
+  return nodes;
 }
 
 export function markdown(text: string): DocumentFragment {

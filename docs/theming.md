@@ -125,6 +125,7 @@ Part names are public API under semver: removing or renaming one is a breaking c
 | `message`                               | Every message. Each also has `user` or `assistant` |
 | `user`, `assistant`                     | Messages by sender                                 |
 | `code`, `code-block`                    | Code in assistant replies                          |
+| `sources`, `source`                     | Cited sources under a reply and each link          |
 | `activity`                              | Tool activity from `renderActivity`                |
 | `typing`, `typing-avatar`, `typing-dot` | The typing indicator                               |
 | `status`                                | The visually hidden status line                    |
@@ -270,7 +271,7 @@ renderMessage: ({ role, text, streaming }, { markdown }) => {
 };
 ```
 
-`helpers.markdown(text)` is the widget's own safe renderer and `helpers.text(text)` makes a text node.
+`helpers.markdown(text)` is the widget's own safe renderer and `helpers.text(text)` makes a text node. `message.sources` holds the web sources a completed assistant reply cited (`{ url, title }[]`, empty otherwise). A hook that returns content replaces the default sources list too; place `helpers.sources(message.sources)` wherever you want the list.
 
 **Model output is untrusted.** Build nodes with `textContent`, `append` or `helpers.markdown`. Never pass it to `innerHTML`: the browser can run an injected `onerror` while parsing, before the widget sees the node. As a second layer, everything a hook returns is cleaned before it is added. Scripts, frames, embeds, `style` and `template` elements, `on*` attributes and `srcdoc` are removed, as are URLs that aren't `http`, `https`, `mailto`, `tel`, `blob` or `data:image`. Listeners you add with `addEventListener` keep working. There is no way to turn this off.
 

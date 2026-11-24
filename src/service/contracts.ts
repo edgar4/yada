@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { contentSchema, maxImageChars, maxImages } from "../core/content.js";
+import {
+  contentSchema,
+  maxImageChars,
+  maxImages,
+  maxSources,
+  sourceSchema,
+} from "../core/content.js";
 import { runResultSchema } from "../core/checkpoint.js";
 import { messageSchema } from "../storage/conversations.js";
 export const jobInputSchema = z.strictObject({
@@ -59,6 +65,7 @@ export const eventSchema = z.strictObject({
   expiresAt: z.number().optional(),
   tool: z.string().optional(),
   failed: z.boolean().optional(),
+  sources: z.array(sourceSchema).max(maxSources).optional(),
   ...usageFieldsSchema.shape,
 });
 const quotaWindowSchema = z.object({

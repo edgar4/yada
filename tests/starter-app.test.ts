@@ -179,6 +179,9 @@ for (const driver of drivers)
         expect((await send("/.env")).status).toBe(404);
         expect((await send("/../config.ts")).status).toBe(404);
         expect(provider.requests).toHaveLength(2);
+        expect(provider.requests[0]?.tools.map((tool) => tool.name)).toContain(
+          "research",
+        );
       } finally {
         await app.close();
       }

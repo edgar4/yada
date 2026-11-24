@@ -8,7 +8,13 @@ import {
 import { Suspended, type ActionExecutor } from "./action.js";
 import type { AgentEvent, ModelCall, RunHooks } from "./hooks.js";
 import { abortable } from "./abort.js";
-import { contentText, hasImages, mapText, messagesSize } from "./content.js";
+import {
+  contentText,
+  hasImages,
+  mapText,
+  messagesSize,
+  type Source,
+} from "./content.js";
 import {
   InvalidArguments,
   ToolCallError,
@@ -101,6 +107,7 @@ type ToolOutcome =
       content: Content;
       failed: boolean;
       cause?: string;
+      sources?: readonly Source[];
       error?: { code: ToolCallErrorCode; delivery: ToolCallDelivery };
     }
   | { stop: RunResult }
@@ -395,12 +402,13 @@ async function executeGroup(
       loop.signal.throwIfAborted();
       if ("stop" in outcome) return outcome.stop;
       if ("terminal" in outcome) return await loop.finish(outcome.terminal);
-      const { content, failed, cause, error } = outcome;
+      const { content, failed, cause, error, sources } = outcome;
       state.messages.push({
         role: "tool",
         toolCallId: call.id,
         name: call.name,
         content,
+        ...(sources ? { sources: [...sources] } : {}),
       });
       state.calls++;
       state.roundFailures = (state.roundFailures ?? 0) + (failed ? 1 : 0);
@@ -479,26 +487,28 @@ async function executeCall(loop: Loop, call: ToolCall): Promise<ToolOutcome> {
     timeoutMs === Infinity
       ? signal
       : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
+  const sources: Source[] = [];
   try {
-    return {
-      failed: false,
-      content: await abortable(
-        () =>
-          tool.execute(call.args, identity, toolSignal, {
-            addUsage: (usage) => {
-              addUsage(loop.state, usage);
-            },
-            maxOutput: loop.limits.maxToolOutput,
-            limits: loop.limits,
-            remainingCostMicros: remainingCost(loop),
-            ...(nest ? { runChild: (child) => nest(call, child) } : {}),
-            ...(options.executeWrite?.ask
-              ? { ask: options.executeWrite.ask(call) }
-              : {}),
-          }),
-        toolSignal,
-      ),
-    };
+    const content = await abortable(
+      () =>
+        tool.execute(call.args, identity, toolSignal, {
+          addUsage: (usage) => {
+            addUsage(loop.state, usage);
+          },
+          addSources: (found) => {
+            sources.push(...found);
+          },
+          maxOutput: loop.limits.maxToolOutput,
+          limits: loop.limits,
+          remainingCostMicros: remainingCost(loop),
+          ...(nest ? { runChild: (child) => nest(call, child) } : {}),
+          ...(options.executeWrite?.ask
+            ? { ask: options.executeWrite.ask(call) }
+            : {}),
+        }),
+      toolSignal,
+    );
+    return { failed: false, content, ...(sources.length ? { sources } : {}) };
   } catch (error) {
     if (error instanceof Suspended) return { stop: error.suspension };
     if (error instanceof CheckpointError) throw error;

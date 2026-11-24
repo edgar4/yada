@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import type { Identity } from "../core/contracts.js";
+import type { Identity, Turn } from "../core/contracts.js";
 import type { YadaStorage } from "../storage/index.js";
 import { elicitationTool, validElicitation } from "../core/action.js";
 import { ActionConflict, executedStatuses } from "../storage/actions.js";
 import { JobConflict } from "../storage/jobs.js";
-import { contentText } from "../core/content.js";
+import { contentText, sourcesOf, type Source } from "../core/content.js";
 import type { ConversationMessage } from "../storage/conversations.js";
 import {
   awaitedApprovalId,
@@ -54,19 +54,38 @@ export async function readJson(
   }
   return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
 }
-const visibleMessages = (
-  messages: readonly ConversationMessage[],
-): { role: string; content?: string; code?: string }[] =>
-  messages.flatMap(
-    (message): { role: string; content?: string; code?: string }[] =>
-      message.role === "failure"
-        ? [message]
-        : (message.role === "user" ||
-              (message.role === "assistant" && !message.toolCalls.length)) &&
-            contentText(message.content)
-          ? [{ role: message.role, content: contentText(message.content) }]
-          : [],
-  );
+type VisibleMessage = {
+  role: string;
+  content?: string;
+  code?: string;
+  sources?: Source[];
+};
+const visibleMessages = (messages: readonly ConversationMessage[]) => {
+  let turns: Turn[] = [];
+  return messages.flatMap((message): VisibleMessage[] => {
+    if (message.role === "failure") {
+      turns = [];
+      return [message];
+    }
+    if (message.role === "summary") return [];
+    if (message.role !== "user") turns.push(message);
+    if (
+      message.role === "tool" ||
+      (message.role === "assistant" && message.toolCalls.length) ||
+      !contentText(message.content)
+    )
+      return [];
+    const sources = message.role === "assistant" ? sourcesOf(turns) : [];
+    if (message.role === "assistant") turns = [];
+    return [
+      {
+        role: message.role,
+        content: contentText(message.content),
+        ...(sources.length ? { sources } : {}),
+      },
+    ];
+  });
+};
 const LEASE_TTL_MS = 30_000;
 const parseRequest = <T>(schema: z.ZodType<T>, value: unknown) => {
   const parsed = schema.safeParse(value);

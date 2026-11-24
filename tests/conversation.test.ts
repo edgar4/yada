@@ -1,3 +1,4 @@
+import { sourcesOf } from "../src/core/content.js";
 import { expect, it } from "vitest";
 import {
   createStorage,
@@ -100,4 +101,41 @@ it("stores a summary once and keeps the full turns", async () => {
   } finally {
     await store.close();
   }
+});
+
+it("collects unique sources from answers and tool results", () => {
+  const redirect = (n: number) => ({
+    url: `https://redirect.example/${String(n)}`,
+    title: "site.example",
+  });
+  expect(
+    sourcesOf([
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [],
+        providerMetadata: {
+          provider: "gemini",
+          data: {
+            sources: [redirect(1), redirect(2), { url: "x", title: "" }],
+          },
+        },
+      },
+      {
+        role: "tool",
+        toolCallId: "c",
+        name: "research",
+        content: "",
+        sources: [
+          redirect(1),
+          { url: "https://a.example/1", title: "" },
+          { url: "https://a.example/2", title: "" },
+        ],
+      },
+    ]),
+  ).toEqual([
+    redirect(1),
+    { url: "https://a.example/1", title: "" },
+    { url: "https://a.example/2", title: "" },
+  ]);
 });
