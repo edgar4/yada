@@ -214,6 +214,23 @@ description: "Yada is a free, open-source AI agent harness for Node.js. Connect 
         checks its own work, then waits for your yes. Open source, and it runs
         on any model you bring.
       </p>
+      <div class="install-pill">
+        <span class="prompt" aria-hidden="true">$</span>
+        <code id="terminal-install-code" tabindex="0"
+          >curl -fsSL https://yada.edgar.co.ke/install.sh | sh</code
+        >
+        <button
+          type="button"
+          class="copy-icon"
+          data-copy="terminal-install-code"
+          aria-label="Copy install command"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="9" y="9" width="11" height="11" rx="2" />
+            <path d="M5 15V6a2 2 0 0 1 2-2h8" />
+          </svg>
+        </button>
+      </div>
     </div>
     <figure class="demo">
       <img
@@ -224,7 +241,10 @@ description: "Yada is a free, open-source AI agent harness for Node.js. Connect 
       />
       <figcaption>
         Installed with one command, then adding a function with two approvals.
-        The model's replies in this demo are scripted.
+        The model's replies in this demo are scripted. On Windows, run
+        <code>irm https://yada.edgar.co.ke/install.ps1 | iex</code>. With
+        Homebrew,
+        <code>brew tap edgar4/yada &amp;&amp; brew install yada</code>.
         <a href="{{ '/terminal.html' | relative_url }}"
           >Terminal guide <span aria-hidden="true">→</span></a
         >
