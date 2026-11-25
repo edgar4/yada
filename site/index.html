@@ -27,9 +27,13 @@ description: "Yada is a free, open-source AI agent harness for Node.js. Connect 
         </p>
         <div class="hero-actions">
           <a class="button button-primary" href="#get-started">Get started</a>
-          <div class="install-pill">
+          <div class="install-pill highlight">
             <span class="prompt" aria-hidden="true">$</span>
-            <code id="install-code">npx @edgaralochi/yada init my-agent</code>
+            <code id="install-code"
+              ><span class="nb">npx</span>
+              <span class="s">@edgaralochi/yada</span>
+              <span class="k">init</span> my-agent</code
+            >
             <button
               type="button"
               class="copy-icon"
@@ -214,10 +218,12 @@ description: "Yada is a free, open-source AI agent harness for Node.js. Connect 
         checks its own work, then waits for your yes. Open source, and it runs
         on any model you bring.
       </p>
-      <div class="install-pill">
+      <div class="install-pill highlight">
         <span class="prompt" aria-hidden="true">$</span>
         <code id="terminal-install-code" tabindex="0"
-          >curl -fsSL https://yada.edgar.co.ke/install.sh | sh</code
+          ><span class="nb">curl</span> <span class="k">-fsSL</span>
+          <span class="s">https://yada.edgar.co.ke/install.sh</span>
+          <span class="o">|</span> <span class="nb">sh</span></code
         >
         <button
           type="button"
@@ -242,9 +248,16 @@ description: "Yada is a free, open-source AI agent harness for Node.js. Connect 
       <figcaption>
         Installed with one command, then adding a function with two approvals.
         The model's replies in this demo are scripted. On Windows, run
-        <code>irm https://yada.edgar.co.ke/install.ps1 | iex</code>. With
-        Homebrew,
-        <code>brew tap edgar4/yada &amp;&amp; brew install yada</code>.
+        <code class="highlight"
+          ><span class="nb">irm</span>
+          <span class="s">https://yada.edgar.co.ke/install.ps1</span>
+          <span class="o">|</span> <span class="nb">iex</span></code
+        >. With Homebrew,
+        <code class="highlight"
+          ><span class="nb">brew</span> <span class="k">tap</span>
+          <span class="s">edgar4/yada</span> <span class="o">&amp;&amp;</span>
+          <span class="nb">brew</span> <span class="k">install</span> yada</code
+        >.
         <a href="{{ '/terminal.html' | relative_url }}"
           >Terminal guide <span aria-hidden="true">→</span></a
         >

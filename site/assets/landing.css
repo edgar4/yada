@@ -406,6 +406,12 @@
 }
 .demo figcaption code {
   overflow-wrap: anywhere;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--ink-deep);
+  color: var(--white);
+  font-family: var(--mono);
+  font-size: 0.88em;
 }
 .demo img {
   display: block;
