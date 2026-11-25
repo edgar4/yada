@@ -4,472 +4,512 @@ title: "Yada — open-source AI agent harness for your app"
 description: "Yada is a free, open-source AI agent harness for Node.js. Connect any model to your APIs so users can search, book or update things by chatting."
 ---
 
-<main id="main" tabindex="-1">
-  <section class="hero on-ink" aria-labelledby="hero-title">
-    <svg class="hero-strokes" viewBox="0 0 120 120" aria-hidden="true">
-      <g fill="none" stroke-linecap="round" stroke-width="12">
-        <path d="M30 32 Q45 46 60 60" />
-        <path d="M90 32 Q75 46 60 60" />
-        <path d="M60 60 Q60 75 60 90" />
-      </g>
-    </svg>
-    <div class="wrap hero-grid">
-      <div class="hero-copy">
-        <p class="kicker">Open-source AI agent harness</p>
-        <h1 id="hero-title">
-          Add an AI agent that can do things
-          <span>inside your app.</span>
-        </h1>
-        <p class="hero-description">
-          Yada is a free, open-source agent harness. Plug in a model, give it
-          your APIs as tools, and your users can search, book, apply or update
-          just by chatting.
-        </p>
-        <div class="hero-actions">
-          <a class="button button-primary" href="#get-started">Get started</a>
-          <div class="install-pill highlight">
-            <span class="prompt" aria-hidden="true">$</span>
-            <code id="install-code"
-              ><span class="nb">npx</span>
-              <span class="s">@edgaralochi/yada</span>
-              <span class="k">init</span> my-agent</code
+<main id="main" class="home" tabindex="-1">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="wrap">
+      <div class="hero-panel">
+        <div class="hero-copy">
+          <h1 id="hero-title" data-enter>
+            Let your users get things done by asking<svg
+              class="spark"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
             >
-            <button
-              type="button"
-              class="copy-icon"
-              data-copy="install-code"
-              aria-label="Copy install command"
+              <path
+                d="M12 0c.6 6.6 5.4 11.4 12 12-6.6.6-11.4 5.4-12 12-.6-6.6-5.4-11.4-12-12C6.6 11.4 11.4 6.6 12 0z"
+              />
+            </svg>
+          </h1>
+          <p class="hero-lead" data-enter="2">
+            Yada is a free, open-source AI agent harness for Node.js. Give it
+            your APIs as tools, and it asks before it changes anything.
+          </p>
+          <div class="hero-actions" data-enter="3">
+            <a class="btn btn-ink" href="#get-started">Get started</a>
+            <a class="arrow-link" href="#how"
+              >See how it works <span aria-hidden="true">↓</span></a
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <rect x="9" y="9" width="11" height="11" rx="2" />
-                <path d="M5 15V6a2 2 0 0 1 2-2h8" />
-              </svg>
-            </button>
           </div>
         </div>
-      </div>
-      <div class="hero-demo">
-        <div class="flow-window" aria-label="Example conversation in your app">
-          <div class="window-bar">Your app · support console</div>
-          <ol class="flow-body">
-            <li class="flow-message">
-              <span class="flow-label">You</span>
-              <p>Find this customer’s latest order.</p>
-            </li>
-            <li class="tool-call">
-              <span class="flow-label">order_lookup · read tool</span>
-              <p>Order #1042 · Ready to ship</p>
-            </li>
-            <li class="flow-message assistant-message">
-              <span class="flow-label">Yada</span>
-              <p>Found it. Want me to update the delivery note?</p>
-            </li>
-            <li class="approval-preview">
-              <div>
-                <strong>Waiting for your approval.</strong
-                ><span>Writes never run without a confirmed decision.</span>
-              </div>
-            </li>
-          </ol>
+        <div class="hero-art">
+          <svg
+            class="sticker"
+            id="hero-face"
+            viewBox="0 0 120 120"
+            aria-hidden="true"
+            data-enter="5"
+          >
+            <rect width="120" height="120" rx="28" />
+            <g>
+              <path d="M30 32 Q45 46 60 60" />
+              <path d="M90 32 Q75 46 60 60" />
+              <path d="M60 60 Q60 75 60 90" />
+            </g>
+            <circle cx="60" cy="60" r="9" />
+          </svg>
+          <div class="float-card chat-card" data-enter="3">
+            <div class="chat-head">
+              <img
+                src="{{ '/assets/brand/yada-avatar-smile.svg' | relative_url }}"
+                width="30"
+                height="30"
+                alt=""
+              />Shop helper<i aria-hidden="true"></i>
+            </div>
+            <div class="chat-msgs">
+              <p class="bubble user">
+                Add “leave at the side door” to order #1042.
+              </p>
+              <p class="tool-chip">order_lookup → #1042 · Ready to ship</p>
+              <p class="bubble bot">
+                Found it. This changes the order, so I need your OK.
+              </p>
+            </div>
+            <div class="ask-bar" aria-hidden="true">Ask anything<b>↑</b></div>
+          </div>
+          <div class="approval-card" data-enter="4">
+            <div class="approval-head">
+              <img
+                src="{{ '/assets/brand/yada-avatar-thinking.svg' | relative_url }}"
+                width="26"
+                height="26"
+                alt=""
+              />Needs your approval
+            </div>
+            <p class="approval-title">Update delivery note</p>
+            <div class="diff">
+              <div class="rm">− None</div>
+              <div class="ad">+ Leave at the side door</div>
+            </div>
+            <div class="row">
+              <button class="btn btn-amber" type="button" id="hero-yes">
+                Approve
+              </button>
+              <button class="btn btn-ghost" type="button" id="hero-no">
+                Decline
+              </button>
+            </div>
+          </div>
+          <div class="float-card receipt" id="hero-receipt" aria-live="polite">
+            <i aria-hidden="true">✓</i>
+            <div>Note saved<small>receipt rcpt_8f2a</small></div>
+          </div>
         </div>
+        <svg class="squiggle" viewBox="0 0 290 230" aria-hidden="true">
+          <path
+            d="M282 20C230 10 190 40 200 90c8 40 50 46 50 14 0-34-60-40-96 4-30 36-40 80-130 98"
+          />
+          <path d="M38 192l-16 14 21 6" />
+        </svg>
       </div>
     </div>
   </section>
 
   <div class="wrap">
-    <ul class="proof-row" aria-label="Project facts">
-      <li>
-        <a href="https://github.com/edgar4/yada/blob/main/LICENSE"
-          >MIT licensed</a
-        >
-      </li>
-      <li data-proof="npm" hidden>
-        <a href="https://www.npmjs.com/package/@edgaralochi/yada"
-          >npm <span></span
-        ></a>
-      </li>
-      <li data-proof="stars" hidden>
-        <a href="https://github.com/edgar4/yada"><span></span> GitHub stars</a>
-      </li>
-      <li>
-        Works with Anthropic · OpenAI · Gemini · DeepSeek · Ollama · llama.cpp
-      </li>
+    <ul class="providers" aria-label="Supported model providers">
+      <li>Anthropic</li>
+      <li>OpenAI</li>
+      <li>Gemini</li>
+      <li>DeepSeek</li>
+      <li>Ollama</li>
+      <li class="mono">llama.cpp</li>
     </ul>
   </div>
 
-  <section class="section wrap" id="runtime" aria-labelledby="runtime-title">
-    <div class="section-heading">
-      <h2 id="runtime-title">What an agent harness does</h2>
-      <p>
-        The model decides what to do, your code decides what’s allowed, and Yada
-        carries it out.
-      </p>
-    </div>
-    <ol class="lifecycle">
-      <li>
-        <span class="step-number" aria-hidden="true">01</span>
-        <h3>Pick any model</h3>
-        <p>
-          Anthropic, OpenAI, Gemini, DeepSeek, or local models through Ollama
-          and llama.cpp. To switch, change the config.
-        </p>
-      </li>
-      <li>
-        <span class="step-number" aria-hidden="true">02</span>
-        <h3>Give it your tools</h3>
-        <p>
-          Turn HTTP APIs, SQL queries and MCP servers into tools the agent can
-          call. Inputs are validated and permissions checked on every call.
-        </p>
-      </li>
-      <li>
-        <span class="step-number" aria-hidden="true">03</span>
-        <h3>Users just ask</h3>
-        <p>
-          Placing orders, editing profiles, sending invoices: users can do
-          anything you expose as a tool by chatting, within the rules you set.
-        </p>
-      </li>
-      <li>
-        <span class="step-number" aria-hidden="true">04</span>
-        <h3>Never lose a run</h3>
-        <p>
-          Conversations and run state persist in SQLite, PostgreSQL or MySQL, so
-          agents resume after a crash or deploy.
-        </p>
-      </li>
-    </ol>
-  </section>
-
-  <section class="talon section wrap" id="in-use" aria-labelledby="talon-title">
-    <div class="section-heading centered">
-      <h2 id="talon-title">Built into TalonHR</h2>
-      <p>
-        TalonHR, a recruitment platform, runs its AI agent on Yada. Job seekers
-        apply and employers manage candidates by chatting. These are screen
-        recordings with live model output on demo data, at 2× speed.
-      </p>
-    </div>
-    <div class="demo-grid">
-      <figure class="demo">
-        <div class="video-frame">
-          <video
-            controls
-            muted
-            playsinline
-            preload="none"
-            poster="{{ '/assets/demo/talon-applicant.jpg' | relative_url }}"
-            src="{{ '/assets/demo/talon-applicant.mp4' | relative_url }}"
-          ></video>
-          <button
-            type="button"
-            class="play-button"
-            aria-label="Play applicant demo video"
-            hidden
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          </button>
+  <section class="sec wrap" id="how" aria-labelledby="how-title">
+    <h2 id="how-title" class="centered">It only knows what you let it</h2>
+    <div class="bento">
+      <div class="tile">
+        <div>
+          <p class="big-number" aria-hidden="true">6</p>
+          <h3>
+            <span class="visually-hidden">Six </span>model providers, local ones
+            included. Switch with one line.
+          </h3>
         </div>
-        <figcaption>
-          <strong>Applicant</strong> finds part-time UX jobs in Berlin and
-          applies with a saved CV after approving.
-        </figcaption>
-      </figure>
-      <figure class="demo">
-        <div class="video-frame">
-          <video
-            controls
-            muted
-            playsinline
-            preload="none"
-            poster="{{ '/assets/demo/talon-employer.jpg' | relative_url }}"
-            src="{{ '/assets/demo/talon-employer.mp4' | relative_url }}"
-          ></video>
-          <button
-            type="button"
-            class="play-button"
-            aria-label="Play employer demo video"
-            hidden
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          </button>
+        <p class="env-line">
+          YADA_LLM_PROVIDER=<b id="provider-name">anthropic</b>
+        </p>
+      </div>
+      <div class="tile">
+        <h3>Your APIs become tools. Your auth checks every call.</h3>
+        <div class="flow" aria-hidden="true">
+          <img
+            src="{{ '/assets/brand/yada-mark-dark.svg' | relative_url }}"
+            width="72"
+            height="72"
+            alt=""
+          />
+          <span class="arrows"><i class="pulse"></i><i></i></span>
+          <span class="dot-icon"
+            ><svg viewBox="0 0 24 24">
+              <rect x="5" y="11" width="14" height="9" rx="2" />
+              <path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg
+          ></span>
+          <span class="arrows"><i class="pulse"></i><i></i></span>
+          <span class="dot-icon"
+            ><svg viewBox="0 0 24 24">
+              <rect x="4" y="4" width="16" height="6" rx="1.5" />
+              <rect x="4" y="14" width="16" height="6" rx="1.5" />
+              <path d="M8 7h.01M8 17h.01" /></svg
+          ></span>
         </div>
-        <figcaption>
-          <strong>Employer</strong> reviews candidates, moves one to
-          interviewing and schedules the interview, approving each change.
-        </figcaption>
-      </figure>
+        <ul class="chips" aria-label="Tool sources">
+          <li>HTTP APIs</li>
+          <li>SQL queries</li>
+          <li>MCP servers</li>
+        </ul>
+      </div>
+      <div class="tile wide">
+        <div>
+          <h3>Nothing is written until someone says yes</h3>
+          <p>Approved writes run once and leave a receipt.</p>
+        </div>
+        <div class="white-card">
+          <p class="approval-title">Change the delivery note on #1042?</p>
+          <div class="diff light">
+            <div class="rm">− note: None</div>
+            <div class="ad">+ note: Leave at the side door</div>
+          </div>
+          <div class="row">
+            <button class="btn btn-ink btn-sm" type="button" id="tile-yes">
+              Approve change
+            </button>
+            <button class="btn btn-line btn-sm" type="button" id="tile-no">
+              Decline
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="tile">
+        <h3>Picks up where it left off after a crash or deploy</h3>
+        <div>
+          <div class="steps" aria-hidden="true">
+            <span class="fill"></span><i></i><i></i><i class="crash"></i><i></i
+            ><i></i>
+          </div>
+          <ul class="chips" aria-label="Storage">
+            <li>SQLite</li>
+            <li>PostgreSQL</li>
+            <li>MySQL</li>
+          </ul>
+        </div>
+      </div>
+      <div class="tile">
+        <h3>Teach it with skills from Claude, Cursor or Codex</h3>
+        <ul class="files" aria-label="Example skills folder">
+          <li>skills/</li>
+          <li>refunds/SKILL.md</li>
+          <li>shipping/SKILL.md</li>
+        </ul>
+      </div>
+      <div class="tile wide dark">
+        <div>
+          <h3>Keys stay on your server</h3>
+          <p>
+            Yada is a library in your backend, not a hosted platform. Nothing
+            sits between your app and your model.
+          </p>
+        </div>
+        <ul class="entry-points" aria-label="Package entry points">
+          <li><code>yada</code>agent harness</li>
+          <li><code>yada/client</code>browser SDK</li>
+          <li><code>yada/widget</code>chat widget</li>
+        </ul>
+      </div>
     </div>
   </section>
 
-  <section
-    class="terminal-demo section wrap"
-    id="terminal"
-    aria-labelledby="terminal-title"
-  >
-    <div class="section-heading centered">
-      <h2 id="terminal-title">Describe it. Review it. Ship it.</h2>
-      <p>
-        Tell yada what you want changed. It finds the code, writes the diff and
-        checks its own work, then waits for your yes. Open source, and it runs
-        on any model you bring.
-      </p>
-      <div class="install-pill highlight">
-        <span class="prompt" aria-hidden="true">$</span>
-        <code id="terminal-install-code" tabindex="0"
-          ><span class="nb">curl</span> <span class="k">-fsSL</span>
-          <span class="s">https://yada.edgar.co.ke/install.sh</span>
-          <span class="o">|</span> <span class="nb">sh</span></code
+  <section class="sec" id="in-app" aria-labelledby="in-app-title">
+    <div class="wrap split">
+      <div class="visual">
+        <div class="blob" aria-hidden="true"></div>
+        <div
+          class="shop"
+          role="group"
+          aria-label="Example shop admin with Yada"
         >
-        <button
-          type="button"
-          class="copy-icon"
-          data-copy="terminal-install-code"
-          aria-label="Copy install command"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="9" y="9" width="11" height="11" rx="2" />
-            <path d="M5 15V6a2 2 0 0 1 2-2h8" />
-          </svg>
+          <div class="shop-main">
+            <p class="shop-title">Order #1042</p>
+            <span class="tag">Ready to ship</span>
+            <dl>
+              <div>
+                <dt>Customer</dt>
+                <dd>Amara Okafor</dd>
+              </div>
+              <div>
+                <dt>Items</dt>
+                <dd>2 × Linen shirt, sand · M</dd>
+              </div>
+              <div>
+                <dt>Address</dt>
+                <dd>Kilimani, Nairobi</dd>
+              </div>
+              <div id="note-field">
+                <dt>Delivery note</dt>
+                <dd id="note">None</dd>
+              </div>
+            </dl>
+          </div>
+          <div class="shop-chat">
+            <div class="chat-head">
+              <img
+                src="{{ '/assets/brand/yada-avatar-smile.svg' | relative_url }}"
+                width="24"
+                height="24"
+                alt=""
+              />Shop helper
+            </div>
+            <div class="feed" id="feed"></div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h2 id="in-app-title">Lives inside the app your users already know</h2>
+        <p class="lead">
+          Stream replies with the browser SDK, or drop in the chat widget with
+          your own name, look and copy.
+          <a href="{{ '/browser.html' | relative_url }}"
+            >Browser SDK and widget</a
+          >
+        </p>
+        <button class="btn btn-line" type="button" id="replay">
+          Play it again
         </button>
       </div>
     </div>
-    <figure class="demo">
-      <img
-        src="{{ '/assets/demo/yada-terminal.gif' | relative_url }}"
-        width="1200"
-        height="780"
-        alt="A terminal installs yada with curl, then yada lists and reads src/math.ts, shows a diff adding a multiply function, asks to allow the edit and a check command, and reports the change."
-      />
-      <figcaption>
-        Installed with one command, then adding a function with two approvals.
-        The model's replies in this demo are scripted. On Windows, run
-        <code class="highlight"
-          ><span class="nb">irm</span>
-          <span class="s">https://yada.edgar.co.ke/install.ps1</span>
-          <span class="o">|</span> <span class="nb">iex</span></code
-        >. With Homebrew,
-        <code class="highlight"
-          ><span class="nb">brew</span> <span class="k">tap</span>
-          <span class="s">edgar4/yada</span> <span class="o">&amp;&amp;</span>
-          <span class="nb">brew</span> <span class="k">install</span> yada</code
-        >.
-        <a href="{{ '/terminal.html' | relative_url }}"
-          >Terminal guide <span aria-hidden="true">→</span></a
-        >
-      </figcaption>
-    </figure>
   </section>
 
-  <section class="section wrap" id="used-by" aria-labelledby="used-by-title">
-    <div class="docs-heading">
-      <h2 id="used-by-title">Also running on Yada</h2>
-    </div>
-    <div class="guide-grid">
-      <a class="guide" href="https://www.tinkerpayments.com/"
-        ><h3>Tinker Payments</h3>
-        <p>
-          One dashboard for a business’s payment providers: track payments,
-          investigate failed ones and match them to settlements.
+  <section class="sec" id="terminal" aria-labelledby="terminal-title">
+    <div class="wrap split reverse">
+      <div>
+        <h2 id="terminal-title">Describe it. Review it. Ship it.</h2>
+        <p class="lead">
+          Tell yada what you want changed. It finds the code, writes the diff
+          and checks its own work, then waits for your yes. The replies in this
+          demo are scripted.
+          <a href="{{ '/terminal.html' | relative_url }}">Terminal guide</a>
         </p>
-        <span class="guide-arrow" aria-hidden="true">→</span></a
-      >
-      <a class="guide" href="https://app.nairobifashionhub.co.ke/"
-        ><h3>Nairobi Fashion Hub</h3>
-        <p>
-          Book models, designers, stylists and photographers in Kenya, and buy
-          tickets to fashion events.
-        </p>
-        <span class="guide-arrow" aria-hidden="true">→</span></a
-      >
-      <a class="guide" href="https://withtinkerdigital.com/"
-        ><h3>Tinker Digital</h3>
-        <p>
-          Integrations and software that connect legacy systems, payments and
-          operations.
-        </p>
-        <span class="guide-arrow" aria-hidden="true">→</span></a
-      >
-    </div>
-  </section>
-
-  <section class="building-blocks wrap" aria-labelledby="blocks-title">
-    <div class="blocks-intro">
-      <h2 id="blocks-title">It only knows what you let it.</h2>
-      <p>
-        Yada is Hebrew for “to know”. Your agent knows only the tools you
-        register, the data they reach and the permissions of the user asking.
-        It’s a library in your backend, not a hosted platform.
-      </p>
-      <a class="text-link" href="{{ '/architecture.html' | relative_url }}"
-        >How the harness works <span aria-hidden="true">→</span></a
-      >
-    </div>
-    <div class="block-list">
-      <div class="block-row">
-        <h3>Keys stay on your server</h3>
-        <p>
-          Model keys and tool code stay on your server. No hosted layer sits
-          between your app and your model provider.
-        </p>
-        <a class="text-link" href="{{ '/configuration.html' | relative_url }}"
-          >Provider configuration <span aria-hidden="true">→</span></a
-        >
-      </div>
-      <div class="block-row">
-        <h3>Your auth, checked on every call</h3>
-        <p>
-          Pass in the signed-in user and tenant. Yada checks permissions before
-          each tool runs and again before a write executes.
-        </p>
-        <a class="text-link" href="{{ '/actions.html' | relative_url }}"
-          >Approved actions <span aria-hidden="true">→</span></a
-        >
-      </div>
-      <div class="block-row">
-        <h3>Extend your agent with skills</h3>
-        <p>
-          Drop <code>SKILL.md</code> folders from Claude, Cursor or Codex into
-          <code>skills/</code>. The agent loads them when they’re relevant.
-          Scripts need host tools.
-        </p>
-        <a class="text-link" href="{{ '/skills.html' | relative_url }}"
-          >Skills guide <span aria-hidden="true">→</span></a
-        >
-      </div>
-      <div class="block-row">
-        <h3>A chat UI that fits your product</h3>
-        <p>
-          Stream responses with the browser SDK, or drop in the accessible chat
-          widget and give it your own name, look and copy.
-        </p>
-        <a class="text-link" href="{{ '/browser.html' | relative_url }}"
-          >Browser SDK and widget <span aria-hidden="true">→</span></a
-        >
-        <a class="text-link" href="{{ '/theming.html' | relative_url }}"
-          >Rename and restyle it, live <span aria-hidden="true">→</span></a
-        >
-      </div>
-    </div>
-  </section>
-
-  <section
-    class="start-section on-ink"
-    id="get-started"
-    aria-labelledby="start-title"
-  >
-    <div class="wrap start-grid">
-      <div class="start-copy">
-        <h2 id="start-title">Start with one command.</h2>
-        <p>
-          On Node 24, one command scaffolds a working agent: config, SQLite
-          storage, example tools, a skills folder and the chat widget, all wired
-          together.
-        </p>
-        <p>
-          Add your model key to <code>.env</code> and run
-          <code>npm start</code>. Password protection is optional.
-        </p>
-        <ul class="entry-points" aria-label="Package entry points">
-          <li><code>yada</code> agent harness</li>
-          <li><code>yada/client</code> browser SDK</li>
-          <li><code>yada/widget</code> chat widget</li>
-        </ul>
-        <a class="text-link" href="{{ '/starter.html' | relative_url }}"
-          >Full setup guide <span aria-hidden="true">→</span></a
-        >
-      </div>
-      <div class="setup-stack">
-        <div class="code-panel">
-          <div class="code-heading">
-            <span>Create your agent</span
-            ><button
-              type="button"
-              data-copy="setup-code"
-              aria-label="Copy agent setup command"
-            >
-              Copy
-            </button>
-          </div>
-          <pre
-            class="highlight"
-          ><code id="setup-code"><span class="nb">npx</span> @edgaralochi/yada init my-agent</code></pre>
+        <div class="tabs" role="group" aria-label="Install method" hidden>
+          <button type="button" data-os="sh" aria-pressed="true">
+            macOS · Linux
+          </button>
+          <button type="button" data-os="win" aria-pressed="false">
+            Windows
+          </button>
+          <button type="button" data-os="brew" aria-pressed="false">
+            Homebrew
+          </button>
         </div>
-        <div class="code-panel env-panel">
-          <div class="code-heading">
-            <span>Connect a live model</span
-            ><button
-              type="button"
-              data-copy="env-code"
-              aria-label="Copy provider environment variables"
-            >
-              Copy
-            </button>
-          </div>
-          <pre
-            class="highlight"
-          ><code id="env-code"><span class="nv">YADA_LLM_PROVIDER</span>=<span class="s">anthropic</span>
-<span class="nv">YADA_LLM_MODEL</span>=<span class="s">claude-opus-5-5</span>
-<span class="nv">YADA_LLM_API_KEY</span>=<span class="s">your-provider-key</span></code></pre>
+        <div class="pill">
+          <span class="prompt" aria-hidden="true">$</span>
+          <code id="terminal-install-code" tabindex="0"
+            ><span class="nb">curl</span> <span class="k">-fsSL</span>
+            <span class="s">https://yada.edgar.co.ke/install.sh</span>
+            <span class="o">|</span> <span class="nb">sh</span></code
+          >
+          <button
+            class="copy"
+            type="button"
+            data-copy="terminal-install-code"
+            aria-label="Copy install command"
+          >
+            Copy
+          </button>
+        </div>
+      </div>
+      <div class="visual">
+        <div class="blob" aria-hidden="true"></div>
+        <img
+          class="terminal-gif"
+          src="{{ '/assets/demo/yada-terminal.gif' | relative_url }}"
+          width="1200"
+          height="780"
+          alt="A terminal installs yada with curl, then yada lists and reads src/math.ts, shows a diff adding a multiply function, asks to allow the edit and a check command, and reports the change."
+        />
+      </div>
+    </div>
+  </section>
+
+  <section class="sec wrap" id="in-use" aria-labelledby="in-use-title">
+    <h2 id="in-use-title" class="centered">Already running in production</h2>
+    <div class="users">
+      <div class="talon">
+        <div>
+          <h3>TalonHR</h3>
           <p>
-            Set these in <code>my-agent/.env</code>, then run
-            <code>cd my-agent</code> and <code>npm start</code>.
+            Job seekers apply and employers manage candidates by chatting.
+            Screen recordings with live model output on demo data, at 2× speed.
           </p>
         </div>
+        <div class="videos">
+          <div class="video-frame">
+            <video
+              controls
+              muted
+              playsinline
+              preload="none"
+              poster="{{ '/assets/demo/talon-applicant.jpg' | relative_url }}"
+              src="{{ '/assets/demo/talon-applicant.mp4' | relative_url }}"
+            ></video>
+            <button
+              type="button"
+              class="play-button"
+              aria-label="Play applicant demo video"
+              hidden
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </button>
+          </div>
+          <div class="video-frame">
+            <video
+              controls
+              muted
+              playsinline
+              preload="none"
+              poster="{{ '/assets/demo/talon-employer.jpg' | relative_url }}"
+              src="{{ '/assets/demo/talon-employer.mp4' | relative_url }}"
+            ></video>
+            <button
+              type="button"
+              class="play-button"
+              aria-label="Play employer demo video"
+              hidden
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="others">
+        <a class="other" href="https://www.tinkerpayments.com/"
+          ><div>
+            <h3>Tinker Payments</h3>
+            <p>
+              Tracks payments, investigates failed ones and matches them to
+              settlements.
+            </p>
+          </div>
+          <span class="round-arrow" aria-hidden="true">↗</span></a
+        >
+        <a class="other" href="https://app.nairobifashionhub.co.ke/"
+          ><div>
+            <h3>Nairobi Fashion Hub</h3>
+            <p>
+              Books models, designers, stylists and photographers, and sells
+              event tickets.
+            </p>
+          </div>
+          <span class="round-arrow" aria-hidden="true">↗</span></a
+        >
+        <a class="other" href="https://withtinkerdigital.com/"
+          ><div>
+            <h3>Tinker Digital</h3>
+            <p>Connects legacy systems, payments and operations.</p>
+          </div>
+          <span class="round-arrow" aria-hidden="true">↗</span></a
+        >
       </div>
     </div>
   </section>
 
-  <section class="section wrap" aria-labelledby="docs-title">
-    <div class="docs-heading">
-      <h2 id="docs-title">Guides for every part of the harness</h2>
-      <p>Setup, skills, tools, approvals, storage and deployment.</p>
-    </div>
-    <div class="guide-grid">
-      <a class="guide" href="{{ '/starter.html' | relative_url }}"
+  <section class="sec wrap" id="guides" aria-labelledby="guides-title">
+    <h2 id="guides-title" class="centered">A guide for every part</h2>
+    <div class="guides">
+      <a href="{{ '/starter.html' | relative_url }}"
         ><h3>One-command setup</h3>
-        <p>Create and run your own agent with the packaged starter.</p>
-        <span class="guide-arrow" aria-hidden="true">→</span></a
+        <span aria-hidden="true">→</span></a
       >
-      <a class="guide" href="{{ '/skills.html' | relative_url }}"
-        ><h3>Reusable skills</h3>
-        <p>Add workflows with standard SKILL.md instructions and references.</p>
-        <span class="guide-arrow" aria-hidden="true">→</span></a
-      >
-      <a class="guide" href="{{ '/configuration.html' | relative_url }}"
+      <a href="{{ '/configuration.html' | relative_url }}"
         ><h3>Models and providers</h3>
-        <p>Credentials, model selection and local servers.</p>
-        <span class="guide-arrow" aria-hidden="true">→</span></a
+        <span aria-hidden="true">→</span></a
       >
-      <a class="guide" href="{{ '/actions.html' | relative_url }}"
+      <a href="{{ '/actions.html' | relative_url }}"
         ><h3>Approved actions</h3>
-        <p>Write tools, approval previews and receipts.</p>
-        <span class="guide-arrow" aria-hidden="true">→</span></a
+        <span aria-hidden="true">→</span></a
       >
-      <a class="guide" href="{{ '/browser.html' | relative_url }}"
+      <a href="{{ '/skills.html' | relative_url }}"
+        ><h3>Reusable skills</h3>
+        <span aria-hidden="true">→</span></a
+      >
+      <a href="{{ '/browser.html' | relative_url }}"
         ><h3>SDK and chat widget</h3>
-        <p>Streaming clients and a themeable web component.</p>
-        <span class="guide-arrow" aria-hidden="true">→</span></a
+        <span aria-hidden="true">→</span></a
       >
-      <a class="guide" href="{{ '/mcp.html' | relative_url }}"
+      <a href="{{ '/mcp.html' | relative_url }}"
         ><h3>MCP connections</h3>
-        <p>External tool servers and OAuth connections.</p>
-        <span class="guide-arrow" aria-hidden="true">→</span></a
+        <span aria-hidden="true">→</span></a
       >
-      <a class="guide" href="{{ '/storage.html' | relative_url }}"
+      <a href="{{ '/storage.html' | relative_url }}"
         ><h3>Durable storage</h3>
-        <p>Conversations and run state across restarts.</p>
-        <span class="guide-arrow" aria-hidden="true">→</span></a
+        <span aria-hidden="true">→</span></a
       >
-      <a class="guide" href="{{ '/deployment.html' | relative_url }}"
-        ><h3>Deployment and operations</h3>
-        <p>Installable packages and a Docker starting point.</p>
-        <span class="guide-arrow" aria-hidden="true">→</span></a
+      <a href="{{ '/deployment.html' | relative_url }}"
+        ><h3>Deployment</h3>
+        <span aria-hidden="true">→</span></a
       >
+    </div>
+  </section>
+
+  <section class="closing" id="get-started" aria-labelledby="start-title">
+    <div class="wrap">
+      <svg class="squiggle down" viewBox="0 0 200 120" aria-hidden="true">
+        <path
+          d="M10 10c60 0 110 10 110 40 0 24-40 26-40 6 0-26 60-30 70 10 6 24-4 40-10 52"
+        />
+        <path d="M128 102l12 14 10-16" />
+      </svg>
+      <h2 id="start-title">Start with one command</h2>
+      <p class="lead">
+        On Node 24 it scaffolds a working agent: config, SQLite storage, example
+        tools, a skills folder and the chat widget.
+      </p>
+      <div class="pill">
+        <span class="prompt" aria-hidden="true">$</span>
+        <code id="setup-code" tabindex="0"
+          ><span class="nb">npx</span> <span class="s">@edgaralochi/yada</span>
+          <span class="k">init</span> my-agent</code
+        >
+        <button
+          class="copy"
+          type="button"
+          data-copy="setup-code"
+          aria-label="Copy agent setup command"
+        >
+          Copy
+        </button>
+      </div>
+      <div class="env-card">
+        <div class="env-head">
+          <span>my-agent/.env</span
+          ><button
+            class="copy"
+            type="button"
+            data-copy="env-code"
+            aria-label="Copy provider environment variables"
+          >
+            Copy
+          </button>
+        </div>
+        <pre
+          tabindex="0"
+        ><code id="env-code"><span class="k">YADA_LLM_PROVIDER</span>=<span class="s">anthropic</span>
+<span class="k">YADA_LLM_MODEL</span>=<span class="s">claude-opus-5-5</span>
+<span class="k">YADA_LLM_API_KEY</span>=<span class="s">your-provider-key</span></code></pre>
+      </div>
+      <div class="closing-actions">
+        <a class="btn btn-ink" href="{{ '/starter.html' | relative_url }}"
+          >Read the setup guide</a
+        >
+        <a class="btn btn-line" href="https://github.com/edgar4/yada"
+          >Star on GitHub</a
+        >
+      </div>
     </div>
   </section>
 </main>
+<script src="{{ '/assets/home.js' | relative_url }}" defer></script>

@@ -54,44 +54,68 @@
           ><img
             class="brand-mark"
             src="{{ '/assets/brand/yada-mark-dark.svg' | relative_url }}"
-            width="40"
-            height="40"
+            width="34"
+            height="34"
             alt=""
           />yada</a
         >
         <nav aria-label="Main navigation">
-          <a href="{{ '/starter.html' | relative_url }}">Documentation</a>
-          <a class="github-link" href="https://github.com/edgar4/yada"
-            >GitHub <span aria-hidden="true">↗</span></a
+          <a class="nav-text" href="{{ '/starter.html' | relative_url }}"
+            >Documentation</a
+          >
+          <a class="nav-button" href="https://github.com/edgar4/yada"
+            >GitHub<span data-proof="stars" hidden> ★ <span></span></span
+          ></a>
+          <a
+            class="nav-button nav-primary"
+            href="{{ '/starter.html' | relative_url }}"
+            >Get started</a
           >
         </nav>
       </div>
     </header>
     {{ content }}
     <footer class="site-footer on-ink">
-      <div class="wrap footer-inner">
+      <div class="wrap footer-grid">
         <div>
           <a class="footer-brand" href="{{ '/' | relative_url }}"
             ><img
               src="{{ '/assets/brand/yada-mark-dark.svg' | relative_url }}"
-              width="44"
-              height="44"
+              width="34"
+              height="34"
               alt=""
             />yada</a
           >
           <p>The open-source AI agent harness for your app.</p>
         </div>
-        <nav aria-label="Footer navigation">
-          <a href="{{ '/starter.html' | relative_url }}">Read the docs</a
-          ><a href="https://github.com/edgar4/yada"
-            >View the source <span aria-hidden="true">↗</span></a
+        <nav aria-label="Documentation">
+          <h2>Docs</h2>
+          <a href="{{ '/starter.html' | relative_url }}">Setup</a>
+          <a href="{{ '/configuration.html' | relative_url }}">Models</a>
+          <a href="{{ '/actions.html' | relative_url }}">Approved actions</a>
+          <a href="{{ '/terminal.html' | relative_url }}">Terminal</a>
+        </nav>
+        <nav aria-label="Project">
+          <h2>Project</h2>
+          <a href="https://github.com/edgar4/yada">GitHub</a>
+          <a href="https://www.npmjs.com/package/@edgaralochi/yada"
+            >npm<span data-proof="npm" hidden> <span></span></span
+          ></a>
+          <a href="https://github.com/edgar4/yada/releases">Releases</a>
+          <a href="https://github.com/edgar4/yada/blob/main/LICENSE"
+            >MIT license</a
           >
+        </nav>
+        <nav aria-label="Running on Yada">
+          <h2>Running on Yada</h2>
+          <a href="https://talonhr.eu">TalonHR</a>
+          <a href="https://www.tinkerpayments.com/">Tinker Payments</a>
+          <a href="https://app.nairobifashionhub.co.ke/">Nairobi Fashion Hub</a>
+          <a href="https://withtinkerdigital.com/">Tinker Digital</a>
         </nav>
       </div>
       <div class="wrap footer-meta">
-        <a href="https://github.com/edgar4/yada/blob/main/LICENSE">License</a
-        ><a href="https://www.npmjs.com/package/@edgaralochi/yada">npm</a
-        ><a href="https://github.com/edgar4/yada/releases">Releases</a
+        <span>Yada is Hebrew for “to know”.</span
         ><span>Built by Edgar Alochi</span>
       </div>
     </footer>

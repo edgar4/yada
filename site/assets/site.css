@@ -86,10 +86,14 @@ summary:focus-visible,
   margin-inline: auto;
 }
 .site-header {
-  border-bottom: 2px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(12px);
 }
 .header-inner {
-  min-height: 88px;
+  min-height: 72px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -99,11 +103,11 @@ summary:focus-visible,
 .footer-brand {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   text-decoration: none;
   font-family: var(--display);
-  font-size: 30px;
-  font-weight: 700;
+  font-size: 22px;
+  font-weight: 650;
   letter-spacing: -0.03em;
 }
 .wordmark:hover,
@@ -112,27 +116,49 @@ summary:focus-visible,
 }
 .brand-mark {
   display: block;
-  border-radius: 10px;
+  border-radius: 9px;
 }
-.site-header nav,
-.site-footer nav {
+.site-header nav {
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: 10px;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 560;
 }
-.site-header nav a,
-.site-footer nav a {
+.site-header nav a {
   text-decoration: none;
 }
-.github-link {
-  border: 2px solid var(--text);
-  padding: 9px 18px;
-  border-radius: 999px;
+.nav-text {
+  margin-right: 12px;
+  padding-block: 10px;
+  color: var(--muted);
 }
-.github-link:hover {
+.nav-text:hover {
+  color: var(--text);
+}
+.nav-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  transition:
+    transform 0.15s,
+    border-color 0.15s;
+}
+.nav-button:hover {
+  color: inherit;
+  border-color: var(--text);
+  transform: translateY(-1px);
+}
+.nav-primary {
+  border-color: var(--text);
   background: var(--text);
+  color: var(--bg);
+}
+.nav-primary:hover {
   color: var(--bg);
 }
 .skip-link {
@@ -219,41 +245,50 @@ h3 {
   border-bottom-color: var(--amber);
 }
 .site-footer {
-  padding-block: 56px;
+  padding-block: 72px 48px;
+  border-radius: 40px 40px 0 0;
 }
-.footer-inner {
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
-  align-items: center;
-}
-.footer-brand {
-  font-size: 38px;
-}
-.footer-brand img {
-  outline: 2px solid var(--line);
-  border-radius: 12px;
+.footer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr));
+  gap: 40px;
 }
 .site-footer p {
-  font-size: 14px;
-  color: var(--muted);
-  margin: 14px 0 0;
+  max-width: 260px;
+  margin: 16px 0 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #a39cc6;
 }
 .site-footer nav {
-  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.site-footer h2 {
+  margin: 6px 0 12px;
+  font-size: 15px;
+  letter-spacing: 0;
+}
+.site-footer nav a {
+  padding-block: 7px;
+  font-size: 15px;
+  color: #a39cc6;
+  text-decoration: none;
+}
+.site-footer nav a:hover {
+  color: var(--white);
 }
 .footer-meta {
   display: flex;
   flex-wrap: wrap;
+  justify-content: space-between;
   gap: 8px 20px;
-  margin-top: 32px;
+  margin-top: 56px;
   padding-top: 24px;
   border-top: 1px solid var(--line);
   font-size: 13px;
-  color: var(--muted);
-}
-.footer-meta a {
-  text-decoration: none;
+  color: #a39cc6;
 }
 .visually-hidden {
   position: absolute;
@@ -270,34 +305,19 @@ h3 {
 }
 @media (max-width: 760px) {
   .header-inner {
-    min-height: 72px;
+    min-height: 64px;
   }
-  .site-header nav {
-    gap: 16px;
-    font-size: 13px;
+  .nav-text,
+  .nav-button:not(.nav-primary) {
+    display: none;
   }
-  .github-link {
-    padding: 7px 13px;
-  }
-  .wordmark {
-    font-size: 26px;
-    gap: 9px;
-  }
-  .brand-mark {
-    width: 34px;
-    height: 34px;
-  }
-  .footer-inner {
-    flex-direction: column;
-    align-items: flex-start;
+  .footer-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 420px) {
   .wrap {
     width: calc(100% - 32px);
-  }
-  .site-header nav {
-    gap: 12px;
   }
   h1 {
     font-size: 42px;
