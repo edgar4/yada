@@ -46,6 +46,7 @@
   background: var(--ink-deep);
   border: 1px solid var(--line);
   border-radius: 999px;
+  color: var(--white);
   font-family: var(--mono);
   font-size: 14px;
 }
