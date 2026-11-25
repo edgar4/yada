@@ -191,6 +191,7 @@
   text-align: center;
 }
 .section-heading p:last-child,
+.terminal-demo .section-heading p,
 .docs-heading > p {
   margin: 0;
   font-size: 18px;
@@ -401,6 +402,9 @@
 .terminal-demo {
   --wrap: 1000px;
   padding-top: 0;
+}
+.demo figcaption code {
+  overflow-wrap: anywhere;
 }
 .demo img {
   display: block;
